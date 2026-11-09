@@ -170,6 +170,29 @@ class SimulatorSocketTest {
     }
 
     @Test
+    void noLanguageInTheUrlLeavesItPendingAndALanguageFixesIt() throws Exception {
+        Browser pending = connect("role=farmer");
+        JsonNode ready = pending.nextText();
+        assertThat(ready.get("language").asText()).isEqualTo("auto");
+        Leg leg = legOf(ready);
+        assertThat(leg.languagePending()).isTrue();
+        assertThat(leg.language().code()).isEqualTo("en-IN");
+
+        leg.switchLanguage(new com.example.g_one.core.Language("hi-IN", "Hindi", "Nalini"));
+        JsonNode changed = pending.nextText();
+        assertThat(changed.get("type").asText()).isEqualTo("language");
+        assertThat(changed.get("language").asText()).isEqualTo("hi-IN");
+        assertThat(leg.languagePending()).isFalse();
+        pending.session.close();
+
+        Browser fixed = connect("role=farmer&lang=bn-IN");
+        JsonNode fixedReady = fixed.nextText();
+        assertThat(fixedReady.get("language").asText()).isEqualTo("bn-IN");
+        assertThat(legOf(fixedReady).languagePending()).isFalse();
+        fixed.session.close();
+    }
+
+    @Test
     void theSameNumberOnTwoCallsGivesTheSameMemoryKey() throws Exception {
         Browser first = connect("role=farmer&lang=hi-IN&caller=%2B919876543211");
         Leg a = legOf(first.nextText());

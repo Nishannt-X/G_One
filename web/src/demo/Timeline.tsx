@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { translationKey, type CallView, type TimelineItem } from '../lib/callState'
 import { duration, languageLabel } from '../lib/format'
 import { useStickToBottom } from '../lib/useStickToBottom'
-import { CheckIcon, ChevronIcon, CrossIcon, LockIcon, MemoryIcon, SearchIcon, StoreIcon } from '../ui/icons'
+import { CheckIcon, ChevronIcon, CrossIcon, LanguageIcon, LockIcon, MemoryIcon, SearchIcon, StoreIcon } from '../ui/icons'
 import { sampleGloss } from './gloss'
 import { toolNote } from './toolNote'
 import { Avatar } from './parts'
@@ -19,7 +19,7 @@ function buildRows(call: CallView): Row[] {
   }
   for (const note of call.languageNotes) {
     const label = languageLabel(note.to)
-    rows.push({ kind: 'note', key: note.key, atMs: note.atMs, tone: 'plain', icon: note.role === 'farmer' ? <MemoryIcon /> : <StoreIcon />, text: note.from === 'auto' ? `${note.role === 'farmer' ? 'Farmer' : 'Buyer'} speaks ${label}` : `${note.role === 'farmer' ? 'Farmer' : 'Buyer'}: switched to ${label}` })
+    rows.push({ kind: 'note', key: note.key, atMs: note.atMs, tone: 'plain', icon: <LanguageIcon />, text: note.from === 'auto' ? `${note.role === 'farmer' ? 'Farmer' : 'Buyer'} speaks ${label}` : `${note.role === 'farmer' ? 'Farmer' : 'Buyer'}: switched to ${label}` })
   }
   if (call.memory?.returning) {
     const gist = call.memory.gists[0]

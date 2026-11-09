@@ -134,6 +134,51 @@ class PrismaSpeechToTextTest {
     }
 
     @Test
+    void whileALanguageIsBeingChosenEveryLanguageIsHintedAndTheChoiceOpensANewSocket() {
+        ws.onConnect(PrismaSpeechToTextTest::connected);
+        session = adapter(ws.baseUrl(), "prisma-v3.0", settings("auto", 14, 10, 700))
+                .open(leg, LegRole.FARMER, Language.DETECTING, listener);
+        FakeGnaniSocketServer.Conn first = conn(0);
+        assertThat(first.headers).containsEntry("language_code", "hi-IN,en-IN,bn-IN,ta-IN,kn-IN")
+                .containsEntry("format", "codemix");
+        first.send("{\"type\":\"transcript\",\"text\":\"हिंदी\",\"is_final\":true}");
+        await().atMost(WAIT).until(() -> turns.size() == 1);
+        assertThat(turns.get(0).language()).isEqualTo(Language.DETECTING);
+
+        session.retarget(HINDI);
+        FakeGnaniSocketServer.Conn second = conn(1);
+        assertThat(second.headers).containsEntry("language_code", "hi-IN,en-IN").containsEntry("format", "transcribe");
+        await().atMost(WAIT).until(() -> first.clientClosed.isDone());
+
+        second.send("{\"type\":\"transcript\",\"text\":\"प्याज़ का भाव\",\"is_final\":true}");
+        await().atMost(WAIT).until(() -> turns.size() == 2);
+        assertThat(turns.get(1).language()).isEqualTo(HINDI);
+    }
+
+    @Test
+    void audioFedDuringTheChangeOfSocketReachesTheNewOne() {
+        ws.onConnect(PrismaSpeechToTextTest::connected);
+        session = adapter(ws.baseUrl(), "prisma-v3.0", settings("auto", 14, 10, 700))
+                .open(leg, LegRole.FARMER, Language.DETECTING, listener);
+        conn(0);
+        session.retarget(HINDI);
+        feedVoiced(8000, 400);
+        FakeGnaniSocketServer.Conn second = conn(1);
+        await().atMost(WAIT).until(() -> second.binary.size() >= 6);
+    }
+
+    @Test
+    void aRetargetThatChangesNothingKeepsTheSocket() throws Exception {
+        ws.onConnect(PrismaSpeechToTextTest::connected);
+        session = adapter(ws.baseUrl(), "prisma-v3.0", settings("auto", 14, 10, 700))
+                .open(leg, LegRole.FARMER, HINDI, listener);
+        FakeGnaniSocketServer.Conn only = conn(0);
+        session.retarget(HINDI);
+        Thread.sleep(300);
+        assertThat(ws.conns).containsExactly(only);
+    }
+
+    @Test
     void browserRatesAreResampledBeforeFraming() {
         ws.onConnect(PrismaSpeechToTextTest::connected);
         openRealtime();

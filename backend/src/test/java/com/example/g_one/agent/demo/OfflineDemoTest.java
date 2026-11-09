@@ -138,6 +138,45 @@ class OfflineDemoTest {
     }
 
     /** The clocks in these turns are wall-clock: a beat lets one turn end before the next starts. */
+    @Test
+    void typedTurnsChooseAndChangeTheLanguageWithNoKeys() {
+        bus.subscribe(events::add);
+        CallId call = CallId.random();
+        FakeLeg farmer = new FakeLeg(call, LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, null).pendingLanguage();
+        keepHearing(farmer);
+        registry.register(farmer);
+        waitForSaid(1);
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(0).language()).isEqualTo("en-IN");
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(0).text()).contains("Which language");
+        assertThat(eventsOf(ConsoleEvent.CallStarted.class).get(0).language()).isEqualTo("auto");
+        sleep();
+
+        typed.say(farmer.id(), "हिंदी");
+        waitForSaid(3);
+        assertThat(farmer.language().code()).isEqualTo("hi-IN");
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(1).text()).isEqualTo("ठीक है, हिंदी में बात करते हैं।");
+        sleep();
+
+        typed.say(farmer.id(), "मुझे प्याज़ का भाव बताइए");
+        waitForSaid(4);
+        sleep();
+        typed.say(farmer.id(), "ನನಗೆ ಈರುಳ್ಳಿ ಬೆಲೆ ಬೇಕು");
+        waitForSaid(5);
+        assertThat(farmer.language().code()).as("one Kannada turn is not a switch").isEqualTo("hi-IN");
+        sleep();
+        typed.say(farmer.id(), "ಈರುಳ್ಳಿ ಬೆಲೆ ಎಷ್ಟು ಹೇಳಿ");
+        waitFor(() -> assertThat(farmer.language().code()).isEqualTo("kn-IN"));
+        waitForSaid(6);
+        sleep();
+        typed.say(farmer.id(), "English please");
+        waitFor(() -> assertThat(farmer.language().code()).isEqualTo("en-IN"));
+
+        assertThat(eventsOf(ConsoleEvent.LanguageChanged.class)).extracting(ConsoleEvent.LanguageChanged::from, ConsoleEvent.LanguageChanged::to,
+                ConsoleEvent.LanguageChanged::reason).containsExactly(org.assertj.core.groups.Tuple.tuple("auto", "hi-IN", "named"),
+                org.assertj.core.groups.Tuple.tuple("hi-IN", "kn-IN", "run"), org.assertj.core.groups.Tuple.tuple("kn-IN", "en-IN", "named"));
+        farmer.remoteHangup();
+    }
+
     private static void sleep() {
         try {
             Thread.sleep(30);

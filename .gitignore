@@ -1,0 +1,27 @@
+target/
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Local credentials and environment-specific Spring configuration.
+.env
+.env.*
+!.env.example
+**/application.properties
+**/application-*.properties
+*.pem
+*.key
+*.p12
+*.jks
+
+# Historical docs (distilled into dump/LEGACY-NOTES.md; originals are in git history at 2d606e8)
+dump/legacy-docs/
+
+# Web
+node_modules/
+web/dist/
+.env.local
+
+# Old project code, untracked since be28f01; kept on local disks as reference only (see dump/LEGACY-NOTES.md)
+/src/

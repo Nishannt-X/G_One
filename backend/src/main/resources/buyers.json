@@ -1,0 +1,25 @@
+{
+  "_comment": "The buyer directory. Every buyer is synthetic. phoneRef is a key into G_ONE_BUYER_PHONES (real demo numbers live only in that env var); it is never sent to the model, the console or the browser. Prices are indicative ranges for the directory, in rupees per unit, not quotes.",
+  "buyers": [
+    {"id": "mehta-agro", "name": "Mehta Agro Traders", "type": "trader", "district": "Pune", "serves": ["Pune", "Nashik", "Ahilyanagar"], "language": "en-IN", "reliability": 92, "phoneRef": "MEHTA_AGRO",
+      "crops": [{"crop": "Onion", "minPrice": 4100, "maxPrice": 4700, "unit": "quintal", "minQuantity": 10, "maxQuantity": 300}, {"crop": "Potato", "minPrice": 1500, "maxPrice": 1900, "unit": "quintal", "minQuantity": 20, "maxQuantity": 200}]},
+    {"id": "shinde-traders", "name": "Shinde Traders", "type": "mandi agent", "district": "Nashik", "serves": ["Nashik", "Ahilyanagar"], "language": "hi-IN", "reliability": 78, "phoneRef": "SHINDE_TRADERS",
+      "crops": [{"crop": "Onion", "minPrice": 3800, "maxPrice": 4500, "unit": "quintal", "minQuantity": 5, "maxQuantity": 150}, {"crop": "Tomato", "minPrice": 1200, "maxPrice": 1800, "unit": "quintal", "minQuantity": 5, "maxQuantity": 80}]},
+    {"id": "sahyadri-kirana", "name": "Sahyadri Kirana Store", "type": "kirana", "district": "Ahilyanagar", "serves": ["Ahilyanagar", "Nashik", "Pune"], "language": "hi-IN", "reliability": 70, "phoneRef": "SAHYADRI_KIRANA",
+      "crops": [{"crop": "Onion", "minPrice": 4000, "maxPrice": 4600, "unit": "quintal", "minQuantity": 1, "maxQuantity": 10}, {"crop": "Potato", "minPrice": 1600, "maxPrice": 2000, "unit": "quintal", "minQuantity": 1, "maxQuantity": 10}]},
+    {"id": "vidarbha-cotton", "name": "Vidarbha Cotton House", "type": "trader", "district": "Nagpur", "serves": ["Nagpur", "Indore"], "language": "hi-IN", "reliability": 85, "phoneRef": "VIDARBHA_COTTON",
+      "crops": [{"crop": "Cotton", "minPrice": 6800, "maxPrice": 7400, "unit": "quintal", "minQuantity": 20, "maxQuantity": 500}]},
+    {"id": "bardhaman-rice", "name": "Bardhaman Rice Mills", "type": "mill", "district": "Purba Bardhaman", "serves": ["Purba Bardhaman", "Hooghly", "Nadia"], "language": "bn-IN", "reliability": 88, "phoneRef": "BARDHAMAN_RICE",
+      "crops": [{"crop": "Paddy", "minPrice": 2100, "maxPrice": 2400, "unit": "quintal", "minQuantity": 25, "maxQuantity": 800}, {"crop": "Rice", "minPrice": 3200, "maxPrice": 3700, "unit": "quintal", "minQuantity": 10, "maxQuantity": 300}]},
+    {"id": "hooghly-aloo", "name": "Hooghly Aloo Bhandar", "type": "cold store", "district": "Hooghly", "serves": ["Hooghly", "Purba Bardhaman", "Nadia", "Murshidabad"], "language": "bn-IN", "reliability": 74, "phoneRef": "HOOGHLY_ALOO",
+      "crops": [{"crop": "Potato", "minPrice": 1300, "maxPrice": 1750, "unit": "quintal", "minQuantity": 10, "maxQuantity": 400}]},
+    {"id": "karnal-grain", "name": "Karnal Grain Company", "type": "trader", "district": "Karnal", "serves": ["Karnal", "Ludhiana", "Bathinda"], "language": "hi-IN", "reliability": 90, "phoneRef": "KARNAL_GRAIN",
+      "crops": [{"crop": "Wheat", "minPrice": 2450, "maxPrice": 2700, "unit": "quintal", "minQuantity": 25, "maxQuantity": 1000}, {"crop": "Paddy", "minPrice": 2200, "maxPrice": 2450, "unit": "quintal", "minQuantity": 25, "maxQuantity": 1000}]},
+    {"id": "malwa-soya", "name": "Malwa Soya Processors", "type": "processor", "district": "Indore", "serves": ["Indore", "Ujjain"], "language": "hi-IN", "reliability": 83, "phoneRef": "MALWA_SOYA",
+      "crops": [{"crop": "Soyabean", "minPrice": 4300, "maxPrice": 4800, "unit": "quintal", "minQuantity": 20, "maxQuantity": 600}, {"crop": "Wheat", "minPrice": 2400, "maxPrice": 2650, "unit": "quintal", "minQuantity": 20, "maxQuantity": 300}]},
+    {"id": "agra-aloo", "name": "Agra Aloo Mart", "type": "trader", "district": "Agra", "serves": ["Agra"], "language": "hi-IN", "reliability": 66, "phoneRef": "AGRA_ALOO",
+      "crops": [{"crop": "Potato", "minPrice": 1250, "maxPrice": 1650, "unit": "quintal", "minQuantity": 10, "maxQuantity": 250}]},
+    {"id": "kolar-tomato", "name": "Kolar Tomato Agents", "type": "mandi agent", "district": "Kolar", "serves": ["Kolar", "Guntur"], "language": "en-IN", "reliability": 80, "phoneRef": "KOLAR_TOMATO",
+      "crops": [{"crop": "Tomato", "minPrice": 1100, "maxPrice": 1700, "unit": "quintal", "minQuantity": 5, "maxQuantity": 200}]}
+  ]
+}

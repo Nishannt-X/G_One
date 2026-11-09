@@ -1,0 +1,1244 @@
+{
+  "version": 1,
+  "label": "Scripted sample, synthetic voices",
+  "sampleRate": 24000,
+  "voices": {
+    "farmer": "Kavin",
+    "buyer": "Ishaan",
+    "ai": {
+      "kn-IN": "Saanvi",
+      "hi-IN": "Bhavna",
+      "en-IN": "Kaveri",
+      "bn-IN": "Kirra"
+    }
+  },
+  "farmer": {
+    "name": "Basavaraj",
+    "language": "kn-IN",
+    "languages": [
+      "Kannada",
+      "English"
+    ]
+  },
+  "buyer": {
+    "name": "Mondal Traders",
+    "language": "bn-IN",
+    "languages": [
+      "Bengali",
+      "Hindi"
+    ]
+  },
+  "phones": {
+    "farmer": {
+      "lang": "kn",
+      "labelLang": "en",
+      "lockTime": "10:48",
+      "lockDate": "ಶನಿವಾರ, 7 ನವೆಂಬರ್",
+      "notice": "ಡೀಲ್ ಸಾರಾಂಶ ಬಂದಿದೆ",
+      "title": "Sauda Parchi",
+      "subtitle": "ಡೀಲ್ ಸಾರಾಂಶ",
+      "rows": [
+        {
+          "label": "Crop",
+          "value": "ಈರುಳ್ಳಿ"
+        },
+        {
+          "label": "Quantity",
+          "value": "40 ಕ್ವಿಂಟಾಲ್"
+        },
+        {
+          "label": "Rate",
+          "value": "₹1,900 / ಕ್ವಿಂಟಾಲ್"
+        },
+        {
+          "label": "Total",
+          "value": "₹76,000"
+        },
+        {
+          "label": "Pickup",
+          "value": "ಖರೀದಿದಾರರ ಲಾರಿ"
+        },
+        {
+          "label": "Payment",
+          "value": "ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ"
+        },
+        {
+          "label": "Date",
+          "value": "2026-11-07"
+        },
+        {
+          "label": "Call ID",
+          "value": "GO-4F7A"
+        }
+      ],
+      "note": "ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಇದು ಒಪ್ಪಂದ ಪತ್ರ ಅಲ್ಲ.",
+      "noteGloss": "A record of what was said on the call. This is not a contract document."
+    },
+    "buyer": {
+      "lang": "bn",
+      "labelLang": "hi",
+      "lockTime": "10:48",
+      "lockDate": "শনিবার, 7 নভেম্বর",
+      "notice": "চুক্তির সারাংশ এসেছে",
+      "title": "Sauda Parchi",
+      "subtitle": "চুক্তির সারাংশ",
+      "rows": [
+        {
+          "label": "फसल",
+          "value": "পেঁয়াজ"
+        },
+        {
+          "label": "मात्रा",
+          "value": "40 কুইন্টাল"
+        },
+        {
+          "label": "भाव",
+          "value": "₹1,900 / কুইন্টাল"
+        },
+        {
+          "label": "कुल रकम",
+          "value": "₹76,000"
+        },
+        {
+          "label": "ढुलाई",
+          "value": "আপনার ট্রাক"
+        },
+        {
+          "label": "भुगतान",
+          "value": "মাল পৌঁছলে টাকা"
+        },
+        {
+          "label": "तारीख",
+          "value": "2026-11-07"
+        },
+        {
+          "label": "कॉल आईडी",
+          "value": "GO-4F7A"
+        }
+      ],
+      "note": "ফোনে যা কথা হয়েছে তার লিখিত বিবরণ। এটা চুক্তিপত্র নয়।",
+      "noteGloss": "A written account of what was said on the call. This is not a contract document."
+    }
+  },
+  "disclaimer": "Recorded by G-One from the call. Not a contract.",
+  "memoryBefore": {
+    "facts": [
+      {
+        "field": "district",
+        "value": "Gadag"
+      },
+      {
+        "field": "main_crop",
+        "value": "onion"
+      },
+      {
+        "field": "languages",
+        "value": "Kannada, some English"
+      }
+    ],
+    "gist": {
+      "daysAgo": 12,
+      "summary": "Asked the onion rate at Hubballi. Did not sell yet."
+    }
+  },
+  "memoryAfter": {
+    "summary": "Sold 40 quintals of onion at ₹1,900 to Mondal Traders, pay on delivery. Refused a UPI PIN request."
+  },
+  "totalMs": 170624,
+  "beats": [
+    {
+      "id": "greet",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "greet-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ನಮಸ್ಕಾರ ಬಸವರಾಜ್ ಅವರೇ! ಹೋದ ಸಲ ಈರುಳ್ಳಿ rate ಕೇಳಿದ್ರಿ, ನೆನಪಿದೆ. ಇವತ್ತು ಏನು ಮಾಡೋಣ?",
+          "spoken": "ನಮಸ್ಕಾರ ಬಸವರಾಜ್ ಅವರೇ! ಹೋದ ಸಲ ಈರುಳ್ಳಿ ರೇಟ್ ಕೇಳಿದ್ರಿ, ನೆನಪಿದೆ. ಇವತ್ತು ಏನು ಮಾಡೋಣ?",
+          "gloss": "Namaskara, Basavaraj! Last time you asked about the onion rate, I remember. What shall we do today?",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "greet-1-5d4beeff.wav",
+          "durationMs": 5188,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "sell",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "state": "draft",
+        "commodity": "onion",
+        "quantity": "40 quintal"
+      },
+      "clips": [
+        {
+          "id": "sell-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಹೌದು. ನಲವತ್ತು ಕ್ವಿಂಟಾಲ್ ಈರುಳ್ಳಿ ಇದೆ, ಮಾರಬೇಕು.",
+          "spoken": null,
+          "gloss": "Yes. I have forty quintals of onion to sell.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "sell-1-d8651d91.wav",
+          "durationMs": 3561,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "sell-2",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "Good price ಸಿಕ್ಕಿದ್ರೆ ಕೊಡ್ತೀನಿ.",
+          "spoken": "ಗುಡ್ ಪ್ರೈಸ್ ಸಿಕ್ಕಿದ್ರೆ ಕೊಡ್ತೀನಿ.",
+          "gloss": "If I get a good price, I will sell.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "sell-2-68d223ff.wav",
+          "durationMs": 1590,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "consent",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": "consent",
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": {
+        "tool": "buyer_match",
+        "args": {
+          "commodity": "onion",
+          "quantity": "40 quintal"
+        },
+        "result": "Matched buyer 'Mondal Traders, Kolkata' (sample directory)."
+      },
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "consent-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಕೊಲ್ಕತ್ತಾದಲ್ಲಿ ಮೊಂಡಲ್ ಟ್ರೇಡರ್ಸ್ ಅಂತ ಖರೀದಿದಾರರು ಸಿಕ್ಕಿದ್ದಾರೆ. ಅವರಿಗೆ ಕರೆ ಮಾಡಲಾ?",
+          "spoken": null,
+          "gloss": "I found a buyer in Kolkata, Mondal Traders. Shall I call them?",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "consent-1-cee29055.wav",
+          "durationMs": 4428,
+          "pan": -1,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "consent-yes",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "consent-yes-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಆಯ್ತು, ಮಾಡಿ.",
+          "spoken": null,
+          "gloss": "All right, do it.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "consent-yes-1-a3c2dc47.wav",
+          "durationMs": 1195,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "disclose",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": true,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "market": "Kolkata"
+      },
+      "clips": [
+        {
+          "id": "disclose-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "নমস্কার, আমি জি-ওয়ান, একটা এআই সহকারী। কর্ণাটকের এক চাষির হয়ে ফোন করছি। ওঁর চল্লিশ কুইন্টাল পেঁয়াজ বিক্রি আছে।",
+          "spoken": null,
+          "gloss": "Namaskar, I am G-One, an AI assistant. I am calling on behalf of a farmer in Karnataka. He has forty quintals of onion for sale.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "disclose-1-2f4bc1c1.wav",
+          "durationMs": 10500,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "disclose-2",
+          "kind": "said",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "क्या मैं आपको उनसे जोड़ दूँ?",
+          "spoken": null,
+          "gloss": "Shall I connect you with him?",
+          "to": "buyer",
+          "voice": "Bhavna",
+          "file": "disclose-2-31e2d8b4.wav",
+          "durationMs": 1469,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "buyer-in",
+      "speakerRole": "buyer",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "buyer-in-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "হ্যাঁ বলুন, পেঁয়াজ আমার লাগবে।",
+          "spoken": null,
+          "gloss": "Yes, go on, I need onions.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "buyer-in-1-fcb1eda0.wav",
+          "durationMs": 1801,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "buyer-in-2",
+          "kind": "original",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "ठीक है, बात कराइए।",
+          "spoken": null,
+          "gloss": "All right, let me talk to them.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "buyer-in-2-041f094b.wav",
+          "durationMs": 1463,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "buyer-in-3",
+          "kind": "heard",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಅವರಿಗೆ ಈರುಳ್ಳಿ ಬೇಕಂತೆ. ಮಾತಾಡೋಣ ಅಂತಿದ್ದಾರೆ.",
+          "spoken": null,
+          "gloss": "They need onions. They would like to talk.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "buyer-in-3-ff9ccac5.wav",
+          "durationMs": 2694,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "ask-rate",
+      "speakerRole": "farmer",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "ask-rate-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ನಮ್ಮ ಈರುಳ್ಳಿ quality ಚೆನ್ನಾಗಿದೆ, good size ಇದೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಎಷ್ಟು ಕೊಡ್ತೀರಿ?",
+          "spoken": "ನಮ್ಮ ಈರುಳ್ಳಿ ಕ್ವಾಲಿಟಿ ಚೆನ್ನಾಗಿದೆ, ಗುಡ್ ಸೈಜ್ ಇದೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಎಷ್ಟು ಕೊಡ್ತೀರಿ?",
+          "gloss": "Our onion quality is good, a good size. How much will you give a quintal?",
+          "to": null,
+          "voice": "Kavin",
+          "file": "ask-rate-1-1958c3ec.wav",
+          "durationMs": 4233,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "ask-rate-2",
+          "kind": "heard",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "কৃষক বলছেন, ওঁর পেঁয়াজ ভালো। আপনি কুইন্টাল প্রতি কত দেবেন?",
+          "spoken": null,
+          "gloss": "The farmer says his onions are good. How much will you give a quintal?",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "ask-rate-2-accd7181.wav",
+          "durationMs": 5344,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "low-offer",
+      "speakerRole": "buyer",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "price": 1500,
+        "unit": "quintal"
+      },
+      "clips": [
+        {
+          "id": "low-offer-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "দেখুন, বাজার এখন খুব খারাপ।",
+          "spoken": null,
+          "gloss": "Look, the market is very bad now.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "low-offer-1-31c3ed49.wav",
+          "durationMs": 1949,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "low-offer-2",
+          "kind": "original",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "पंद्रह सौ रुपये क्विंटल दे सकता हूँ।",
+          "spoken": null,
+          "gloss": "I can give ₹1,500 a quintal.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "low-offer-2-c4e55d45.wav",
+          "durationMs": 1803,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "low-offer-3",
+          "kind": "heard",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "market ಈಗ down ಇದೆ ಅಂತಾರೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಒಂದು ಸಾವಿರದ ಐನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರಂತೆ.",
+          "spoken": "ಮಾರ್ಕೆಟ್ ಈಗ ಡೌನ್ ಇದೆ ಅಂತಾರೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಒಂದು ಸಾವಿರದ ಐನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರಂತೆ.",
+          "gloss": "They say the market is down now. They will give ₹1,500 a quintal.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "low-offer-3-5980afb8.wav",
+          "durationMs": 4450,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "price-note",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": "price_reference",
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": {
+        "tool": "mandi_price",
+        "args": {
+          "commodity": "onion",
+          "market": "Hubballi"
+        },
+        "result": "Onion modal price 1800 rupees per quintal at Hubballi, indicative sample reference dated 2026-11-06."
+      },
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "price-note-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ನವೆಂಬರ್ ಆರನೇ ತಾರೀಖಿನ sample reference ಪ್ರಕಾರ ಈರುಳ್ಳಿ ಸುಮಾರು ಒಂದು ಸಾವಿರದ ಎಂಟು ನೂರು ರೂಪಾಯಿ ಕ್ವಿಂಟಾಲಿಗೆ ಇತ್ತು. ಇದು ಇವತ್ತಿನ rate ಅಲ್ಲ, ಆದರೆ ಒಂದು ಸಾವಿರದ ಐನೂರು ಅದಕ್ಕಿಂತ ತುಂಬಾ ಕಡಿಮೆ. ಎರಡು ಸಾವಿರ ಕೇಳಿ ನೋಡಿ.",
+          "spoken": "ನವೆಂಬರ್ ಆರನೇ ತಾರೀಖಿನ ಸ್ಯಾಂಪಲ್ ರೆಫರೆನ್ಸ್ ಪ್ರಕಾರ ಈರುಳ್ಳಿ ಸುಮಾರು ಒಂದು ಸಾವಿರದ ಎಂಟು ನೂರು ರೂಪಾಯಿ ಕ್ವಿಂಟಾಲಿಗೆ ಇತ್ತು. ಇದು ಇವತ್ತಿನ ರೇಟ್ ಅಲ್ಲ, ಆದರೆ ಒಂದು ಸಾವಿರದ ಐನೂರು ಅದಕ್ಕಿಂತ ತುಂಬಾ ಕಡಿಮೆ. ಎರಡು ಸಾವಿರ ಕೇಳಿ ನೋಡಿ.",
+          "gloss": "In the indicative sample reference dated 6 November, onion was about ₹1,800 a quintal. That is not today's rate, but ₹1,500 is well below it. Try asking ₹2,000.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "price-note-1-b56d3358.wav",
+          "durationMs": 11880,
+          "pan": -1,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "counter",
+      "speakerRole": "farmer",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "counter-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಇಲ್ಲ, ಅಷ್ಟು ಕಡಿಮೆಗೆ ಆಗಲ್ಲ. ಕ್ವಿಂಟಾಲಿಗೆ ಎರಡು ಸಾವಿರ ಕೊಡಿ.",
+          "spoken": null,
+          "gloss": "No, not that low. Give ₹2,000 a quintal.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "counter-1-2d0447aa.wav",
+          "durationMs": 3943,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "counter-2",
+          "kind": "heard",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "किसान कह रहे हैं कि ये बहुत कम है। वो क्विंटल के दो हज़ार रुपये माँग रहे हैं।",
+          "spoken": null,
+          "gloss": "The farmer says that is too low. He is asking ₹2,000 a quintal.",
+          "to": "buyer",
+          "voice": "Bhavna",
+          "file": "counter-2-ea1f3685.wav",
+          "durationMs": 4951,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "settle",
+      "speakerRole": "buyer",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "price": 1900
+      },
+      "clips": [
+        {
+          "id": "settle-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "দু হাজার একটু বেশি হয়ে যাচ্ছে। উনিশশো টাকা দেব, এটাই শেষ কথা।",
+          "spoken": null,
+          "gloss": "Two thousand is a bit much. I will give ₹1,900, that is my last word.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "settle-1-3ed52376.wav",
+          "durationMs": 4246,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "settle-2",
+          "kind": "heard",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ಎರಡು ಸಾವಿರ ಕೊಡೋಕೆ ಆಗಲ್ಲ ಅಂತಾರೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಒಂದು ಸಾವಿರದ ಒಂಬೈನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರಂತೆ, ಇದೇ last price ಅಂತೆ.",
+          "spoken": "ಎರಡು ಸಾವಿರ ಕೊಡೋಕೆ ಆಗಲ್ಲ ಅಂತಾರೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಒಂದು ಸಾವಿರದ ಒಂಬೈನೂರು ರೂಪಾಯಿ ಕೊಡ್ತಾರಂತೆ, ಇದೇ ಲಾಸ್ಟ್ ಪ್ರೈಸ್ ಅಂತೆ.",
+          "gloss": "They say they cannot give two thousand. They will give ₹1,900 a quintal, and that is their last price.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "settle-2-0005a772.wav",
+          "durationMs": 6105,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "qr-ask",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": true,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "qr-ask-1",
+          "kind": "original",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "एडवांस के लिए एक क्यूआर कोड भेज रहा हूँ।",
+          "spoken": null,
+          "gloss": "For the advance I am sending a QR code.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "qr-ask-1-c9b2e544.wav",
+          "durationMs": 2273,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "qr-ask-2",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "স্ক্যান করে ইউপিআই পিন দিন, টাকা পেয়ে যাবেন।",
+          "spoken": null,
+          "gloss": "Scan it and enter your UPI PIN, and you will get the money.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "qr-ask-2-85cb219c.wav",
+          "durationMs": 2855,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "caution",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": "caution",
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "caution-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ಹುಷಾರು. ಖರೀದಿದಾರರು QR scan ಮಾಡಿ UPI PIN ಹಾಕಿ ಅಂತಿದ್ದಾರೆ. ಹಣ ಪಡೆಯೋದಕ್ಕೆ PIN ಯಾವತ್ತೂ ಬೇಕಾಗಲ್ಲ. PIN ಯಾರಿಗೂ ಕೊಡಬೇಡಿ. ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ ತಗೊಳ್ಳಿ.",
+          "spoken": "ಹುಷಾರು. ಖರೀದಿದಾರರು ಕ್ಯೂ ಆರ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ ಯು ಪಿ ಐ ಪಿನ್ ಹಾಕಿ ಅಂತಿದ್ದಾರೆ. ಹಣ ಪಡೆಯೋದಕ್ಕೆ ಪಿನ್ ಯಾವತ್ತೂ ಬೇಕಾಗಲ್ಲ. ಪಿನ್ ಯಾರಿಗೂ ಕೊಡಬೇಡಿ. ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ ತಗೊಳ್ಳಿ.",
+          "gloss": "Careful. The buyer is asking you to scan a QR code and enter a UPI PIN. You never need a PIN to receive money. Do not give your PIN to anyone. Take the money when the goods arrive.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "caution-1-0a748998.wav",
+          "durationMs": 9420,
+          "pan": -1,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "no-pin",
+      "speakerRole": "farmer",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "no-pin-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "PIN ನಾನು ಹಾಕಲ್ಲ. ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ ಕೊಡಿ.",
+          "spoken": "ಪಿನ್ ನಾನು ಹಾಕಲ್ಲ. ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ ಕೊಡಿ.",
+          "gloss": "I will not enter any PIN. Pay when the goods arrive.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "no-pin-1-0ed8b029.wav",
+          "durationMs": 2790,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "no-pin-2",
+          "kind": "heard",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "কৃষক ইউপিআই পিন দেবেন না। মাল পৌঁছনোর পর টাকা দিতে বলছেন।",
+          "spoken": null,
+          "gloss": "The farmer will not give a UPI PIN. He is asking you to pay after the goods arrive.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "no-pin-2-697f27af.wav",
+          "durationMs": 5466,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "pay-later",
+      "speakerRole": "buyer",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "pickup": "Buyer's truck, pay on delivery"
+      },
+      "clips": [
+        {
+          "id": "pay-later-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "ঠিক আছে, আমি ট্রাক পাঠাব।",
+          "spoken": null,
+          "gloss": "All right, I will send a truck.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "pay-later-1-4ec7795b.wav",
+          "durationMs": 1751,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "pay-later-2",
+          "kind": "original",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "माल मिलते ही पूरा पैसा दे दूँगा।",
+          "spoken": null,
+          "gloss": "I will pay in full as soon as I get the goods.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "pay-later-2-66f60c9c.wav",
+          "durationMs": 1840,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "pay-later-3",
+          "kind": "heard",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಆಯ್ತು ಅಂತಾರೆ. ಅವರೇ ಲಾರಿ ಕಳಿಸ್ತಾರೆ, ಮಾಲು ಸಿಕ್ಕ ಮೇಲೆ ಪೂರ್ತಿ ಹಣ ಕೊಡ್ತಾರಂತೆ.",
+          "spoken": null,
+          "gloss": "They agree. They will send a lorry, and pay in full once they get the goods.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "pay-later-3-0a0f94be.wav",
+          "durationMs": 4717,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "readback-farmer",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": "read_back",
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "state": "readback"
+      },
+      "clips": [
+        {
+          "id": "readback-farmer-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಒಪ್ಪಂದ ಹೇಳ್ತೀನಿ. ನಲವತ್ತು ಕ್ವಿಂಟಾಲ್ ಈರುಳ್ಳಿ, ಕ್ವಿಂಟಾಲಿಗೆ ಒಂದು ಸಾವಿರದ ಒಂಬೈನೂರು ರೂಪಾಯಿ. ಒಟ್ಟು ಎಪ್ಪತ್ತಾರು ಸಾವಿರ ರೂಪಾಯಿ. ಲಾರಿ ಅವರದು, ಮಾಲು ತಲುಪಿದ ಮೇಲೆ ಹಣ. ಸರಿನಾ?",
+          "spoken": null,
+          "gloss": "Here is the deal. Forty quintals of onion at ₹1,900 a quintal. Total ₹76,000. Their lorry, money after delivery. Is that right?",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "readback-farmer-1-d0e5d68c.wav",
+          "durationMs": 9576,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "farmer-yes",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": {
+        "state": "confirming",
+        "farmerYes": true
+      },
+      "clips": [
+        {
+          "id": "farmer-yes-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಹೌದು, ಸರಿ. ನನಗೆ ಒಪ್ಪಿಗೆ.",
+          "spoken": null,
+          "gloss": "Yes, that is right. I agree.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "farmer-yes-1-ab13289a.wav",
+          "durationMs": 2398,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "readback-buyer",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": "read_back",
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "readback-buyer-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "চল্লিশ কুইন্টাল পেঁয়াজ, কুইন্টাল প্রতি উনিশশো টাকা। মোট ছিয়াত্তর হাজার টাকা। আপনার ট্রাক, মাল পৌঁছলে টাকা। ঠিক আছে?",
+          "spoken": null,
+          "gloss": "Forty quintals of onion at ₹1,900 a quintal. Total ₹76,000. Your truck, money when the goods arrive. All right?",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "readback-buyer-1-695a5758.wav",
+          "durationMs": 10609,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "buyer-yes",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": "Both sides said yes. The terms are recorded.",
+      "dealPatch": {
+        "state": "agreed",
+        "buyerYes": true
+      },
+      "clips": [
+        {
+          "id": "buyer-yes-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "হ্যাঁ, ঠিক আছে। আমি রাজি।",
+          "spoken": null,
+          "gloss": "Yes, fine. I agree.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "buyer-yes-1-f3c7c18f.wav",
+          "durationMs": 1981,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "sent-farmer",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": "farmer",
+      "tool": null,
+      "note": "Deal summary arrives on the farmer's phone. Simulated, nothing is sent.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "sent-farmer-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada",
+            "English"
+          ],
+          "text": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. Deal summary ನಿಮ್ಮ ಫೋನಿಗೆ message ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಈ deal ನೆನಪಿಟ್ಟುಕೊಳ್ತೀನಿ.",
+          "spoken": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. ಡೀಲ್ ಸಮ್ಮರಿ ನಿಮ್ಮ ಫೋನಿಗೆ ಮೆಸೇಜ್ ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಈ ಡೀಲ್ ನೆನಪಿಟ್ಟುಕೊಳ್ತೀನಿ.",
+          "gloss": "Thank you, Basavaraj. I have messaged the deal summary to your phone. It is a record of what was said on the call. I will remember this deal.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "sent-farmer-1-11bc36e5.wav",
+          "durationMs": 6674,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "sent-buyer",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": true,
+      "deliver": "buyer",
+      "tool": null,
+      "note": "Deal summary arrives on the buyer's phone. Simulated, nothing is sent.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "sent-buyer-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "ধন্যবাদ। চুক্তির সারাংশ আপনার ফোনে মেসেজ করে দিয়েছি। এই কলে যা কথা হয়েছে, সেটাই লেখা আছে।",
+          "spoken": null,
+          "gloss": "Thank you. I have messaged the deal summary to your phone. It records what was said on this call.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "sent-buyer-1-28d596bb.wav",
+          "durationMs": 8500,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "sent-buyer-2",
+          "kind": "said",
+          "language": "hi-IN",
+          "languages": [
+            "Hindi"
+          ],
+          "text": "धन्यवाद, फिर बात करेंगे।",
+          "spoken": null,
+          "gloss": "Thank you, we will talk again.",
+          "to": "buyer",
+          "voice": "Bhavna",
+          "file": "sent-buyer-2-5d243542.wav",
+          "durationMs": 2141,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    }
+  ]
+}

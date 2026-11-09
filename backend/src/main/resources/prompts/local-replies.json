@@ -1,0 +1,125 @@
+{
+  "_comment": "Lines the assistant says without a language model: questions with one truthful answer, and common turns when no model is available. Keyed by Gnani locale code; a code with no entry uses the same prefix, then en-IN. Hinglish and Benglish are written in the native script with English words, which Timbre reads better. The assistant voice is female. No digits.",
+  "replies": {
+    "hi-IN": {
+      "identity": "मैं जी-वन हूँ, किसानों के लिए एक AI फ़ोन सहायक। मैं मंडी का तारीख वाला भाव, मौसम का अनुमान, खेती की सलाह और खरीदार से बात कराने में मदद करती हूँ। आप क्या जानना चाहेंगे?",
+      "nameEarlierCall": "आपने इसी नंबर से पहले बात की थी और {name} नाम बताया था, इसलिए मुझे पता है। न चाहें तो कभी भी मुझे भूल जाओ कहिए।",
+      "nameThisCall": "आपने अभी इसी बातचीत में अपना नाम {name} बताया था, इसलिए मुझे पता है।",
+      "nameUnknown": "मुझे अभी आपका नाम नहीं पता, यह इस नंबर से आपकी पहली बात है। आपका नाम क्या है?",
+      "nameWithheld": "आपका नंबर नहीं दिख रहा, इसलिए मुझे आपका नाम नहीं पता और मैं याद भी नहीं रखूँगी। मैं आपको क्या कहकर बुलाऊँ?",
+      "nameOtherSpeaker": "इस नंबर से पहले किसी और ने नाम बताया था, इसलिए मैंने वह पूछा था। आपका नाम क्या है?",
+      "nameForgotten": "आपके कहने पर मैंने सब मिटा दिया है, इसलिए अब मुझे आपका नाम नहीं पता।",
+      "askNameAgain": "क्या मैं {name} जी से बात कर रही हूँ?",
+      "followUp": "बताइए, आज क्या मदद करूँ?",
+      "greeting": "नमस्ते जी। बताइए, फसल का भाव, मौसम या खरीदार, किसमें मदद करूँ?",
+      "greetingNamed": "नमस्ते {name} जी। बताइए, आज क्या मदद करूँ?",
+      "thanks": "आपका स्वागत है। और कुछ जानना है?",
+      "yes": "जी, समझ गई। अभी जवाब बनाने में देर है, कुछ सेकंड बाद यही बात फिर बोलिए।",
+      "no": "ठीक है। बताइए, और किसमें मदद करूँ?",
+      "askCrop": "किस फसल का भाव जानना है?",
+      "didNotHear": [
+        "आपकी आवाज़ साफ़ नहीं आई। आप किस बारे में पूछ रहे हैं?",
+        "मैं ठीक से सुन नहीं पाई। फसल का नाम बोलकर बताइए।"
+      ],
+      "afterPrice": "क्या आप इसे बेचना चाहते हैं?",
+      "sellBusy": "समझ गई, आपको बेचना है। दस सेकंड बाद यही बात फिर बोलिए, मैं खरीदार ढूँढूँगी।",
+      "confirmAmount": "रकम की पक्की जानकारी अपने कृषि कार्यालय से लीजिए।"
+    },
+    "hi-en": {
+      "identity": "मैं जी-वन हूँ, farmers के लिए एक AI phone assistant। मैं mandi का dated rate, weather और buyer से बात कराने में help करती हूँ। आपको क्या जानना है?",
+      "nameEarlierCall": "आपने इसी number से पहले call की थी और {name} नाम बताया था, इसलिए मुझे पता है। न चाहें तो कभी भी forget me कहिए।",
+      "nameThisCall": "आपने अभी इसी call में अपना नाम {name} बताया था, इसलिए मुझे पता है।",
+      "nameUnknown": "मुझे अभी आपका नाम नहीं पता, इस number से यह आपकी पहली call है। आपका नाम क्या है?",
+      "nameWithheld": "आपका number नहीं दिख रहा, इसलिए मुझे नाम नहीं पता और मैं save भी नहीं करूँगी। मैं आपको क्या कहकर बुलाऊँ?",
+      "nameOtherSpeaker": "इस number से पहले किसी और ने नाम बताया था, इसलिए मैंने पूछा था। आपका नाम क्या है?",
+      "nameForgotten": "आपके कहने पर मैंने सब delete कर दिया है, इसलिए अब मुझे आपका नाम नहीं पता।",
+      "askNameAgain": "क्या मैं {name} जी से बात कर रही हूँ?",
+      "followUp": "बताइए, आज क्या help करूँ?",
+      "greeting": "नमस्ते जी। बताइए, rate, weather या buyer, किसमें help करूँ?",
+      "greetingNamed": "नमस्ते {name} जी। बताइए, आज क्या help करूँ?",
+      "thanks": "Welcome जी। और कुछ जानना है?",
+      "yes": "जी, समझ गई। अभी reply में थोड़ा time लग रहा है, कुछ second बाद यही बात फिर बोलिए।",
+      "no": "ठीक है। बताइए, और किसमें help करूँ?",
+      "askCrop": "किस crop का rate जानना है?",
+      "didNotHear": [
+        "आपकी आवाज़ clear नहीं आई। आप किस बारे में पूछ रहे हैं?",
+        "मैं ठीक से सुन नहीं पाई। Crop का नाम बोलकर बताइए।"
+      ],
+      "afterPrice": "क्या आपको इसे sell करना है?",
+      "sellBusy": "समझ गई, आपको sell करना है। दस second बाद यही बात फिर बोलिए, मैं buyer ढूँढूँगी।",
+      "confirmAmount": "Amount की पक्की जानकारी अपने कृषि office से लीजिए।"
+    },
+    "en-IN": {
+      "identity": "I am G-One, an AI phone assistant for farmers. I help with dated mandi references, the weather forecast, farming advice and talking to buyers. What would you like to know?",
+      "nameEarlierCall": "You called from this number before and told me your name is {name}, so that is how I know. Say forget me any time if you do not want that.",
+      "nameThisCall": "You told me your name, {name}, earlier on this call, so that is how I know.",
+      "nameUnknown": "I do not know your name yet, this is your first call from this number. What is your name?",
+      "nameWithheld": "I cannot see your number, so I do not know your name and I will not remember this call. What should I call you?",
+      "nameOtherSpeaker": "Someone else gave me a name from this number earlier, which is why I asked. What is your name?",
+      "nameForgotten": "You asked me to forget you and I deleted everything, so I no longer know your name.",
+      "askNameAgain": "Am I speaking with {name} ji?",
+      "followUp": "What can I help you with today?",
+      "greeting": "Hello. Would you like a crop price, the weather, or a buyer?",
+      "greetingNamed": "Hello {name} ji. What can I help you with today?",
+      "thanks": "You are welcome. Anything else you would like to know?",
+      "yes": "Got it. I need a few seconds to answer, so please say that again shortly.",
+      "no": "All right. What else can I help you with?",
+      "askCrop": "Which crop do you want the price for?",
+      "didNotHear": [
+        "I did not catch that clearly. What are you asking about?",
+        "I could not hear you well. Please tell me the name of the crop."
+      ],
+      "afterPrice": "Would you like to sell it?",
+      "sellBusy": "Got it, you want to sell. Say that again in ten seconds and I will look for buyers.",
+      "confirmAmount": "Please confirm the exact amount at your local agriculture office."
+    },
+    "bn-IN": {
+      "identity": "আমি জি-ওয়ান, কৃষকদের জন্য একজন এআই ফোন সহায়ক। আমি তারিখ দেওয়া বাজারদর, আবহাওয়ার পূর্বাভাস, চাষের পরামর্শ আর ক্রেতার সঙ্গে কথা বলাতে সাহায্য করি। আপনি কী জানতে চান?",
+      "nameEarlierCall": "আপনি এই নম্বর থেকে আগে কথা বলেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি। না চাইলে যেকোনো সময় আমাকে ভুলে যাও বলুন।",
+      "nameThisCall": "আপনি এই কলেই আপনার নাম {name} বলেছিলেন, তাই আমি জানি।",
+      "nameUnknown": "আমি এখনো আপনার নাম জানি না, এই নম্বর থেকে এটা আপনার প্রথম কল। আপনার নাম কী?",
+      "nameWithheld": "আপনার নম্বর দেখা যাচ্ছে না, তাই আপনার নাম জানি না আর মনেও রাখব না। আপনাকে কী বলে ডাকব?",
+      "nameOtherSpeaker": "এই নম্বর থেকে আগে অন্য কেউ একটা নাম বলেছিলেন, তাই জিজ্ঞেস করেছিলাম। আপনার নাম কী?",
+      "nameForgotten": "আপনার কথায় আমি সব মুছে দিয়েছি, তাই এখন আর আপনার নাম জানি না।",
+      "askNameAgain": "আমি কি {name} বাবুর সঙ্গে কথা বলছি?",
+      "followUp": "বলুন, আজ কীভাবে সাহায্য করব?",
+      "greeting": "নমস্কার। বলুন, ফসলের দাম, আবহাওয়া না ক্রেতা, কীসে সাহায্য করব?",
+      "greetingNamed": "নমস্কার {name} বাবু। বলুন, আজ কীভাবে সাহায্য করব?",
+      "thanks": "স্বাগত। আর কিছু জানতে চান?",
+      "yes": "বুঝেছি। উত্তর দিতে কয়েক সেকেন্ড লাগবে, একটু পরে কথাটা আবার বলুন।",
+      "no": "ঠিক আছে। বলুন, আর কীসে সাহায্য করব?",
+      "askCrop": "কোন ফসলের দাম জানতে চান?",
+      "didNotHear": [
+        "আপনার কথা পরিষ্কার শোনা গেল না। আপনি কী নিয়ে জানতে চাইছেন?",
+        "ঠিকমতো শুনতে পাইনি। ফসলের নামটা বলুন।"
+      ],
+      "afterPrice": "আপনি কি এটা বিক্রি করতে চান?",
+      "sellBusy": "বুঝেছি, আপনি বিক্রি করতে চান। দশ সেকেন্ড পরে কথাটা আবার বলুন, আমি ক্রেতা খুঁজব।",
+      "confirmAmount": "টাকার সঠিক পরিমাণ স্থানীয় কৃষি অফিস থেকে জেনে নিন।"
+    },
+    "bn-en": {
+      "identity": "আমি জি-ওয়ান, farmer-দের জন্য একটা AI phone assistant। আমি mandi-র dated rate, weather আর buyer-এর সঙ্গে কথা বলাতে help করি। আপনি কী জানতে চান?",
+      "nameEarlierCall": "আপনি এই number থেকে আগে call করেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি। না চাইলে যেকোনো সময় forget me বলুন।",
+      "nameThisCall": "আপনি এই call-এই আপনার নাম {name} বলেছিলেন, তাই আমি জানি।",
+      "nameUnknown": "আমি এখনো আপনার নাম জানি না, এই number থেকে এটা আপনার প্রথম call। আপনার নাম কী?",
+      "nameWithheld": "আপনার number দেখা যাচ্ছে না, তাই নাম জানি না আর save-ও করব না। আপনাকে কী বলে ডাকব?",
+      "nameOtherSpeaker": "এই number থেকে আগে অন্য কেউ একটা নাম বলেছিলেন, তাই জিজ্ঞেস করেছিলাম। আপনার নাম কী?",
+      "nameForgotten": "আপনার কথায় আমি সব delete করে দিয়েছি, তাই এখন আর আপনার নাম জানি না।",
+      "askNameAgain": "আমি কি {name} বাবুর সঙ্গে কথা বলছি?",
+      "followUp": "বলুন, আজ কীভাবে help করব?",
+      "greeting": "নমস্কার। বলুন, rate, weather না buyer, কীসে help করব?",
+      "greetingNamed": "নমস্কার {name} বাবু। বলুন, আজ কীভাবে help করব?",
+      "thanks": "Welcome। আর কিছু জানতে চান?",
+      "yes": "বুঝেছি। Reply দিতে কয়েক second লাগবে, একটু পরে কথাটা আবার বলুন।",
+      "no": "ঠিক আছে। বলুন, আর কীসে help করব?",
+      "askCrop": "কোন crop-এর rate জানতে চান?",
+      "didNotHear": [
+        "আপনার কথা clear শোনা গেল না। আপনি কী নিয়ে জানতে চাইছেন?",
+        "ঠিকমতো শুনতে পাইনি। Crop-এর নামটা বলুন।"
+      ],
+      "afterPrice": "আপনি কি এটা sell করতে চান?",
+      "sellBusy": "বুঝেছি, আপনি sell করতে চান। দশ second পরে কথাটা আবার বলুন, আমি buyer খুঁজব।",
+      "confirmAmount": "Amount-টা স্থানীয় কৃষি office থেকে জেনে নিন।"
+    }
+  }
+}

@@ -1,0 +1,94 @@
+# All secrets and provider choices come from environment variables; see .env.example at the repo root.
+spring:
+  application:
+    name: g_one
+
+server:
+  port: ${PORT:8080}
+  # Honour X-Forwarded-* from the HTTPS tunnel/proxy so same-origin WebSocket checks pass.
+  forward-headers-strategy: framework
+  error:
+    include-message: never
+    include-stacktrace: never
+
+g-one:
+  # code:label:voice, comma separated. Codes/voices must exist for the chosen Timbre model.
+  languages: ${G_ONE_LANGUAGES:hi-IN:Hindi:Nalini,en-IN:English:Kaveri,hi-en:Hinglish:Poorvi,bn-IN:Bengali:Kirra,bn-en:Benglish:Kirra,ta-IN:Tamil:Asmita,kn-IN:Kannada:Saanvi}
+  # Blank = the bundled dated sample (src/main/resources/mandi-snapshot.sample.json).
+  mandi-snapshot-file: ${G_ONE_MANDI_SNAPSHOT_FILE:}
+  # Live AGMARKNET price for ONE variety at ONE market. Blank = off (the dated snapshot above is used). Set all six
+  # identifying values together. Cannot be combined with a snapshot file.
+  agmarknet:
+    base-url: ${G_ONE_AGMARKNET_BASE_URL:https://api.agmarknet.gov.in}
+    market-id: ${G_ONE_AGMARKNET_MARKET_ID:}
+    state-id: ${G_ONE_AGMARKNET_STATE_ID:}
+    commodity-id: ${G_ONE_AGMARKNET_COMMODITY_ID:}
+    commodity: ${G_ONE_AGMARKNET_COMMODITY:}
+    market: ${G_ONE_AGMARKNET_MARKET:}
+    variety: ${G_ONE_AGMARKNET_VARIETY:}
+    timeout-seconds: ${G_ONE_AGMARKNET_TIMEOUT_SECONDS:5}
+    max-age-days: ${G_ONE_AGMARKNET_MAX_AGE_DAYS:3}
+    cache-minutes: ${G_ONE_AGMARKNET_CACHE_MINUTES:30}
+  gnani:
+    base-url: ${GNANI_BASE_URL:https://api.vachana.ai}
+    api-key: ${GNANI_API_KEY:}
+    # Empty = omit the field, which the Prisma docs define as the default model (v2.5).
+    stt-model: ${GNANI_STT_MODEL:}
+    tts-model: ${GNANI_TTS_MODEL:timbre-v2.5}
+    timeout-seconds: ${GNANI_TIMEOUT_SECONDS:30}
+  # Live speech tuning. Live speech runs only with GNANI_API_KEY set and the demo off.
+  speech:
+    # auto = Prisma realtime, then uploads per turn if it is unavailable. rest = uploads per turn from the start.
+    stt-mode: ${GNANI_STT_MODE:auto}
+    min-silence-ms: ${G_ONE_STT_MIN_SILENCE_MS:400}
+    # Speech needed before the assistant is interrupted, so that "haan" does not cut it off.
+    barge-in-min-speech-ms: ${G_ONE_BARGE_IN_MIN_SPEECH_MS:700}
+    # Extra wait after an utterance that stops on "aur", "lekin", "toh".
+    continuation-hold-ms: ${G_ONE_CONTINUATION_HOLD_MS:1200}
+    vad-threshold-dbfs: ${G_ONE_VAD_THRESHOLD_DBFS:-42}
+    vad-hangover-ms: ${G_ONE_VAD_HANGOVER_MS:600}
+    vad-short-hangover-ms: ${G_ONE_VAD_SHORT_HANGOVER_MS:350}
+  llm:
+    # Groq / xAI / OpenAI-compatible /chat/completions endpoint.
+    base-url: ${G_ONE_LLM_BASE_URL:https://api.groq.com/openai/v1}
+    api-key: ${G_ONE_LLM_API_KEY:${GROQ_API_KEY:${XAI_API_KEY:}}}
+    model: ${G_ONE_LLM_MODEL:qwen/qwen3.8-27b}
+    timeout-seconds: ${G_ONE_LLM_TIMEOUT_SECONDS:15}
+    # low / medium / high for reasoning models. Empty leaves the field out, since other providers reject it.
+    reasoning-effort: ${G_ONE_LLM_REASONING_EFFORT:}
+    # Tried in order when the primary is rate limited or down.
+    fallback-models: ${G_ONE_LLM_FALLBACK_MODELS:openai/gpt-oss-20b,qwen/qwen3.8-27b}
+    # Substrings of models that mistranslate figures: never used for mediation, deal extraction or price replies.
+    numeric-unsafe-models: ${G_ONE_LLM_NUMERIC_UNSAFE_MODELS:qwen}
+    # Each model's tokens-per-minute limit (Groq free tier). 0 turns the local budget off.
+    tokens-per-minute: ${G_ONE_LLM_TOKENS_PER_MINUTE:8000}
+    # Optional second OpenAI-compatible endpoint, tried last, for when the primary provider runs out of quota.
+    # Sarvam: https://api.sarvam.ai/v1 with the model sarvam-105b-conversations.
+    extra-base-url: ${G_ONE_LLM_EXTRA_BASE_URL:}
+    extra-api-key: ${G_ONE_LLM_EXTRA_API_KEY:}
+    extra-models: ${G_ONE_LLM_EXTRA_MODELS:}
+  # Who translates a mediated turn: auto = Sarvam when SARVAM_API_KEY is set, else the language model.
+  translate:
+    provider: ${G_ONE_TRANSLATOR:auto}
+    base-url: ${SARVAM_BASE_URL:https://api.sarvam.ai}
+    api-key: ${SARVAM_API_KEY:}
+    # sarvam-translate:v1 writes native script, which Timbre needs. mayura:v1 colloquial modes mix English words in Latin
+    # script into Kannada and Bengali (measured in the bake-off), so it is not the default.
+    model: ${G_ONE_SARVAM_MODEL:sarvam-translate:v1}
+    mode: ${G_ONE_SARVAM_MODE:formal}
+    timeout-seconds: ${G_ONE_SARVAM_TIMEOUT_SECONDS:4}
+  # true = the scripted offline demo: no LLM, Gnani or phone keys, and typed turns in the browser call simulator.
+  demo:
+    enabled: ${G_ONE_DEMO_MODE:false}
+  # Farmer memory (docs/memory.md, ADR 0004). Stored under CallerKey (HMAC of the number) only, never a raw number.
+  memory:
+    # sqlite (default, file under data-dir) or in-memory (lost on restart; for tests).
+    store: ${G_ONE_MEMORY_STORE:sqlite}
+    # Holds g-one.db. Created on startup with a .gitignore so the database is never committed.
+    data-dir: ${G_ONE_DATA_DIR:./data}
+    # Base64 of at least 32 random bytes. Needed to key the seed farmer; never commit it.
+    hmac-key: ${G_ONE_MEMORY_HMAC_KEY:}
+    # Optional synthetic seed: a file path, or classpath:memory/seed-suresh.json for the bundled demo farmer.
+    seed-file: ${G_ONE_MEMORY_SEED_FILE:}
+    # Required as the X-Access-Code header on /api/memory/**. Blank = no check (local dev only).
+    access-code: ${G_ONE_ACCESS_CODE:}

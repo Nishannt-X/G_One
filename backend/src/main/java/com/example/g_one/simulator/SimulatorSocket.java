@@ -2,6 +2,7 @@ package com.example.g_one.simulator;
 
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.CallerKey;
+import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.Language;
 import com.example.g_one.core.Leg;
 import com.example.g_one.core.LegRegistry;
@@ -41,7 +42,8 @@ import org.springframework.web.util.UriUtils;
  * and no buyer yet. {@code caller} must be one of {@link SimulatorCallers}; leave it out to withhold the caller ID.
  * Turn it off with {@code g-one.simulator.enabled=false}. Same-origin pages may connect, and so may pages served from
  * localhost on any port (the Vite dev server proxies with a different Origin). In the offline demo the page may also send
- * {@code {"type":"say","text":"..."}} as a typed turn ({@link TypedTurns}).
+ * {@code {"type":"say","text":"..."}} as a typed turn ({@link TypedTurns}). A buyer socket also receives the call's
+ * {@link BuyerLines} as text, so a phone can show them without the console feed, which carries the farmer's whispers.
  */
 @Configuration
 @EnableWebSocket
@@ -59,11 +61,13 @@ public class SimulatorSocket implements WebSocketConfigurer {
     private final SimulatorCallers callers;
     private final ObjectMapper json;
     private final ObjectProvider<TypedTurns> typedTurns;
+    private final ConsoleBus bus;
     private final AtomicInteger open = new AtomicInteger();
 
     public SimulatorSocket(LegRegistry registry, Language.Registry languages, SimulatorCallers callers,
-                           ObjectMapper json, ObjectProvider<TypedTurns> typedTurns) {
+                           ObjectMapper json, ObjectProvider<TypedTurns> typedTurns, ConsoleBus bus) {
         this.typedTurns = typedTurns;
+        this.bus = bus;
         this.registry = registry;
         this.languages = languages;
         this.callers = callers;
@@ -107,6 +111,11 @@ public class SimulatorSocket implements WebSocketConfigurer {
             leg.onEnded(open::decrementAndGet);
             // The browser needs its ids before the pipeline can start talking.
             send(safe, ready(leg));
+            if (leg.role() == LegRole.BUYER) {
+                ConsoleBus.Subscription lines = bus.subscribe(
+                        event -> BuyerLines.forBuyer(event, leg).ifPresent(line -> send(safe, lineJson(line))));
+                leg.onEnded(lines::close);
+            }
             try {
                 registry.register(leg);
             } catch (IllegalStateException e) {
@@ -163,6 +172,15 @@ public class SimulatorSocket implements WebSocketConfigurer {
             node.put("language", leg.language().code());
             node.put("sampleRate", SimulatorLeg.PLAYBACK_RATE);
             node.put("memory", leg.callerKey().isPresent());
+            return node.toString();
+        }
+
+        private String lineJson(BuyerLines.Line line) {
+            ObjectNode node = json.createObjectNode();
+            node.put("type", "line");
+            node.put("kind", line.kind());
+            node.put("language", line.language());
+            node.put("text", line.text());
             return node.toString();
         }
 

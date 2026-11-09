@@ -1,4 +1,4 @@
-import { parseRoute, useHash } from './lib/route'
+import { parseRoute, useHash, type Route } from './lib/route'
 import { useFarmerRegistry } from './lib/farmers'
 import { useConsoleFeed } from './lib/useConsoleFeed'
 import Shell from './ui/Shell'
@@ -8,6 +8,7 @@ import FarmersPage from './views/FarmersPage'
 import LandingPage from './views/LandingPage'
 import LiveView from './views/LiveView'
 import MemoryView from './views/MemoryView'
+import JoinPage from './simulator/JoinPage'
 import SimulatorPage from './simulator/SimulatorPage'
 
 /** The older operator views share one width; the new pages lay themselves out. */
@@ -16,16 +17,21 @@ function Legacy({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const route = parseRoute(useHash())
+  // A buyer's phone never opens the console feed: it carries the farmer's whispers and memory.
+  return route.view === 'join' ? <JoinPage query={route.query} /> : <Console route={route} />
+}
+
+function Console({ route }: { route: Route }) {
   const { feed, status, dispatch } = useConsoleFeed()
   useFarmerRegistry(feed)
-  const route = parseRoute(useHash())
 
   return (
     <Shell route={route}>
       {route.view === 'home' ? (
         <LandingPage section={route.param} />
       ) : route.view === 'demo' ? (
-        <DemoPage feed={feed} status={status} dispatch={dispatch} autoplay={route.query.get('autoplay') === '1'} />
+        <DemoPage feed={feed} status={status} dispatch={dispatch} autoplay={route.query.get('autoplay') === '1'} lan={route.query.get('lan')} />
       ) : route.view === 'farmers' ? (
         <FarmersPage openKey={route.param} seed={route.query.get('seed') === '1'} />
       ) : route.view === 'live' ? (

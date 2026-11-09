@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.g_one.core.AudioFrame;
 import com.example.g_one.core.CallId;
+import com.example.g_one.core.ConsoleBus;
+import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.Leg;
 import com.example.g_one.core.LegRegistry;
 import com.example.g_one.core.LegRole;
@@ -50,6 +52,8 @@ class SimulatorSocketTest {
 
     @Autowired
     LegRegistry registry;
+    @Autowired
+    ConsoleBus bus;
     @Autowired
     TestRestTemplate http;
     @LocalServerPort
@@ -287,6 +291,29 @@ class SimulatorSocketTest {
         assertThat(second.closed.poll(5, TimeUnit.SECONDS).getCode()).isEqualTo(CloseStatus.POLICY_VIOLATION.getCode());
         buyer.session.close();
         farmer.session.close();
+    }
+
+    @Test
+    void aBuyerSocketGetsItsLinesButNeverAWhisper() throws Exception {
+        Browser farmer = connect("role=farmer&lang=hi-IN");
+        Leg farmerLeg = legOf(farmer.nextText());
+        Browser buyer = connect("role=buyer&lang=en-IN&callId=" + farmerLeg.callId().value());
+        Leg buyerLeg = legOf(buyer.nextText());
+
+        bus.publish(new ConsoleEvent.WhisperSent(farmerLeg.callId(), 1, farmerLeg.id(),
+                ConsoleEvent.WhisperKind.CAUTION, "hi-IN", "private note"));
+        bus.publish(new ConsoleEvent.TurnTranslated(farmerLeg.callId(), 2, farmerLeg.id(), LegRole.FARMER, LegRole.BUYER,
+                "hi-IN", "en-IN", "I want four thousand", 0));
+
+        JsonNode line = buyer.nextText();
+        assertThat(line.get("type").asText()).isEqualTo("line");
+        assertThat(line.get("kind").asText()).isEqualTo("you_hear");
+        assertThat(line.get("text").asText()).isEqualTo("I want four thousand");
+        assertThat(buyerLeg.role()).isEqualTo(LegRole.BUYER);
+        assertThat(farmer.text.poll(200, TimeUnit.MILLISECONDS)).as("the farmer socket gets no lines").isNull();
+
+        farmer.session.close();
+        buyer.session.close();
     }
 
     @Test

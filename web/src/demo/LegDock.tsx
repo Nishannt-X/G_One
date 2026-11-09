@@ -18,10 +18,12 @@ interface Props {
   callId: string
   canStart: boolean
   lockedReason?: string
+  /** A buyer's idle line, such as how to join from a phone. */
+  hint?: string
 }
 
 /** One person's phone: set up and start, then talk or type and hang up. Keeps the same height in every state. */
-export default function LegDock({ role, sim, config, lines, callId, canStart, lockedReason }: Props) {
+export default function LegDock({ role, sim, config, lines, callId, canStart, lockedReason, hint }: Props) {
   const { state, start, stop, say, setMuted, setMicMode, setTalking } = sim
   const farmer = role === 'farmer'
   const [lang, setLang] = useState(farmer ? 'hi-IN' : 'en-IN')
@@ -90,7 +92,7 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
             {state.micError && <button type="button" className="shrink-0 font-bold underline" onClick={() => void begin(true)}>Use typing</button>}
           </p>
         ) : (
-          <p className="truncate text-sm leading-tight text-faint">{!canStart ? lockedReason : !farmer ? 'Phone join is not built yet. Play the buyer from this tab.' : state.status === 'ended' ? state.message : 'A browser call, using a synthetic number.'}</p>
+          <p className="truncate text-sm leading-tight text-faint">{!canStart ? lockedReason : !farmer ? (hint ?? 'Play the buyer from this tab.') : state.status === 'ended' ? state.message : 'A browser call, using a synthetic number.'}</p>
         )}
       </form>
     )

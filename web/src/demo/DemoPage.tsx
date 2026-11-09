@@ -10,6 +10,8 @@ import type { LegRole } from '../types/console'
 import { PlayIcon } from '../ui/icons'
 import DealPanel from './DealPanel'
 import LegDock from './LegDock'
+import PhoneJoinCard from './PhoneJoinCard'
+import { usePhoneJoin } from './phoneJoin'
 import { Avatar, Waveform } from './parts'
 import Timeline from './Timeline'
 import ControlStrip from './voiced/ControlStrip'
@@ -89,7 +91,7 @@ function Intro({ onPlay, busy, label }: { onPlay: () => void; busy: boolean; lab
   )
 }
 
-export default function DemoPage({ feed, status, dispatch, autoplay }: { feed: FeedState; status: FeedStatus; dispatch: Dispatch<FeedAction>; autoplay: boolean }) {
+export default function DemoPage({ feed, status, dispatch, autoplay, lan }: { feed: FeedState; status: FeedStatus; dispatch: Dispatch<FeedAction>; autoplay: boolean; lan: string | null }) {
   const farmer = useCallSimulator()
   const buyer = useCallSimulator()
   const { config, failed } = useSimulatorConfig()
@@ -138,6 +140,11 @@ export default function DemoPage({ feed, status, dispatch, autoplay }: { feed: F
 
   const buyerCallId = ownCallId ?? (call && !call.ended && call.origin === 'feed' ? call.callId : '')
   const buyerReady = Boolean(buyerCallId)
+  const phone = usePhoneJoin(buyerCallId, lan)
+  const [buyerInThisTab, setBuyerInThisTab] = useState(false)
+  const buyerLeg = call ? legByRole(call, 'buyer') : undefined
+  const buyerDocked = buyer.state.status === 'live' || buyer.state.status === 'connecting' || buyer.state.status === 'reconnecting'
+  const showPhoneCard = phone.kind === 'ready' && !buyerInThisTab && !buyerDocked && (!buyerLeg || Boolean(buyerLeg.ended))
   const feedLabel = FEED_LABEL[status]
   const originLabel = voicedOn && voiceManifest ? voiceManifest.label : !call ? 'No call yet' : call.origin === 'feed' ? (call.ended ? 'Call finished' : 'Live call') : 'Sample conversation, synthetic'
 
@@ -176,7 +183,11 @@ export default function DemoPage({ feed, status, dispatch, autoplay }: { feed: F
               <LegDock role="farmer" sim={farmer} config={config} lines={lines} callId="" canStart={!sampleRunning && status !== 'offline'} lockedReason={sampleRunning ? 'Wait for the sample to finish.' : 'The engine is offline, so calls cannot start.'} />
             </div>
             <div className="border-t border-line p-3 md:h-[10.25rem] md:border-t-0">
-              <LegDock role="buyer" sim={buyer} config={config} lines={lines} callId={buyerCallId} canStart={buyerReady} lockedReason="Opens once a farmer is on a call." />
+              {showPhoneCard ? (
+                <PhoneJoinCard hosts={phone.hosts} port={phone.port} callId={buyerCallId} onUseThisTab={() => setBuyerInThisTab(true)} />
+              ) : (
+                <LegDock role="buyer" sim={buyer} config={config} lines={lines} callId={buyerCallId} canStart={buyerReady} lockedReason="Opens once a farmer is on a call." hint={phone.kind === 'ready' ? 'Or play the buyer from this tab.' : phone.hint} />
+              )}
             </div>
           </div></>}
           {voice.needsTap && (

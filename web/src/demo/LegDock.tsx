@@ -28,8 +28,6 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
   const { state, start, stop, say, setMuted, setMicMode, setTalking } = sim
   const farmer = role === 'farmer'
   const [caller, setCaller] = useState<string | null>(null)
-  // The farmer is usually heard on the microphone. A buyer in the same tab usually types.
-  const [voice, setVoice] = useState(farmer)
   const [text, setText] = useState('')
 
   const inCall = state.status === 'connecting' || state.status === 'live' || state.status === 'reconnecting'
@@ -51,7 +49,7 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
 
   if (!inCall) {
     return (
-      <form className="flex h-full flex-col justify-between gap-2.5" onSubmit={(e) => { e.preventDefault(); void begin(!voice) }}>
+      <form className="flex h-full flex-col justify-between gap-2.5" onSubmit={(e) => { e.preventDefault(); void begin(false) }}>
         <div>
           {farmer ? (
             <label className="min-w-0">
@@ -66,14 +64,6 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div role="radiogroup" aria-label="How to talk" className="grid shrink-0 grid-cols-2 rounded-xl bg-sunk p-1">
-            {[true, false].map((v) => (
-              <label key={String(v)} className={`flex min-h-9 cursor-pointer items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand ${voice === v ? 'bg-surface text-ink shadow-card' : 'text-muted'}`}>
-                <input type="radio" className="sr-only" checked={voice === v} onChange={() => setVoice(v)} />
-                {v ? (farmer ? 'Mic' : 'Talk') : 'Type'}
-              </label>
-            ))}
-          </div>
           <button type="submit" disabled={!canStart || config === null} title={!canStart ? lockedReason : undefined} className={`${farmer ? 'btn-primary' : 'btn-quiet'} min-w-0 flex-1`}>
             <PhoneIcon /> <span className="truncate">{farmer ? 'Call as farmer' : 'Join as buyer'}</span>
           </button>

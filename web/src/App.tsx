@@ -3,6 +3,7 @@ import { useFarmerRegistry } from './lib/farmers'
 import { useConsoleFeed } from './lib/useConsoleFeed'
 import Shell from './ui/Shell'
 import DemoPage from './demo/DemoPage'
+import SampleReceiptPage from './demo/voiced/SampleReceiptPage'
 import BuyersView from './views/BuyersView'
 import FarmersPage from './views/FarmersPage'
 import LandingPage from './views/LandingPage'
@@ -19,6 +20,7 @@ function Legacy({ children }: { children: React.ReactNode }) {
 export default function App() {
   const route = parseRoute(useHash())
   // A buyer's phone never opens the console feed: it carries the farmer's whispers and memory.
+  if (route.view === 'sample-receipt') return <SampleReceiptPage />
   return route.view === 'join' ? <JoinPage query={route.query} /> : <Console route={route} />
 }
 

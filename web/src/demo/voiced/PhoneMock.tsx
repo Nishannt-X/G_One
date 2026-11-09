@@ -1,18 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { LegRole } from '../../types/console'
 import { Logo } from '../../ui/icons'
 import type { VoicedState } from './engine'
 import type { Manifest, PhoneMessage } from './manifest'
+import { SAMPLE_RECEIPT_HREF } from './sampleReceipt'
 import { phoneLit } from './sides'
 
-const RECEIPT_URL = '/api/deals/latest/receipt.html'
 const PHONE_WALL = { farmer: 'phone-wall-farmer', buyer: 'phone-wall-buyer' }
-
-let receiptProbe: Promise<boolean> | null = null
-function receiptReachable(): Promise<boolean> {
-  receiptProbe ??= fetch(RECEIPT_URL, { method: 'HEAD' }).then((r) => r.ok).catch(() => false)
-  return receiptProbe
-}
 
 function StatusBar({ time }: { time: string }) {
   return (
@@ -81,17 +75,10 @@ function Chat({ message, disclaimer }: { message: PhoneMessage; disclaimer: stri
 }
 
 function Caption({ lit }: { lit: boolean }) {
-  const [reachable, setReachable] = useState(false)
-  useEffect(() => {
-    if (!lit) return
-    let live = true
-    void receiptReachable().then((ok) => { if (live) setReachable(ok) })
-    return () => { live = false }
-  }, [lit])
   return (
     <div className="flex h-12 flex-col items-center justify-start gap-0.5 pt-1.5 text-center">
       <p className="text-[0.6875rem] leading-tight font-semibold text-faint">Simulated — nothing is sent</p>
-      {lit && reachable && <a href={RECEIPT_URL} target="_blank" rel="noreferrer" title="Opens the most recent receipt saved on this server" className="text-xs font-semibold text-brand underline">View Sauda Parchi</a>}
+      {lit && <a href={SAMPLE_RECEIPT_HREF} target="_blank" rel="noreferrer" title="Opens this sample's own receipt" className="text-xs font-semibold text-brand underline">View Sauda Parchi</a>}
     </div>
   )
 }

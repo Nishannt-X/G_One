@@ -138,6 +138,8 @@ export type MessageKey =
   | 'memory_forget_confirm'
   | 'memory_forgotten'
   | 'memory_empty'
+  | 'credit_speech_live'
+  | 'credit_speech_sample'
 
 const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
   en: {
@@ -151,6 +153,8 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     calls: 'Calls',
     deal_title: 'Deal Card',
     deal_receipt_button: 'View Sauda Parchi (Receipt) ↗',
+    credit_speech_live: 'Speech: Gnani Prisma (recognition) · Timbre (voice)',
+    credit_speech_sample: 'Voices: Gnani Timbre (recorded sample)',
     deal_agreed: 'Deal Agreed',
     deal_closed: 'Deal Closed',
     deal_progress: 'Deal Progress',
@@ -289,6 +293,8 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     calls: 'कॉल्स',
     deal_title: 'सौदा पर्ची',
     deal_receipt_button: 'सौदा पर्ची देखें (Receipt) ↗',
+    credit_speech_live: 'वाणी: Gnani Prisma (पहचान) · Timbre (आवाज़)',
+    credit_speech_sample: 'आवाज़ें: Gnani Timbre (रिकॉर्ड किया गया सैंपल)',
     deal_agreed: 'सौदा पक्का',
     deal_closed: 'सौदा रद्द',
     deal_progress: 'सौदा प्रगति',

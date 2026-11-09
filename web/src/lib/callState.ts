@@ -31,6 +31,15 @@ export type TimelineItem =
   | { kind: 'assistant'; key: string; legId: string; role: LegRole; language: string; text: string; atMs: number }
   | { kind: 'whisper'; key: string; legId: string; whisperKind: WhisperKind; language: string; text: string; atMs: number }
 
+/** A leg's language being chosen or changed, shown as a small note on the conversation. */
+export interface LanguageNote {
+  key: string
+  role: LegRole
+  from: string
+  to: string
+  atMs: number
+}
+
 export interface ToolView {
   key: string
   tool: string
@@ -60,6 +69,7 @@ export interface CallView {
   language: string
   legs: LegView[]
   items: TimelineItem[]
+  languageNotes: LanguageNote[]
   tools: ToolView[]
   /** Translations by `translationKey(legId, turnStartedMs)`, so they can arrive in any order. */
   translations: Record<string, Translation>
@@ -206,6 +216,13 @@ function applyToCall(call: CallView, event: ConsoleEvent): CallView {
       return { ...call, ended: { atMs: event.atMs, durationMs: event.durationMs, reason: event.reason } }
     case 'turn_measured':
       return call
+    case 'language_changed':
+      return {
+        ...call,
+        language: event.role === 'farmer' ? event.to : call.language,
+        legs: call.legs.map((leg) => (leg.legId === event.legId ? { ...leg, language: event.to } : leg)),
+        languageNotes: cap(call.languageNotes, { key, role: event.role, from: event.from, to: event.to, atMs: event.atMs }, MAX_ITEMS),
+      }
   }
 }
 
@@ -224,6 +241,7 @@ export function feedReducer(state: FeedState, action: FeedAction): FeedState {
       language: event.language,
       legs: [],
       items: [],
+      languageNotes: [],
       tools: [],
       translations: {},
       timings: [],

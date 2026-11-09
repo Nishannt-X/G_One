@@ -4,10 +4,16 @@ import com.example.g_one.GOneProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /** A language the demo offers: Gnani locale code, display label and the Timbre voice used to speak it. */
 public record Language(String code, String label, String voice) {
+    /** The code that stands for "this leg's language is still being chosen". Never an offered language. */
+    public static final String AUTO_CODE = "auto";
+
+    /** What a speech-to-text session listens with while the language is being chosen: every language it can hear. */
+    public static final Language DETECTING = new Language(AUTO_CODE, "Choosing language", "n/a");
 
     /** Supported languages, parsed once from configuration ("code:label:voice,..."). */
     @Component
@@ -38,6 +44,11 @@ public record Language(String code, String label, String voice) {
                 throw new IllegalArgumentException("Unsupported language.");
             }
             return l;
+        }
+
+        /** The offered language with this code, if there is one. */
+        public Optional<Language> find(String code) {
+            return Optional.ofNullable(code == null ? null : byCode.get(code));
         }
     }
 }

@@ -6,6 +6,8 @@ import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.Terms;
+import com.example.g_one.agent.language.LanguageFlow;
+import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.llm.SpokenNumbers;
 import com.example.g_one.agent.tools.buyers.BuyerConnector.ConnectRequest;
 import com.example.g_one.agent.tools.mandi.MandiAnswer;
@@ -81,6 +83,10 @@ public final class MediationSession {
     private final LegVoice farmerVoice;
     private final LegVoice buyerVoice;
     private final DealDesk desk;
+    /** Null for a buyer leg started with a fixed language. */
+    private final LanguageFlow buyerLanguage;
+    /** Starts as the call's language and follows the farmer's own changes. */
+    private volatile Language farmerLanguage;
     private final AtomicLong seq = new AtomicLong();
     private final Map<String, String> localizedPhrases = new ConcurrentHashMap<>();
     private final Object lock = new Object();
@@ -115,6 +121,13 @@ public final class MediationSession {
         this.farmerVoice = new LegVoice(farmer.farmerLeg(), tts);
         this.buyerVoice = new LegVoice(buyer, tts);
         this.desk = new DealDesk(callId, clock, bus, new DeskOutput(), request == null ? null : request.quantity());
+        this.farmerLanguage = farmer.language();
+        this.buyerLanguage = languages != null && buyer.languagePending() ? new LanguageFlow(languages::find) : null;
+    }
+
+    /** The farmer's language changed; turns from now on are read and translated with it. */
+    public void farmerLanguage(Language language) {
+        farmerLanguage = language;
     }
 
     /** Publishes the leg, opens its speech-to-text session and asks the buyer. Returns quickly. */
@@ -180,7 +193,7 @@ public final class MediationSession {
         };
         SttSession opened = null;
         try {
-            opened = stt.open(buyer.id(), LegRole.BUYER, buyer.language(), listener);
+            opened = stt.open(buyer.id(), LegRole.BUYER, buyerLanguage != null ? Language.DETECTING : buyer.language(), listener);
         } catch (RuntimeException e) {
             log.error("Could not open speech-to-text for buyer leg {}", buyer.id(), e);
         }
@@ -193,11 +206,20 @@ public final class MediationSession {
             closeQuietly(opened);
             return;
         }
+        if (buyerLanguage != null) {
+            buyerLanguage.asked();
+            sayAssistant(LegRole.BUYER, LanguageLines.opener(LegRole.BUYER), false, null);
+            return;
+        }
+        introduceFarmer();
+    }
+
+    private void introduceFarmer() {
         String code = buyer.language().code();
         sayAssistant(LegRole.BUYER, lines.get("buyerIntro", code, Map.of(
                 "farmer", farmerDescription(code),
                 "produce", produce(code),
-                "language", farmer.language().label())), false, null);
+                "language", language(LegRole.FARMER).label())), false, null);
     }
 
     private String farmerDescription(String code) {
@@ -222,22 +244,75 @@ public final class MediationSession {
         return request.quantity() == null ? named : CropNames.quantity(request.quantity(), code) + " " + named;
     }
 
-    private void buyerTurn(Turn turn) {
+    private void buyerTurn(Turn heard) {
         Phase now;
         synchronized (lock) {
             now = phase;
         }
         if (now == Phase.OVER) return;
-        publishHeard(turn);
-        side.note(Speaker.BUYER, turn.text());
+        Turn turn = heard;
+        if (buyerLanguage != null) {
+            LanguageFlow.Outcome outcome = buyerLanguage.onTurn(heard.text(), buyerVoice.speaking());
+            switch (outcome.kind()) {
+                case IGNORED -> {
+                    return;
+                }
+                case REASK -> {
+                    Turn asked = new Turn(heard.legId(), heard.role(), buyer.language(), heard.text(), heard.startedMs(), heard.endedMs());
+                    publishHeard(asked);
+                    side.note(Speaker.BUYER, asked.text());
+                    enqueue(() -> sayFixed(LegRole.BUYER, LanguageLines.reask(), languages.find("hi-en").orElse(buyer.language())));
+                    return;
+                }
+                case CHOSEN -> {
+                    // What the buyer said is not an answer to anything yet: they have not heard who is calling.
+                    Language chosen = outcome.language();
+                    switchBuyer(outcome);
+                    Turn answered = new Turn(heard.legId(), heard.role(), chosen, heard.text(), heard.startedMs(), heard.endedMs());
+                    publishHeard(answered);
+                    side.note(Speaker.BUYER, answered.text());
+                    enqueue(() -> {
+                        sayFixed(LegRole.BUYER, LanguageLines.confirmation(chosen.code()), chosen);
+                        introduceFarmer();
+                    });
+                    return;
+                }
+                case SWITCHED -> {
+                    switchBuyer(outcome);
+                    turn = new Turn(heard.legId(), heard.role(), outcome.language(), heard.text(), heard.startedMs(), heard.endedMs());
+                }
+                case KEEP -> { }
+            }
+        }
+        Turn current = turn;
+        publishHeard(current);
+        side.note(Speaker.BUYER, current.text());
         long n = seq.incrementAndGet();
         enqueue(() -> {
             if (askingBuyer()) {
-                buyerAnswered(turn);
+                buyerAnswered(current);
             } else if (live()) {
-                process(turn, n);
+                process(current, n);
             }
         });
+    }
+
+    private void switchBuyer(LanguageFlow.Outcome outcome) {
+        String from = buyer.languagePending() ? Language.AUTO_CODE : buyer.language().code();
+        buyer.switchLanguage(outcome.language());
+        SttSession listening;
+        synchronized (lock) {
+            listening = buyerSession;
+        }
+        if (listening != null) {
+            try {
+                listening.retarget(outcome.language());
+            } catch (RuntimeException e) {
+                log.warn("Changing the speech-to-text language failed on buyer leg {}", buyer.id(), e);
+            }
+        }
+        bus.publish(new ConsoleEvent.LanguageChanged(callId, clock.millis(), buyer.id(), LegRole.BUYER, from,
+                outcome.language().code(), outcome.reason()));
     }
 
     private boolean askingBuyer() {
@@ -255,7 +330,7 @@ public final class MediationSession {
             }
             side.takeOver();
             sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", farmer.language().code(),
+            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
                     Map.of("buyer", buyerName())), false, null);
             return;
         }
@@ -278,7 +353,7 @@ public final class MediationSession {
         }
         side.outcome("buyer_declined", null);
         sayAssistant(LegRole.BUYER, lines.get("buyerDeclined", buyer.language().code()), true, o -> hangUpBuyer());
-        sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", farmer.language().code(),
+        sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", language(LegRole.FARMER).code(),
                 Map.of("buyer", buyerName())), false, null);
         side.release();
     }
@@ -395,12 +470,12 @@ public final class MediationSession {
     }
 
     private boolean whisperCaution(String key) {
-        whisper(WhisperKind.CAUTION, lines.get(key, farmer.language().code()), true);
+        whisper(WhisperKind.CAUTION, lines.get(key, language(LegRole.FARMER).code()), true);
         return true;
     }
 
     private void whisper(WhisperKind kind, String line, boolean isProtected) {
-        Language spoken = farmer.language();
+        Language spoken = language(LegRole.FARMER);
         String text = rendered(line, spoken);
         farmerVoice.say(new LegVoice.Line(text, spoken, isProtected, null));
         bus.publish(new ConsoleEvent.WhisperSent(callId, clock.millis(), farmer.farmerLeg().id(), kind, spoken.code(), text));
@@ -434,7 +509,7 @@ public final class MediationSession {
         int compare = difference.compareTo(BigDecimal.ZERO);
         String key = compare == 0 ? "priceNear" : compare < 0 ? "priceAbove"
                 : difference.divide(reference, 4, RoundingMode.HALF_UP).compareTo(FAR_BELOW) >= 0 ? "priceFarBelow" : "priceBelow";
-        String code = lineCode(farmer.language());
+        String code = lineCode(language(LegRole.FARMER));
         whisper(WhisperKind.PRICE_REFERENCE, lines.get(key, code, Map.of(
                 "source", s.sourceName(),
                 "date", SpokenNumbers.date(s.priceDate(), code),
@@ -528,7 +603,7 @@ public final class MediationSession {
         // The buyer's leg ends first, then the farmer hears the private wrap-up and the call ends.
         sayAssistant(LegRole.BUYER, lines.get("endBuyer", buyer.language().code()), true, o -> {
             hangUpBuyer();
-            sayAssistant(LegRole.FARMER, lines.get("endFarmer", farmer.language().code()), true, x -> side.hangUp());
+            sayAssistant(LegRole.FARMER, lines.get("endFarmer", language(LegRole.FARMER).code()), true, x -> side.hangUp());
         });
     }
 
@@ -543,12 +618,20 @@ public final class MediationSession {
         side.note(Speaker.ASSISTANT, text);
     }
 
+    /** A line that is already in {@code language}, so nothing translates it. */
+    private void sayFixed(LegRole role, String text, Language language) {
+        Leg leg = role == LegRole.FARMER ? farmer.farmerLeg() : buyer;
+        voice(role).say(new LegVoice.Line(text, language, false, null));
+        bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), role, language.code(), text));
+        side.note(Speaker.ASSISTANT, text);
+    }
+
     private LegVoice voice(LegRole role) {
         return role == LegRole.FARMER ? farmerVoice : buyerVoice;
     }
 
     private Language language(LegRole role) {
-        return role == LegRole.FARMER ? farmer.language() : buyer.language();
+        return role == LegRole.FARMER ? farmerLanguage : buyer.language();
     }
 
     private void publishHeard(Turn turn) {
@@ -604,7 +687,7 @@ public final class MediationSession {
         closeQuietly(toClose);
         bus.publish(new ConsoleEvent.LegEnded(callId, clock.millis(), buyer.id(), LegRole.BUYER, reason));
         if (before != Phase.OVER) {
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", farmer.language().code()), false, null);
+            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", language(LegRole.FARMER).code()), false, null);
             side.release();
         }
     }

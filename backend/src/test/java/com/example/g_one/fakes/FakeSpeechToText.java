@@ -77,7 +77,8 @@ public final class FakeSpeechToText implements SpeechToText {
     public final class Session implements SttSession {
         private final LegId legId;
         private final LegRole role;
-        private final Language language;
+        private volatile Language language;
+        private final List<Language> retargets = new CopyOnWriteArrayList<>();
         private final SttListener listener;
         private final List<AudioFrame> fed = new CopyOnWriteArrayList<>();
         private volatile boolean closed;
@@ -112,6 +113,17 @@ public final class FakeSpeechToText implements SpeechToText {
                     emitTurn(text);
                 }
             }
+        }
+
+        @Override
+        public void retarget(Language next) {
+            language = next;
+            retargets.add(next);
+        }
+
+        /** Every language this session was told to listen for, in order. */
+        public List<Language> retargets() {
+            return List.copyOf(retargets);
         }
 
         @Override

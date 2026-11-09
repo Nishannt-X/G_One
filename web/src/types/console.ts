@@ -177,6 +177,18 @@ export interface TurnMeasured {
   failure: string
 }
 
+/** A leg's language was chosen or changed. from is "auto" when it had none yet. */
+export interface LanguageChanged {
+  type: 'language_changed'
+  callId: string
+  atMs: number
+  legId: string
+  role: LegRole
+  from: string
+  to: string
+  reason: string
+}
+
 export type ConsoleEvent =
   | CallStarted
   | LegJoined
@@ -190,6 +202,7 @@ export type ConsoleEvent =
   | DealUpdated
   | CallEnded
   | TurnMeasured
+  | LanguageChanged
 
 export type ConsoleEventType = ConsoleEvent['type']
 
@@ -207,6 +220,7 @@ const KNOWN_TYPES: Record<ConsoleEventType, true> = {
   deal_updated: true,
   call_ended: true,
   turn_measured: true,
+  language_changed: true,
 }
 
 export const CONSOLE_EVENT_TYPES = Object.keys(KNOWN_TYPES) as ConsoleEventType[]

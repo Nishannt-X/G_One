@@ -48,6 +48,11 @@ public class DemoSpeech implements SpeechToText, TextToSpeech, TypedTurns {
             }
 
             @Override
+            public void retarget(Language next) {
+                sessions.computeIfPresent(legId, (id, open) -> new Open(open.role(), next, open.listener()));
+            }
+
+            @Override
             public void close() {
                 sessions.remove(legId);
             }

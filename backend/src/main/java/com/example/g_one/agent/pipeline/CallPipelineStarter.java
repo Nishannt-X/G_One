@@ -4,6 +4,7 @@ import com.example.g_one.agent.AgentBrain;
 import com.example.g_one.agent.mediation.MediationEngine;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.InMemoryMemoryStore;
+import com.example.g_one.core.Language;
 import com.example.g_one.core.LegRegistry;
 import com.example.g_one.core.MemoryStore;
 import com.example.g_one.core.SpeechToText;
@@ -39,13 +40,15 @@ class CallPipelineStarter implements SmartInitializingSingleton, DisposableBean 
     private final ObjectProvider<MemoryStore> memory;
     private final ObjectProvider<CallEndHandler> endHandlers;
     private final ObjectProvider<MediationEngine> mediation;
+    private final ObjectProvider<Language.Registry> languages;
     private ExecutorService executor;
     private CallPipeline pipeline;
 
     CallPipelineStarter(LegRegistry registry, ConsoleBus bus, ObjectProvider<AgentBrain> brain,
                         ObjectProvider<SpeechToText> speechToText, ObjectProvider<TextToSpeech> textToSpeech,
                         ObjectProvider<MemoryStore> memory, ObjectProvider<CallEndHandler> endHandlers,
-                        ObjectProvider<MediationEngine> mediation) {
+                        ObjectProvider<MediationEngine> mediation, ObjectProvider<Language.Registry> languages) {
+        this.languages = languages;
         this.mediation = mediation;
         this.registry = registry;
         this.bus = bus;
@@ -81,7 +84,7 @@ class CallPipelineStarter implements SmartInitializingSingleton, DisposableBean 
         });
         executor = Executors.newVirtualThreadPerTaskExecutor();
         pipeline = new CallPipeline(b, stt, tts, store, bus, endHandlers.orderedStream().toList(), executor,
-                System::currentTimeMillis, mediation.getIfUnique());
+                System::currentTimeMillis, mediation.getIfUnique(), languages.getIfUnique());
         pipeline.attach(registry);
         log.info("The call pipeline is on");
     }

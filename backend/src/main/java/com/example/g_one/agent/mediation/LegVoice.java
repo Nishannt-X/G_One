@@ -51,6 +51,13 @@ final class LegVoice {
         pump();
     }
 
+    /** Whether a line is being spoken now. */
+    boolean speaking() {
+        synchronized (lock) {
+            return current != null;
+        }
+    }
+
     /** The person on this leg started speaking. */
     void bargeIn() {
         Line stopped;

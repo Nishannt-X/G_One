@@ -63,6 +63,7 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
     private static final int CONNECTED_TIMEOUT_SECONDS = 5;
     private static final long STABLE_SESSION_MS = 2_000;
     private static final long ROTATE_RETRY_MS = 2_000;
+    private static final long RETARGET_RETRY_MS = 200;
     private static final int POLICY_VIOLATION = 1008;
     private static final int VAD_WINDOW_BYTES = 320;
     private static final int PRE_ROLL_WINDOWS = 15;
@@ -102,9 +103,9 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
     private final class Session implements SttSession {
         private final LegId legId;
         private final LegRole role;
-        private final Language language;
+        private volatile Language language;
         private final SttListener listener;
-        private final LanguageRoute route;
+        private volatile LanguageRoute route;
 
         private final ScheduledThreadPoolExecutor events;
         private final ExecutorService uploads;
@@ -133,6 +134,9 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
         private long connectedAtMs;
         private ScheduledFuture<?> connectWatchdog;
         private ScheduledFuture<?> rotation;
+        private ScheduledFuture<?> retargetRetry;
+        /** The route the current socket was opened with. */
+        private LanguageRoute connectedRoute;
 
         // Used only on the sender thread, in REST mode.
         private final Reframer windows = new Reframer(VAD_WINDOW_BYTES);
@@ -174,7 +178,7 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
 
                         @Override
                         public void finalTurn(String text, long startedMs, long endedMs) {
-                            deliver(() -> listener.onFinalTurn(new Turn(legId, role, language, text, startedMs, endedMs)));
+                            deliver(() -> listener.onFinalTurn(new Turn(legId, role, Session.this.language, text, startedMs, endedMs)));
                         }
                     });
         }
@@ -188,6 +192,34 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
                 post(this::connect);
             }
             sender.start();
+        }
+
+        /**
+         * Prisma takes its hints when the socket opens, so a new route means a new socket. The swap waits for a quiet
+         * moment, as {@link #rotate} does. Audio that arrives during it stays in {@link #outgoing} (the same five seconds
+         * as a reconnect) and goes to the new socket, so what the person says next is heard. Turns already finished
+         * are not re-recognised. In REST mode the next upload simply uses the new code.
+         */
+        @Override
+        public void retarget(Language next) {
+            language = next;
+            route = LanguageRoute.of(next.code(), prismaV3);
+            post(this::applyRoute);
+        }
+
+        private void applyRoute() {
+            synchronized (state) {
+                if (closed || restMode) return;
+            }
+            if (route.equals(connectedRoute)) return;
+            cancel(retargetRetry);
+            retargetRetry = null;
+            if (!assembler.idle()) {
+                retargetRetry = events.schedule(this::applyRoute, RETARGET_RETRY_MS, TimeUnit.MILLISECONDS);
+                return;
+            }
+            dropSocket();
+            connect();
         }
 
         // ---- audio in ----
@@ -284,11 +316,13 @@ public final class PrismaSpeechToText implements SpeechToText, TypedTurns {
                 if (closed || restMode) return;
                 gen = ++generation;
             }
+            LanguageRoute using = route;
+            connectedRoute = using;
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("x-api-key-id", gnani.apiKey());
-            headers.put("language_code", route.sttHints());
+            headers.put("language_code", using.sttHints());
             if (!gnani.sttModel().isBlank()) headers.put("model", gnani.sttModel());
-            if (!route.format().isBlank()) headers.put("format", route.format());
+            if (!using.format().isBlank()) headers.put("format", using.format());
             headers.put("x-sample-rate", String.valueOf(PRISMA_RATE));
             headers.put("x-vad-threshold", String.valueOf(settings.vadThreshold()));
             headers.put("x-min-speech-ms", String.valueOf(settings.minSpeechMs()));

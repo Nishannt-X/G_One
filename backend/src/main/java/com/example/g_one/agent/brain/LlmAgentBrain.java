@@ -31,6 +31,7 @@ import com.example.g_one.core.ToolResult;
 import com.example.g_one.core.Turn;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -55,12 +56,14 @@ import org.springframework.stereotype.Component;
  *   <li>{@link #greet} speaks fixed lines (docs/call-flow.md, variant B): a new farmer hears the welcome and the memory
  *       notice, a withheld caller ID hears the welcome and that nothing will be remembered, and a returning farmer
  *       hears only the name check. No model call, so the greeting cannot fail on the model.</li>
- *   <li>{@link #respond} renders the system prompt (language, today, a memory section for the call's state), replays
- *       the history, and runs the tool loop: at most {@value #MAX_MODEL_CALLS} model calls per turn, the last one
- *       without tools so the model has to speak. Each tool call is published as {@link ConsoleEvent.ToolCalled}.</li>
+ *   <li>{@link #respond} renders the system prompt (language, today, memory rules for the call's state), adds one data
+ *       message (stored memory and the digest of older lines, as JSON: data, not instructions), replays the history,
+ *       and runs the tool loop: at most {@value #MAX_MODEL_CALLS} model calls per turn, the last one without tools so
+ *       the model has to speak. Each tool call is published as {@link ConsoleEvent.ToolCalled}.</li>
  * </ul>
  *
- * <p>The returning farmer's memory stays out of the prompt until they say yes to the name check: the model records
+ * <p>Nothing stored ever goes into the system prompt. The returning farmer's memory stays out of the request until they
+ * say yes to the name check (only the name to check is in the data message until then): the model records
  * the answer with {@code confirm_name}, offered only while the check waits. That per-call state lives in
  * {@link MemoryGate}, keyed by call id; call {@link #callEnded} at hang-up (idle entries expire anyway).
  *
@@ -332,8 +335,8 @@ public class LlmAgentBrain implements AgentBrain {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(ChatMessage.system(systemPrompt(ctx, state, memo, latest)));
         int firstReplayed = Math.max(0, past.size() - MAX_HISTORY_LINES);
-        String digest = CallDigest.of(past.subList(0, firstReplayed), memo.facts);
-        if (!digest.isEmpty()) messages.add(ChatMessage.system(digest));
+        ObjectNode digest = CallDigest.of(past.subList(0, firstReplayed), memo.facts);
+        boolean hasData = addData(messages, state, ctx, digest);
         for (Line line : past.subList(firstReplayed, past.size())) {
             if (line == null || line.text().isBlank()) continue;
             messages.add(switch (line.speaker()) {
@@ -383,6 +386,14 @@ public class LlmAgentBrain implements AgentBrain {
                 }
                 if (EndCallTool.NAME.equals(tc.name()) && result.ok()) turn.endCall = true;
                 messages.add(ChatMessage.tool(tc.id(), result.content()));
+            }
+            MemoryGate.State after = gate.state(ctx);
+            if (after != state) {
+                // A confirmed name check unlocks memory; any other change hides it again. Both prompt parts follow.
+                state = after;
+                messages.set(0, ChatMessage.system(systemPrompt(ctx, state, memo, latest)));
+                if (hasData) messages.remove(1);
+                hasData = addData(messages, state, ctx, digest);
             }
         }
         log.warn("Agent brain gave no spoken answer within {} model calls on call {}", MAX_MODEL_CALLS, ctx.callId());
@@ -468,8 +479,19 @@ public class LlmAgentBrain implements AgentBrain {
         return capped3(kept.isEmpty() ? note : kept + " " + note);
     }
 
+    /**
+     * Puts the data message (stored memory for this state plus the digest of earlier lines) right after the system
+     * prompt, as a user message: everything in it came from callers, so it never rides in the system role. True when
+     * there is one.
+     */
+    private static boolean addData(List<ChatMessage> messages, MemoryGate.State state, CallContext ctx, ObjectNode digest) {
+        Optional<String> data = MemoryBlock.dataMessage(state, ctx.memory(), digest);
+        data.ifPresent(d -> messages.add(1, ChatMessage.user(d)));
+        return data.isPresent();
+    }
+
     private String systemPrompt(CallContext ctx, MemoryGate.State state, CallMemo memo, Turn latest) {
-        String memory = MemoryBlock.forPrompt(state, ctx.memory());
+        String memory = MemoryBlock.forPrompt(state);
         boolean nameKnown = memo.name() != null || (state.usesMemory() && rememberedName(ctx) != null);
         if (!nameKnown && state.maySave()) {
             if (memo.askedName) memory += " The name is still unknown; you already asked, do not ask again.";

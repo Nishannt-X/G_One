@@ -55,5 +55,7 @@ describe('the buyer protocol', () => {
   it('joins the named call over wss on an https page', () => {
     const url = socketUrl({ role: 'buyer', lang: 'en-IN', caller: null, callId: 'call-1' }, { protocol: 'https:', host: '172.20.10.4:5173' })
     expect(url).toBe('wss://172.20.10.4:5173/ws/simulator?role=buyer&lang=en-IN&callId=call-1')
+    expect(socketUrl({ role: 'buyer', lang: null, caller: null, callId: 'call-1' }, { protocol: 'https:', host: 'h' })).toBe('wss://h/ws/simulator?role=buyer&callId=call-1')
+    expect(parseServerMessage('{"type":"language","language":"hi-IN"}')).toEqual({ type: 'language', language: 'hi-IN' })
   })
 })

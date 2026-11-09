@@ -33,7 +33,8 @@ import org.slf4j.LoggerFactory;
  *       {@code {"type":"mark","id":n}} when everything up to mark {@code n} has been heard; text
  *       {@code {"type":"hangup"}}.</li>
  *   <li>server to browser: binary messages of 20 ms of playback audio; text {@code {"type":"ready",...}} once on
- *       connect, {@code {"type":"mark","id":n}} after queued audio, {@code {"type":"clear"}} to drop whatever is not
+ *       connect, {@code {"type":"language","language":code}} when the leg's language is chosen or changes,
+ *       {@code {"type":"mark","id":n}} after queued audio, {@code {"type":"clear"}} to drop whatever is not
  *       yet heard, {@code {"type":"end"}} when we hang up; on a buyer socket only, {@code {"type":"line",...}} from
  *       {@link BuyerLines}.</li>
  * </ul>
@@ -63,7 +64,8 @@ public final class SimulatorLeg implements Leg {
     private final LegId id = LegId.random();
     private final CallId callId;
     private final LegRole role;
-    private final Language language;
+    private volatile Language language;
+    private volatile boolean languagePending;
     private final CallerKey callerKey;
     private final Channel channel;
     private final int playbackRate;
@@ -88,6 +90,13 @@ public final class SimulatorLeg implements Leg {
         this(callId, role, language, callerKey, channel, PLAYBACK_RATE);
     }
 
+    /** @param first the language spoken first, while the person has not chosen one yet */
+    public static SimulatorLeg languagePending(CallId callId, LegRole role, Language first, CallerKey callerKey, Channel channel) {
+        SimulatorLeg leg = new SimulatorLeg(callId, role, first, callerKey, channel, PLAYBACK_RATE);
+        leg.languagePending = true;
+        return leg;
+    }
+
     SimulatorLeg(CallId callId, LegRole role, Language language, CallerKey callerKey, Channel channel, int playbackRate) {
         this.callId = callId;
         this.role = role;
@@ -103,8 +112,25 @@ public final class SimulatorLeg implements Leg {
     @Override public LegRole role() { return role; }
     @Override public LegSource source() { return LegSource.SIMULATOR; }
     @Override public Language language() { return language; }
+    @Override public boolean languagePending() { return languagePending; }
     @Override public Optional<CallerKey> callerKey() { return Optional.ofNullable(callerKey); }
     @Override public int playbackSampleRate() { return playbackRate; }
+
+    @Override
+    public void switchLanguage(Language next) {
+        boolean failed = false;
+        synchronized (lock) {
+            if (ended) return;
+            language = next;
+            languagePending = false;
+            try {
+                channel.sendText("{\"type\":\"language\",\"language\":\"" + next.code() + "\"}");
+            } catch (IOException | RuntimeException e) {
+                failed = true;
+            }
+        }
+        if (failed) end(true);
+    }
 
     @Override
     public void play(AudioFrame frame) {

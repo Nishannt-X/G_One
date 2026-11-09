@@ -4,6 +4,7 @@ import com.example.g_one.core.CallId;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.LegId;
+import com.example.g_one.core.LegRole;
 import jakarta.annotation.PreDestroy;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -96,9 +97,11 @@ public class ConsoleState {
         final ConsoleEvent.CallStarted started;
         final List<ConsoleEvent> events = new ArrayList<>();
         final Map<LegId, ActiveCall.Leg> legs = new LinkedHashMap<>();
+        String language;
 
         CallRecord(ConsoleEvent.CallStarted started) {
             this.started = started;
+            this.language = started.language();
         }
 
         void add(ConsoleEvent event) {
@@ -107,12 +110,16 @@ public class ConsoleState {
                         joined.language()));
             } else if (event instanceof ConsoleEvent.LegEnded ended) {
                 legs.remove(ended.legId());
+            } else if (event instanceof ConsoleEvent.LanguageChanged changed) {
+                legs.computeIfPresent(changed.legId(), (id, leg) ->
+                        new ActiveCall.Leg(leg.legId(), leg.role(), leg.source(), changed.to()));
+                if (changed.role() == LegRole.FARMER) language = changed.to();
             }
             if (events.size() < MAX_EVENTS_PER_CALL || event instanceof ConsoleEvent.CallEnded) events.add(event);
         }
 
         ActiveCall toActiveCall() {
-            return new ActiveCall(started.callId(), started.atMs(), started.language(), List.copyOf(legs.values()));
+            return new ActiveCall(started.callId(), started.atMs(), language, List.copyOf(legs.values()));
         }
     }
 }

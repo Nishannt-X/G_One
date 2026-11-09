@@ -1,6 +1,7 @@
 export type UiLang = 'en' | 'hi'
 
 const LANGUAGES: Record<string, { en: string; hi: string }> = {
+  auto: { en: 'Choosing language…', hi: 'भाषा चुनी जा रही है…' },
   'hi-IN': { en: 'Hindi', hi: 'हिंदी' },
   'en-IN': { en: 'English', hi: 'अंग्रेज़ी' },
   'hi-en': { en: 'Hinglish', hi: 'हिंग्लिश' },

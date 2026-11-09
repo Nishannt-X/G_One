@@ -4,6 +4,8 @@ import com.example.g_one.agent.AgentBrain;
 import com.example.g_one.agent.AgentBrain.Line;
 import com.example.g_one.agent.AgentBrain.Reply;
 import com.example.g_one.agent.AgentBrain.Speaker;
+import com.example.g_one.agent.language.LanguageFlow;
+import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.mediation.MediationEngine;
 import com.example.g_one.agent.mediation.MediationSession;
 import com.example.g_one.agent.mediation.ScamPatterns;
@@ -61,6 +63,10 @@ import org.slf4j.LoggerFactory;
  *       and clears the leg's queued audio.</li>
  *   <li>A reply with {@link Reply#endCall()} hangs up once its audio has been played, unless the farmer speaks
  *       first.</li>
+ *   <li>A leg with no language yet hears one English question instead of the greeting. The answer sets the language
+ *       ({@link LanguageFlow}), the speech-to-text session follows it, a short confirmation is spoken, then the greeting
+ *       in that language, then the reply to what they said if it was more than the language's name. Later turns can
+ *       change the language again; that is silent, and shows on the console.</li>
  *   <li>When the leg ends: close the session, cancel speech, publish {@code leg_ended} and {@code call_ended}, and run
  *       the end handlers on the executor.</li>
  * </ol>
@@ -85,6 +91,7 @@ public final class CallPipeline {
     private final Executor executor;
     private final LongSupplier clock;
     private final MediationEngine mediation;
+    private final Language.Registry languages;
     private final Map<CallId, FarmerLeg> calls = new ConcurrentHashMap<>();
 
     /**
@@ -102,7 +109,15 @@ public final class CallPipeline {
     public CallPipeline(AgentBrain brain, SpeechToText speechToText, TextToSpeech textToSpeech, MemoryStore memory,
                         ConsoleBus bus, List<CallEndHandler> endHandlers, Executor executor, LongSupplier clock,
                         MediationEngine mediation) {
+        this(brain, speechToText, textToSpeech, memory, bus, endHandlers, executor, clock, mediation, null);
+    }
+
+    /** @param languages what a leg may choose; null keeps every leg in the language it started with */
+    public CallPipeline(AgentBrain brain, SpeechToText speechToText, TextToSpeech textToSpeech, MemoryStore memory,
+                        ConsoleBus bus, List<CallEndHandler> endHandlers, Executor executor, LongSupplier clock,
+                        MediationEngine mediation, Language.Registry languages) {
         this.mediation = mediation;
+        this.languages = languages;
         this.brain = Objects.requireNonNull(brain, "brain");
         this.speechToText = Objects.requireNonNull(speechToText, "speechToText");
         this.textToSpeech = Objects.requireNonNull(textToSpeech, "textToSpeech");
@@ -179,16 +194,19 @@ public final class CallPipeline {
         private volatile MediationSession mediationSession;
         private String outcome;
         private String dealSummary;
+        /** Null for a leg started with a fixed language. */
+        private final LanguageFlow languageFlow;
 
         FarmerLeg(Leg leg) {
             this.leg = leg;
             this.callId = leg.callId();
             this.startedMs = now();
+            this.languageFlow = languages != null && leg.languagePending() ? new LanguageFlow(languages::find) : null;
         }
 
         void begin() {
             calls.put(callId, this);
-            publish(new ConsoleEvent.CallStarted(callId, startedMs, leg.language().code()));
+            publish(new ConsoleEvent.CallStarted(callId, startedMs, leg.languagePending() ? Language.AUTO_CODE : leg.language().code()));
             publish(ConsoleEvent.LegJoined.of(leg, startedMs));
             leg.onEnded(this::onEnded);
             leg.onAudio(this::onAudio);
@@ -212,7 +230,7 @@ public final class CallPipeline {
 
             SttSession opened = null;
             try {
-                opened = speechToText.open(leg.id(), LegRole.FARMER, leg.language(), this);
+                opened = speechToText.open(leg.id(), LegRole.FARMER, languageFlow != null ? Language.DETECTING : leg.language(), this);
             } catch (RuntimeException e) {
                 log.error("Could not open speech-to-text for leg {} of call {}; the farmer will not be heard",
                         leg.id(), callId, e);
@@ -232,6 +250,11 @@ public final class CallPipeline {
                 return;
             }
 
+            if (languageFlow != null) {
+                languageFlow.asked();
+                deliver(greetingGeneration, new Reply(LanguageLines.opener(LegRole.FARMER), leg.language(), false));
+                return;
+            }
             Reply greeting = askBrain("greet", () -> brain.greet(ctx), ctx.language());
             deliver(greetingGeneration, greeting);
         }
@@ -360,12 +383,39 @@ public final class CallPipeline {
             // A spoken secret goes no further than here: mediation still sees the digits to withhold the turn.
             Turn turn = withText(heard, ScamPatterns.masked(heard.text()));
             MediationSession live = mediationSession;
-            if (live != null && live.live()) {
+            boolean mediating = live != null && live.live();
+            LanguageFlow.Outcome language = languageOutcome(turn);
+            switch (language.kind()) {
+                case IGNORED -> {
+                    return;
+                }
+                case REASK -> {
+                    askLanguageAgain(withLanguage(turn, leg.language()));
+                    return;
+                }
+                case CHOSEN -> {
+                    if (!mediating) {
+                        languageChosen(turn, language);
+                        return;
+                    }
+                    switchTo(language);
+                    heard = withLanguage(heard, language.language());
+                    turn = withLanguage(turn, language.language());
+                }
+                case SWITCHED -> {
+                    switchTo(language);
+                    heard = withLanguage(heard, language.language());
+                    turn = withLanguage(turn, language.language());
+                }
+                case KEEP -> { }
+            }
+            if (mediating) {
                 note(Speaker.FARMER, turn.text());
                 publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
                 live.farmerTurn(heard);
                 return;
             }
+            Turn answerTo = turn;
             List<Line> history;
             CallContext ctx;
             long turnGeneration;
@@ -375,11 +425,11 @@ public final class CallPipeline {
                 if (ended || context == null) {
                     return;
                 }
-                if (speaking && Phrases.isBackchannel(turn.text())) {
+                if (speaking && Phrases.isBackchannel(answerTo.text())) {
                     return; // "haan" while the assistant talks is listening, not a reply: let it finish
                 }
                 history = List.copyOf(lines);
-                lines.add(new Line(Speaker.FARMER, turn.text()));
+                lines.add(new Line(Speaker.FARMER, answerTo.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
                 speaking = false;
@@ -390,14 +440,130 @@ public final class CallPipeline {
             if (wasSpeaking) {
                 stopSpeaking(toCancel); // a turn with no speech start first still interrupts the assistant
             }
-            publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
+            publish(ConsoleEvent.TurnHeard.of(callId, answerTo, now()));
             submit("respond", () -> {
                 if (generation.get() != turnGeneration) {
                     return; // a newer turn already arrived; skip the brain call
                 }
+                Reply reply = askBrain("respond", () -> brain.respond(ctx, history, answerTo), ctx.language());
+                deliver(turnGeneration, reply);
+            });
+        }
+
+        // ---- the leg's language ----
+
+        private LanguageFlow.Outcome languageOutcome(Turn turn) {
+            if (languageFlow == null) {
+                return KEEP_LANGUAGE;
+            }
+            boolean nowSpeaking;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return IGNORE_TURN;
+                }
+                nowSpeaking = speaking;
+            }
+            return languageFlow.onTurn(turn.text(), nowSpeaking);
+        }
+
+        /** The leg, its context, its recognition and any mediation all move to the new language. */
+        private void switchTo(LanguageFlow.Outcome outcome) {
+            Language next = outcome.language();
+            String from = leg.languagePending() ? Language.AUTO_CODE : leg.language().code();
+            SttSession listening;
+            synchronized (lock) {
+                context = new CallContext(callId, leg, next, context.memory());
+                listening = session;
+            }
+            leg.switchLanguage(next);
+            if (listening != null) {
+                try {
+                    listening.retarget(next);
+                } catch (RuntimeException e) {
+                    log.warn("Changing the speech-to-text language failed on leg {}", leg.id(), e);
+                }
+            }
+            MediationSession inMediation = mediationSession;
+            if (inMediation != null) {
+                inMediation.farmerLanguage(next);
+            }
+            publish(new ConsoleEvent.LanguageChanged(callId, now(), leg.id(), LegRole.FARMER, from, next.code(), outcome.reason()));
+        }
+
+        /** Confirms the language, greets in it, then answers the turn that chose it if that said anything else. */
+        private void languageChosen(Turn turn, LanguageFlow.Outcome outcome) {
+            Language next = outcome.language();
+            Turn heardIn = withLanguage(turn, next);
+            List<Line> before;
+            long turnGeneration;
+            boolean wasSpeaking;
+            Synthesis toCancel;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return;
+                }
+                before = new ArrayList<>(lines);
+                lines.add(new Line(Speaker.FARMER, heardIn.text()));
+                turnGeneration = generation.incrementAndGet();
+                wasSpeaking = speaking;
+                speaking = false;
+                toCancel = synthesis;
+                synthesis = null;
+            }
+            if (wasSpeaking) {
+                stopSpeaking(toCancel);
+            }
+            switchTo(outcome);
+            publish(ConsoleEvent.TurnHeard.of(callId, heardIn, now()));
+            CallContext ctx;
+            synchronized (lock) {
+                if (context == null) {
+                    return;
+                }
+                ctx = context;
+            }
+            Reply confirmation = new Reply(LanguageLines.confirmation(next.code()), next, false);
+            submit("confirm language", () -> deliver(turnGeneration, confirmation,
+                    () -> greetIn(ctx, turnGeneration, heardIn, before, outcome.hasContent())));
+        }
+
+        private void greetIn(CallContext ctx, long turnGeneration, Turn turn, List<Line> before, boolean answer) {
+            if (generation.get() != turnGeneration) {
+                return;
+            }
+            Reply greeting = askBrain("greet", () -> brain.greet(ctx), ctx.language());
+            deliver(turnGeneration, greeting, !answer ? null : () -> {
+                if (generation.get() != turnGeneration) {
+                    return;
+                }
+                List<Line> history = new ArrayList<>(before);
+                history.add(new Line(Speaker.ASSISTANT, greeting.text()));
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, turn), ctx.language());
                 deliver(turnGeneration, reply);
             });
+        }
+
+        private void askLanguageAgain(Turn turn) {
+            long turnGeneration;
+            boolean wasSpeaking;
+            Synthesis toCancel;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return;
+                }
+                lines.add(new Line(Speaker.FARMER, turn.text()));
+                turnGeneration = generation.incrementAndGet();
+                wasSpeaking = speaking;
+                speaking = false;
+                toCancel = synthesis;
+                synthesis = null;
+            }
+            if (wasSpeaking) {
+                stopSpeaking(toCancel);
+            }
+            publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
+            Language spoken = languages.find(REASK_LANGUAGE).orElse(leg.language());
+            submit("ask language again", () -> deliver(turnGeneration, new Reply(LanguageLines.reask(), spoken, false)));
         }
 
         @Override
@@ -409,6 +575,11 @@ public final class CallPipeline {
 
         /** Speaks {@code reply} unless a newer turn, a barge-in or the hang-up superseded {@code replyGeneration}. */
         private void deliver(long replyGeneration, Reply reply) {
+            deliver(replyGeneration, reply, null);
+        }
+
+        /** @param next runs on the executor once the person has heard all of {@code reply}; null for nothing */
+        private void deliver(long replyGeneration, Reply reply, Runnable next) {
             synchronized (lock) {
                 if (ended || generation.get() != replyGeneration) {
                     log.debug("Dropping a superseded reply on leg {}", leg.id());
@@ -416,7 +587,8 @@ public final class CallPipeline {
                 }
                 lines.add(new Line(Speaker.ASSISTANT, reply.text()));
                 speaking = true;
-                if (!reply.language().equals(context.language())) {
+                // A leg that follows its own turns changes language only through its LanguageFlow, never on one reply.
+                if (languageFlow == null && !reply.language().equals(context.language())) {
                     context = new CallContext(callId, leg, reply.language(), context.memory());
                 }
             }
@@ -429,7 +601,7 @@ public final class CallPipeline {
                         frame -> playFrame(replyGeneration, frame));
             } catch (RuntimeException e) {
                 log.warn("Speech synthesis failed to start on leg {}", leg.id(), e);
-                afterSynthesis(replyGeneration, reply);
+                afterSynthesis(replyGeneration, reply, next);
                 return;
             }
             boolean superseded;
@@ -447,7 +619,7 @@ public final class CallPipeline {
                 if (error != null && !isCancellation(error)) {
                     log.warn("Speech synthesis failed on leg {}", leg.id(), error);
                 }
-                afterSynthesis(replyGeneration, reply);
+                afterSynthesis(replyGeneration, reply, next);
             });
         }
 
@@ -465,14 +637,14 @@ public final class CallPipeline {
         }
 
         /** Every frame of the reply is queued (or synthesis failed): wait for the farmer to hear it. */
-        private void afterSynthesis(long replyGeneration, Reply reply) {
+        private void afterSynthesis(long replyGeneration, Reply reply, Runnable next) {
             if (generation.get() != replyGeneration) {
                 return;
             }
-            leg.playbackDone().thenAccept(outcome -> afterPlayback(replyGeneration, reply, outcome));
+            leg.playbackDone().thenAccept(outcome -> afterPlayback(replyGeneration, reply, outcome, next));
         }
 
-        private void afterPlayback(long replyGeneration, Reply reply, PlaybackOutcome outcome) {
+        private void afterPlayback(long replyGeneration, Reply reply, PlaybackOutcome outcome, Runnable next) {
             boolean hangUp = false;
             synchronized (lock) {
                 if (ended || generation.get() != replyGeneration || outcome == PlaybackOutcome.ENDED) {
@@ -492,6 +664,8 @@ public final class CallPipeline {
                 } catch (RuntimeException e) {
                     log.warn("Hanging up leg {} failed", leg.id(), e);
                 }
+            } else if (next != null) {
+                submit("next line", next);
             }
         }
 
@@ -620,6 +794,15 @@ public final class CallPipeline {
                 log.warn("Closing speech-to-text failed on leg {}", leg.id(), e);
             }
         }
+    }
+
+    private static final LanguageFlow.Outcome KEEP_LANGUAGE = new LanguageFlow.Outcome(LanguageFlow.Kind.KEEP, null, false, null);
+    private static final LanguageFlow.Outcome IGNORE_TURN = new LanguageFlow.Outcome(LanguageFlow.Kind.IGNORED, null, false, null);
+    /** Hinglish: the repeat of the question has an English and a Hindi sentence, in one voice. Not yet heard live. */
+    private static final String REASK_LANGUAGE = "hi-en";
+
+    private static Turn withLanguage(Turn t, Language language) {
+        return t.language().equals(language) ? t : new Turn(t.legId(), t.role(), language, t.text(), t.startedMs(), t.endedMs());
     }
 
     private static Turn withText(Turn t, String text) {

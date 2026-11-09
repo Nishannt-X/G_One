@@ -30,6 +30,8 @@ export type ServerMessage =
   | { type: 'mark'; id: number }
   | { type: 'clear' }
   | { type: 'end' }
+  /** This leg's language was chosen or changed. */
+  | { type: 'language'; language: string }
   | ({ type: 'line' } & CallLine)
 
 export function parseServerMessage(text: string): ServerMessage | null {
@@ -58,6 +60,8 @@ export function parseServerMessage(text: string): ServerMessage | null {
     case 'clear':
     case 'end':
       return { type: m.type }
+    case 'language':
+      return typeof m.language === 'string' ? { type: 'language', language: m.language } : null
     case 'line':
       if (typeof m.kind !== 'string' || !LINE_KINDS.includes(m.kind) || typeof m.text !== 'string') return null
       return { type: 'line', kind: m.kind as LineKind, language: typeof m.language === 'string' ? m.language : '', text: m.text }
@@ -83,7 +87,8 @@ export function isSimulatorConfig(value: unknown): value is SimulatorConfig {
 
 export interface SocketParams {
   role: Role
-  lang: string
+  /** A language code to fix this leg to. Null lets G-One ask which language the person wants. */
+  lang: string | null
   /** A synthetic number from the config, or null to withhold the caller ID (no memory). */
   caller: string | null
   /** A buyer may name the farmer's call; blank joins the one call that is waiting. */
@@ -91,7 +96,8 @@ export interface SocketParams {
 }
 
 export function socketUrl(p: SocketParams, loc: Pick<Location, 'protocol' | 'host'> = location): string {
-  const query = new URLSearchParams({ role: p.role, lang: p.lang })
+  const query = new URLSearchParams({ role: p.role })
+  if (p.lang) query.set('lang', p.lang)
   if (p.caller) query.set('caller', p.caller) // URLSearchParams encodes the leading + as %2B
   if (p.role === 'buyer' && p.callId.trim()) query.set('callId', p.callId.trim())
   return `${loc.protocol === 'https:' ? 'wss' : 'ws'}://${loc.host}/ws/simulator?${query.toString().replace(/\+/g, '%20')}`

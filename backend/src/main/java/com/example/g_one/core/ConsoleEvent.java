@@ -28,13 +28,14 @@ import java.util.Locale;
         @JsonSubTypes.Type(value = ConsoleEvent.DealUpdated.class, name = "deal_updated"),
         @JsonSubTypes.Type(value = ConsoleEvent.CallEnded.class, name = "call_ended"),
         @JsonSubTypes.Type(value = ConsoleEvent.TurnMeasured.class, name = "turn_measured"),
+        @JsonSubTypes.Type(value = ConsoleEvent.LanguageChanged.class, name = "language_changed"),
 })
 public sealed interface ConsoleEvent {
     CallId callId();
 
     long atMs();
 
-    /** A farmer leg opened a new call. {@code language} is the farmer's starting language. */
+    /** A farmer leg opened a new call. {@code language} is the farmer's starting language, or "auto" while being chosen. */
     record CallStarted(CallId callId, long atMs, String language) implements ConsoleEvent {}
 
     /** A leg joined the call (the farmer leg first, then a buyer leg after connect). */
@@ -42,7 +43,8 @@ public sealed interface ConsoleEvent {
             implements ConsoleEvent {
 
         public static LegJoined of(Leg leg, long atMs) {
-            return new LegJoined(leg.callId(), atMs, leg.id(), leg.role(), leg.source(), leg.language().code());
+            return new LegJoined(leg.callId(), atMs, leg.id(), leg.role(), leg.source(),
+                    leg.languagePending() ? Language.AUTO_CODE : leg.language().code());
         }
     }
 
@@ -108,6 +110,14 @@ public sealed interface ConsoleEvent {
     record DealUpdated(CallId callId, long atMs, DealState state, String commodity, String variety, String market,
                        String quantity, BigDecimal price, String unit, String pickup, boolean farmerYes,
                        boolean buyerYes) implements ConsoleEvent {}
+
+    /**
+     * A leg's language was chosen or changed. {@code from} is "auto" when it had none yet. {@code reason} is "named" (the
+     * person asked for it), "detected" (the language of what they said), "run" (several turns in a row), "mix" (they mix
+     * it with English) or "default" (it could not be worked out).
+     */
+    record LanguageChanged(CallId callId, long atMs, LegId legId, LegRole role, String from, String to, String reason)
+            implements ConsoleEvent {}
 
     /** The call is over (the farmer leg ended). */
     record CallEnded(CallId callId, long atMs, long durationMs, String reason) implements ConsoleEvent {}

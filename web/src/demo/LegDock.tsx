@@ -3,6 +3,7 @@ import type { DemoLine } from '../lib/useSimulatorSetup'
 import { maskedCallerLabel } from '../lib/useSimulatorSetup'
 import type { Role, SimulatorConfig } from '../simulator/protocol'
 import type { useCallSimulator } from '../simulator/useCallSimulator'
+import { languageLabel } from '../lib/format'
 import { MicIcon, MicOffIcon, PhoneIcon, SendIcon } from '../ui/icons'
 
 type Sim = ReturnType<typeof useCallSimulator>
@@ -26,20 +27,16 @@ interface Props {
 export default function LegDock({ role, sim, config, lines, callId, canStart, lockedReason, hint }: Props) {
   const { state, start, stop, say, setMuted, setMicMode, setTalking } = sim
   const farmer = role === 'farmer'
-  const [lang, setLang] = useState(farmer ? 'hi-IN' : 'en-IN')
   const [caller, setCaller] = useState<string | null>(null)
-  // The farmer is usually heard on the microphone. A buyer in the same tab usually types.
-  const [voice, setVoice] = useState(farmer)
   const [text, setText] = useState('')
 
   const inCall = state.status === 'connecting' || state.status === 'live' || state.status === 'reconnecting'
-  const languages = config?.languages ?? []
   const chosenCaller = caller ?? config?.callers[0]?.number ?? WITHHELD
   const pushToTalk = !farmer
 
   const begin = async (textOnly: boolean) => {
     if (pushToTalk) setMicMode('push-to-talk')
-    await start({ role, lang, caller: farmer && chosenCaller !== WITHHELD ? chosenCaller : null, callId: farmer ? '' : callId, textOnly })
+    await start({ role, lang: null, caller: farmer && chosenCaller !== WITHHELD ? chosenCaller : null, callId: farmer ? '' : callId, textOnly })
     // The session exists only now, so the mode has to be applied to it as well.
     if (pushToTalk) setMicMode('push-to-talk')
   }
@@ -52,8 +49,8 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
 
   if (!inCall) {
     return (
-      <form className="flex h-full flex-col justify-between gap-2.5" onSubmit={(e) => { e.preventDefault(); void begin(!voice) }}>
-        <div className="grid grid-cols-2 gap-2">
+      <form className="flex h-full flex-col justify-between gap-2.5" onSubmit={(e) => { e.preventDefault(); void begin(false) }}>
+        <div>
           {farmer ? (
             <label className="min-w-0">
               <span className="sr-only">Synthetic caller</span>
@@ -65,23 +62,8 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
           ) : (
             <p className="flex min-h-11 items-center rounded-xl bg-sunk px-3 text-[0.9375rem] leading-tight font-semibold text-muted">Buyer joins on their phone</p>
           )}
-          <label className="min-w-0">
-            <span className="sr-only">Language</span>
-            <select className="field py-1" value={lang} onChange={(e) => setLang(e.target.value)}>
-              {languages.length === 0 && <option value={lang}>{lang}</option>}
-              {languages.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-            </select>
-          </label>
         </div>
         <div className="flex items-center gap-2">
-          <div role="radiogroup" aria-label="How to talk" className="grid shrink-0 grid-cols-2 rounded-xl bg-sunk p-1">
-            {[true, false].map((v) => (
-              <label key={String(v)} className={`flex min-h-9 cursor-pointer items-center justify-center rounded-lg px-3 text-sm font-semibold transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand ${voice === v ? 'bg-surface text-ink shadow-card' : 'text-muted'}`}>
-                <input type="radio" className="sr-only" checked={voice === v} onChange={() => setVoice(v)} />
-                {v ? (farmer ? 'Mic' : 'Talk') : 'Type'}
-              </label>
-            ))}
-          </div>
           <button type="submit" disabled={!canStart || config === null} title={!canStart ? lockedReason : undefined} className={`${farmer ? 'btn-primary' : 'btn-quiet'} min-w-0 flex-1`}>
             <PhoneIcon /> <span className="truncate">{farmer ? 'Call as farmer' : 'Join as buyer'}</span>
           </button>
@@ -128,7 +110,7 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
             <MicIcon /> {state.talking ? 'Listening' : 'Hold to talk'}
           </button>
         ))}
-        <span className="min-w-0 flex-1 truncate text-sm text-muted" role="status">{live ? (state.textOnly ? 'Typed turns' : 'On the call') : state.message}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-muted" role="status" data-testid={`${role}-language`}>{live ? `${state.language ? `${languageLabel(state.language)} · ` : ''}${state.textOnly ? 'Typed turns' : 'On the call'}` : state.message}</span>
         <button type="button" className="btn-danger btn-sm" onClick={stop}><PhoneIcon className="rotate-[135deg]" /> {farmer ? 'End call' : 'Leave'}</button>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { languageLabel } from '../lib/format'
 import { parseJoinCall } from '../lib/lan'
 import { useDemoLines, useSimulatorConfig } from '../lib/useSimulatorSetup'
 import { useStickToBottom } from '../lib/useStickToBottom'
@@ -84,10 +85,9 @@ function useWakeLock(active: boolean) {
  */
 export default function JoinPage({ query }: { query: URLSearchParams }) {
   const callId = parseJoinCall(query)
-  const { config, failed } = useSimulatorConfig()
+  const { failed } = useSimulatorConfig()
   const demoLines = useDemoLines()
   const { state, start, stop, say, setMuted } = useCallSimulator()
-  const [lang, setLang] = useState('en-IN')
   const [text, setText] = useState('')
   const stage = joinStage(callId, window.isSecureContext, state)
   // Only the words to tap. A script note describes what the farmer is told, so it stays off this screen.
@@ -97,7 +97,7 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
   useWakeLock(onLine)
 
   const join = (textOnly = false) => {
-    if (callId) void start({ role: 'buyer', lang, caller: null, callId, textOnly })
+    if (callId) void start({ role: 'buyer', lang: null, caller: null, callId, textOnly })
   }
   const send = () => {
     if (!text.trim()) return
@@ -110,7 +110,10 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
     <main className="flex h-dvh flex-col bg-page text-ink">
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
         <p className="text-xl font-bold">G-One <span className="font-medium text-muted">· Buyer</span></p>
-        <span className="badge" data-testid="join-stage" data-stage={stage}>{BADGE[stage]}</span>
+        <span className="flex items-center gap-2">
+          {onLine && state.language && <span className="text-sm font-medium text-muted" data-testid="join-language">{languageLabel(state.language)}</span>}
+          <span className="badge" data-testid="join-stage" data-stage={stage}>{BADGE[stage]}</span>
+        </span>
       </header>
 
       {stage === 'bad-link' && <Notice title="This link has no call in it">Scan the QR code on the laptop again.</Notice>}
@@ -119,14 +122,8 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
         <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
           <div>
             <h1 className="text-3xl leading-tight font-bold">A farmer is on the line</h1>
-            <p className="mt-2 text-lg text-muted">G-One translates between you. It will ask you to say yes before you are connected.</p>
+            <p className="mt-2 text-lg text-muted">G-One translates between you. It will ask which language you want, then ask you to say yes before you are connected.</p>
           </div>
-          <label className="w-full max-w-xs text-left">
-            <span className="mb-1 block font-semibold">I speak</span>
-            <select className="field" value={lang} onChange={(e) => setLang(e.target.value)}>
-              {(config?.languages ?? [{ code: 'en-IN', label: 'English' }]).map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
-            </select>
-          </label>
           {failed && <p role="alert" className="font-medium text-bad">Could not reach the laptop. Check that the backend is running.</p>}
           <button type="button" aria-label="Join call" className="btn-primary grid size-40 place-items-center rounded-full text-xl font-bold" onClick={() => join()}>
             <span className="flex flex-col items-center gap-1"><MicIcon className="size-10" /> Join call</span>
@@ -149,7 +146,7 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
         </Notice>
       )}
 
-      {stage === 'waiting' && <Notice title="Waiting for the farmer">G-One will speak first. Say yes when it asks if you agree.</Notice>}
+      {stage === 'waiting' && <Notice title="On the line">G-One will speak first and ask which language you want.</Notice>}
       {stage === 'in-call' && <Transcript lines={state.lines} />}
 
       {onLine && (

@@ -37,7 +37,8 @@ public final class FakeLeg implements Leg {
     private final CallId callId;
     private final LegRole role;
     private final LegSource source;
-    private final Language language;
+    private volatile Language language;
+    private volatile boolean languagePending;
     private final CallerKey callerKey;
 
     private final List<AudioFrame> played = new CopyOnWriteArrayList<>();
@@ -80,6 +81,19 @@ public final class FakeLeg implements Leg {
     @Override public LegRole role() { return role; }
     @Override public LegSource source() { return source; }
     @Override public Language language() { return language; }
+    @Override public boolean languagePending() { return languagePending; }
+
+    @Override
+    public void switchLanguage(Language next) {
+        language = next;
+        languagePending = false;
+    }
+
+    /** Marks this leg as having no language chosen yet. */
+    public FakeLeg pendingLanguage() {
+        languagePending = true;
+        return this;
+    }
     @Override public Optional<CallerKey> callerKey() { return Optional.ofNullable(callerKey); }
 
     @Override

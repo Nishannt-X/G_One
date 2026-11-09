@@ -25,6 +25,8 @@ final class ScriptedBrain implements AgentBrain {
     final List<RespondCall> responds = new CopyOnWriteArrayList<>();
     volatile boolean failGreet;
     volatile boolean failRespond;
+    /** When set, every reply is in this language, whatever the turn was. */
+    volatile Language replyIn;
     /** Runs inside {@link #respond} before it returns, with the turn text. */
     volatile Consumer<String> whileThinking = text -> {};
 
@@ -49,7 +51,7 @@ final class ScriptedBrain implements AgentBrain {
         if (failRespond) {
             throw new IllegalStateException("brain down (test)");
         }
-        Language language = latest.text().equals(SWITCH_TO_ENGLISH) ? FakeLeg.ENGLISH : ctx.language();
+        Language language = replyIn != null ? replyIn : latest.text().equals(SWITCH_TO_ENGLISH) ? FakeLeg.ENGLISH : ctx.language();
         return new Reply(replyTo(latest.text()), language, latest.text().equals("bye"));
     }
 }

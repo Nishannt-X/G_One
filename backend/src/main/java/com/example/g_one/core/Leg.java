@@ -18,8 +18,21 @@ public interface Leg {
 
     LegSource source();
 
-    /** The language the person on this leg is spoken to in. */
+    /** The language the person on this leg is spoken to in right now. It can change during the call. */
     Language language();
+
+    /**
+     * True while nobody has chosen this leg's language: G-One asks in English and works it out from what the person says.
+     * {@link #language()} then returns the language of that question. False for a leg started with a fixed language.
+     */
+    default boolean languagePending() {
+        return false;
+    }
+
+    /** Changes the leg's language and ends the pending state. Only legs that can be pending support this. */
+    default void switchLanguage(Language next) {
+        throw new UnsupportedOperationException("This leg has a fixed language");
+    }
 
     /**
      * The hashed number of the person on this leg; empty when the caller ID was withheld or anonymous, in which case

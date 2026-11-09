@@ -8,6 +8,29 @@ import {
 } from './callState'
 import type { ConsoleEvent } from '../types/console'
 
+describe('language changes', () => {
+  it('updates the leg and leaves a note on the conversation', () => {
+    let state: FeedState = initialFeed
+    state = feedReducer(state, { type: 'event', event: { type: 'call_started', callId: 'c', atMs: 1, language: 'auto' } })
+    state = feedReducer(state, { type: 'event', event: { type: 'leg_joined', callId: 'c', atMs: 2, legId: 'f', role: 'farmer', source: 'simulator', language: 'auto' } })
+    state = feedReducer(state, { type: 'event', event: { type: 'leg_joined', callId: 'c', atMs: 3, legId: 'b', role: 'buyer', source: 'simulator', language: 'en-IN' } })
+    state = feedReducer(state, { type: 'event', event: { type: 'language_changed', callId: 'c', atMs: 4, legId: 'f', role: 'farmer', from: 'auto', to: 'hi-IN', reason: 'named' } })
+
+    const call = state.calls.c
+    expect(call.language).toBe('hi-IN')
+    expect(call.legs.find((l) => l.legId === 'f')?.language).toBe('hi-IN')
+    expect(call.legs.find((l) => l.legId === 'b')?.language).toBe('en-IN')
+    expect(call.languageNotes).toHaveLength(1)
+    expect(call.languageNotes[0]).toMatchObject({ role: 'farmer', from: 'auto', to: 'hi-IN' })
+  })
+
+  it('keeps a valid language change from the feed and drops a broken one', () => {
+    const event = { type: 'language_changed', callId: 'c', atMs: 4, legId: 'f', role: 'farmer', from: 'auto', to: 'hi-IN', reason: 'named' }
+    expect(normalizeEvent(event)?.type).toBe('language_changed')
+    expect(normalizeEvent({ ...event, to: 3 })).toBeNull()
+  })
+})
+
 describe('feedReducer', () => {
   it('handles call lifecycle and tracks deal updates', () => {
     let state: FeedState = initialFeed

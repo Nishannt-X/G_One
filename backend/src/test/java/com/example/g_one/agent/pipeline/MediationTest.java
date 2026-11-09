@@ -60,6 +60,8 @@ class MediationTest {
     private LegRegistry registry;
     private FakeLeg farmer;
     private FakeLeg buyer;
+    private Language.Registry languages;
+    private MediationEngine engine;
 
     private final Clock clock = new Clock() {
         @Override
@@ -82,13 +84,14 @@ class MediationTest {
     void setUp() throws Exception {
         llm = new FakeLlm();
         bus.subscribe(events::add);
-        GOneProperties props = new GOneProperties(List.of("hi-IN:Hindi:Nalini", "en-IN:English:Kaveri"), "",
+        GOneProperties props = new GOneProperties(List.of("hi-IN:Hindi:Nalini", "en-IN:English:Kaveri", "hi-en:Hinglish:Poorvi"), "",
                 new GOneProperties.Agmarknet("http://127.0.0.1:9", "", "", "", "", "", "", 5, 3, 30), null,
                 new GOneProperties.Llm(llm.baseUrl(), FakeLlm.KEY, "fake-model", 5));
         MandiCatalog catalog = new MandiCatalog(JSON);
-        MediationEngine engine = new MediationEngine(new TurnReader(new ChatClient(props, JSON), JSON),
+        languages = new Language.Registry(props);
+        engine = new MediationEngine(new TurnReader(new ChatClient(props, JSON), JSON),
                 new MediationLines(JSON), new MandiQuote(new MandiSource(props, JSON), catalog), catalog, consent,
-                new MemoryGate(), bus, new Language.Registry(props), clock);
+                new MemoryGate(), bus, languages, clock);
         registry = new LegRegistry();
         new CallPipeline(brain, stt, tts, store, bus, List.of(ended::add), executor, now::get, engine).attach(registry);
 
@@ -155,6 +158,146 @@ class MediationTest {
         session(LegRole.BUYER).say("I can pay " + price + " per quintal");
         executor.runAll();
         finishAll();
+    }
+
+    /** A second call in which neither side has a language yet, up to the buyer's yes. */
+    private CallId bothChooseTheirLanguage(String farmerSays, String buyerSays) {
+        CallId second = CallId.random();
+        LegRegistry r = new LegRegistry();
+        new CallPipeline(brain, stt, tts, store, bus, List.of(ended::add), executor, now::get, engine, languages).attach(r);
+        farmer = FakeLeg.farmer(second).pendingLanguage();
+        r.register(farmer);
+        executor.runAll();
+        farmer.finishPlayback();
+        session(LegRole.FARMER).say(farmerSays);
+        for (int i = 0; i < 6; i++) {
+            farmer.finishPlayback();
+            executor.runAll();
+        }
+        consent.suggested(second, List.of("mehta-agro"), "Onion", "20 quintal", "Nashik");
+        consent.requested(second, new Buyer("mehta-agro", "Mehta Agro Traders", "trader", "Pune", List.of(), "en-IN", 92,
+                "MEHTA_AGRO", List.of()));
+        buyer = FakeLeg.buyer(second).pendingLanguage();
+        r.register(buyer);
+        executor.runAll();
+        finishAll();
+        session(LegRole.BUYER).say(buyerSays);
+        executor.runAll();
+        finishAll();
+        return second;
+    }
+
+    private void buyerSaid(String text, String translation) {
+        llm.replyText(reading(translation, NO_OFFER, NO_CAUTION, "none"));
+        session(LegRole.BUYER).say(text);
+        executor.runAll();
+        finishAll();
+    }
+
+    private void farmerSaid(String text, String translation) {
+        llm.replyText(reading(translation, NO_OFFER, NO_CAUTION, "none"));
+        session(LegRole.FARMER).say(text);
+        executor.runAll();
+        finishAll();
+    }
+
+    private ConsoleEvent.TurnTranslated lastTranslated() {
+        List<ConsoleEvent.TurnTranslated> all = eventsOf(ConsoleEvent.TurnTranslated.class);
+        return all.get(all.size() - 1);
+    }
+
+    @Test
+    void aBuyerWithNoLanguageIsAskedInEnglishThenHearsTheIntroInTheirChoice() {
+        consent.suggested(call, List.of("mehta-agro"), "Onion", "20 quintal", "Nashik");
+        buyer = FakeLeg.buyer(call).pendingLanguage();
+        registry.register(buyer);
+        executor.runAll();
+        assertThat(tts.requests().get(tts.requests().size() - 1).text()).contains("connecting you to a farmer").contains("Which language");
+        assertThat(session(LegRole.BUYER).language()).isEqualTo(Language.DETECTING);
+        buyer.finishPlayback();
+
+        session(LegRole.BUYER).say("हिंदी");
+        executor.runAll();
+        assertThat(buyer.language().code()).isEqualTo("hi-IN");
+        assertThat(session(LegRole.BUYER).retargets()).extracting(Language::code).containsExactly("hi-IN");
+        assertThat(eventsOf(ConsoleEvent.LanguageChanged.class)).singleElement()
+                .satisfies(e -> {
+                    assertThat(e.role()).isEqualTo(LegRole.BUYER);
+                    assertThat(e.from()).isEqualTo("auto");
+                    assertThat(e.to()).isEqualTo("hi-IN");
+                });
+        buyer.finishPlayback();
+        executor.runAll();
+        assertThat(tts.requests().stream().map(FakeTextToSpeech.Request::text))
+                .anyMatch(t -> t.startsWith("ठीक है"))
+                .anyMatch(t -> t.contains("हाँ या ना") || t.contains("AI"));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).as("no consent yet").isEmpty();
+    }
+
+    @Test
+    void eachLegSwitchesOnItsOwnAndTranslationFollowsBoth() {
+        bothChooseTheirLanguage("हिंदी", "English please");
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+        finishAll();
+        assertThat(farmer.language().code()).isEqualTo("hi-IN");
+        assertThat(buyer.language().code()).isEqualTo("en-IN");
+
+        buyerSaid("We can pick it up on Monday", "हम सोमवार को ले जा सकते हैं");
+        assertThat(lastTranslated().fromLanguage()).isEqualTo("en-IN");
+        assertThat(lastTranslated().toLanguage()).isEqualTo("hi-IN");
+
+        buyerSaid("हम सोमवार को आएँगे", "हम सोमवार को आएँगे");
+        assertThat(buyer.language().code()).as("one turn is not a switch").isEqualTo("en-IN");
+        buyerSaid("गाड़ी सुबह भेज देंगे", "गाड़ी सुबह भेज देंगे");
+        assertThat(buyer.language().code()).as("English then a Hindi run is a mix").isEqualTo("hi-en");
+        assertThat(farmer.language().code()).as("the farmer's leg is untouched").isEqualTo("hi-IN");
+        assertThat(session(LegRole.BUYER).retargets()).extracting(Language::code).containsExactly("en-IN", "hi-en");
+
+        buyerSaid("पैसे उसी दिन मिलेंगे", "पैसे उसी दिन मिलेंगे");
+        assertThat(lastTranslated().fromLanguage()).as("the source follows the buyer").isEqualTo("hi-en");
+        assertThat(lastTranslated().toLanguage()).isEqualTo("hi-IN");
+
+        farmerSaid("Monday works for me", "सोमवार ठीक है");
+        farmerSaid("Please send the truck early", "गाड़ी जल्दी भेजिए");
+        assertThat(farmer.language().code()).isEqualTo("en-IN");
+        assertThat(buyer.language().code()).as("the buyer's leg is untouched").isEqualTo("hi-en");
+        farmerSaid("I will keep the onions ready", "मैं प्याज़ तैयार रखूँगा");
+        assertThat(lastTranslated().fromLanguage()).isEqualTo("en-IN");
+        assertThat(lastTranslated().toLanguage()).isEqualTo("hi-en");
+    }
+
+    @Test
+    void twoLegsInTheSameLanguageStillWork() {
+        bothChooseTheirLanguage("हिंदी", "हिंदी");
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+        finishAll();
+
+        buyerSaid("पैसे उसी दिन मिलेंगे", "पैसे उसी दिन मिलेंगे");
+        assertThat(lastTranslated().fromLanguage()).isEqualTo("hi-IN");
+        assertThat(lastTranslated().toLanguage()).isEqualTo("hi-IN");
+        assertThat(lastTranslated().text()).isEqualTo("पैसे उसी दिन मिलेंगे");
+    }
+
+    @Test
+    void theBuyerIsAskedOnceMoreThenSettlesOnHinglish() {
+        consent.suggested(call, List.of("mehta-agro"), "Onion", "20 quintal", "Nashik");
+        buyer = FakeLeg.buyer(call).pendingLanguage();
+        registry.register(buyer);
+        executor.runAll();
+        buyer.finishPlayback();
+
+        session(LegRole.BUYER).say("haan");
+        executor.runAll();
+        assertThat(tts.requests().stream().map(FakeTextToSpeech.Request::text)).anyMatch(t -> t.startsWith("Sorry, I did not catch"));
+        buyer.finishPlayback();
+        executor.runAll();
+
+        session(LegRole.BUYER).say("hmm");
+        executor.runAll();
+        assertThat(buyer.language().code()).isEqualTo("hi-en");
+        assertThat(eventsOf(ConsoleEvent.LanguageChanged.class)).singleElement().extracting(ConsoleEvent.LanguageChanged::reason).isEqualTo("default");
     }
 
     @Test

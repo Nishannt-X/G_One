@@ -1,5 +1,6 @@
 package com.example.g_one.speech.lang;
 
+import com.example.g_one.core.Language;
 import java.util.Locale;
 
 /**
@@ -15,6 +16,13 @@ import java.util.Locale;
 public record LanguageRoute(String sttHints, String sttSingle, String ttsLanguage, String format) {
     private static final String CLEAN = "transcribe";
     private static final String MIXED = "codemix";
+    /**
+     * What Prisma v3 is told while a leg's language is being chosen: every offered language, so the first answer can be
+     * heard whatever it is in. Not yet verified live: how many hints the header takes and how accurate they are.
+     */
+    static final String ALL_HINTS = "hi-IN,en-IN,bn-IN,ta-IN,kn-IN";
+    /** The one code for REST and v2.5, which cannot take several, while a language is being chosen. */
+    private static final String DETECTING_SINGLE = "hi-IN";
 
     /** @param prismaV3 whether the session uses Prisma v3.0, the only model taking several hints and a format */
     public static LanguageRoute of(String code, boolean prismaV3) {
@@ -24,6 +32,7 @@ public record LanguageRoute(String sttHints, String sttSingle, String ttsLanguag
             case "en-in" -> new LanguageRoute("en-IN,hi-IN", "en-IN", "en-IN", CLEAN);
             case "bn-in" -> new LanguageRoute("bn-IN,en-IN", "bn-IN", "bn-IN", CLEAN);
             case "bn-en" -> new LanguageRoute("bn-IN,en-IN", "bn-IN", "bn-IN", MIXED);
+            case Language.AUTO_CODE -> new LanguageRoute(ALL_HINTS, DETECTING_SINGLE, "en-IN", MIXED);
             default -> new LanguageRoute(code, code, code, CLEAN);
         };
         return prismaV3 ? full : new LanguageRoute(full.sttSingle, full.sttSingle, full.ttsLanguage, "");

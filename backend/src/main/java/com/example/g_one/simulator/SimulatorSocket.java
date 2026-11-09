@@ -36,11 +36,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.web.util.UriUtils;
 
 /**
- * {@code /ws/simulator?role=farmer|buyer&lang=hi-IN[&caller=%2B919876543210][&callId=...]}: a browser tab acts as a phone
+ * {@code /ws/simulator?role=farmer|buyer[&lang=hi-IN][&caller=%2B919876543210][&callId=...]}: a browser tab acts as a phone
  * leg (see {@link SimulatorLeg} for the wire format). The leg is registered in the {@link LegRegistry} like a Twilio
  * leg. A farmer starts a new call; a buyer joins the call named by {@code callId}, or the only call that has a farmer
  * and no buyer yet. {@code caller} must be one of {@link SimulatorCallers}; leave it out to withhold the caller ID.
- * Turn it off with {@code g-one.simulator.enabled=false}. Same-origin pages may connect, and so may pages served from
+ * Without {@code lang} the leg starts with its language pending: G-One asks in English and works it out. A {@code lang}
+ * fixes it instead. Turn it off with {@code g-one.simulator.enabled=false}. Same-origin pages may connect, and so may pages served from
  * localhost on any port (the Vite dev server proxies with a different Origin). In the offline demo the page may also send
  * {@code {"type":"say","text":"..."}} as a typed turn ({@link TypedTurns}). A buyer socket also receives the call's
  * {@link BuyerLines} as text, so a phone can show them without the console feed, which carries the farmer's whispers.
@@ -55,6 +56,7 @@ public class SimulatorSocket implements WebSocketConfigurer {
     private static final int BUFFER_LIMIT_BYTES = 4 * 1024 * 1024;
     /** Each open simulator socket can start paid speech and model calls, so only a few at once. */
     static final int MAX_OPEN_LEGS = 8;
+    private static final String FIRST_LANGUAGE = "en-IN";
 
     private final LegRegistry registry;
     private final Language.Registry languages;
@@ -131,9 +133,10 @@ public class SimulatorSocket implements WebSocketConfigurer {
             } catch (IllegalArgumentException e) {
                 throw new Refused("role must be farmer or buyer.");
             }
+            String lang = param(query, "lang");
             Language language;
             try {
-                language = languages.require(param(query, "lang"));
+                language = languages.require(lang.isBlank() ? FIRST_LANGUAGE : lang);
             } catch (IllegalArgumentException e) {
                 throw new Refused(e.getMessage());
             }
@@ -144,7 +147,10 @@ public class SimulatorSocket implements WebSocketConfigurer {
                 throw new Refused(e.getMessage());
             }
             CallId call = role == LegRole.FARMER ? CallId.random() : callToJoin(param(query, "callId"));
-            return new SimulatorLeg(call, role, language, key.orElse(null), new SocketChannel(safe));
+            SocketChannel channel = new SocketChannel(safe);
+            return lang.isBlank()
+                    ? SimulatorLeg.languagePending(call, role, language, key.orElse(null), channel)
+                    : new SimulatorLeg(call, role, language, key.orElse(null), channel);
         }
 
         /** The farmer's call a buyer joins. */
@@ -169,7 +175,7 @@ public class SimulatorSocket implements WebSocketConfigurer {
             node.put("callId", leg.callId().value());
             node.put("legId", leg.id().value());
             node.put("role", leg.role().wire());
-            node.put("language", leg.language().code());
+            node.put("language", leg.languagePending() ? Language.AUTO_CODE : leg.language().code());
             node.put("sampleRate", SimulatorLeg.PLAYBACK_RATE);
             node.put("memory", leg.callerKey().isPresent());
             return node.toString();

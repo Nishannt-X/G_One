@@ -27,6 +27,8 @@ export interface SimulatorState {
   refused: boolean
   /** A buyer's transcript. Stays empty for a farmer. */
   lines: CallLine[]
+  /** This leg's language code, "auto" while it is being chosen, empty before the call connects. */
+  language: string
 }
 
 const IDLE: SimulatorState = {
@@ -45,6 +47,7 @@ const IDLE: SimulatorState = {
   micError: null,
   refused: false,
   lines: [],
+  language: '',
 }
 
 const RETRY_CONFIG = { baseMs: 1000, maxMs: 8000, jitter: 0.2 }
@@ -282,7 +285,11 @@ export function useCallSimulator() {
                 message: 'On the call.',
                 callId: message.callId,
                 memory: message.memory,
+                language: message.language,
               }))
+              break
+            case 'language':
+              setState((s) => ({ ...s, language: message.language }))
               break
             case 'mark':
               player?.whenPlayed(() => {

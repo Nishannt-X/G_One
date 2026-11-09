@@ -3,7 +3,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import manifest from '../../../public/demo/voiced-sample/manifest.json'
 import { parseRoute } from '../../lib/route'
-import { creditMode } from '../speechCredit'
+import { creditMode } from '../creditMode'
 import type { Manifest } from './manifest'
 import { Phone } from './PhoneMock'
 import { ReceiptCard } from './SampleReceiptPage'
@@ -47,11 +47,10 @@ describe('sample receipt', () => {
 
 describe('speech credit', () => {
   it('credits only the speech each mode really uses', () => {
-    expect(creditMode(true, null, false)).toBe('sample')
-    expect(creditMode(true, 'feed', true)).toBe('sample')
-    expect(creditMode(false, 'feed', false)).toBe('live')
-    expect(creditMode(false, 'feed', true)).toBeNull()
-    expect(creditMode(false, 'mock', false)).toBeNull()
-    expect(creditMode(false, null, false)).toBeNull()
+    expect(creditMode(true, null)).toBe('sample')
+    expect(creditMode(true, 'feed')).toBe('sample')
+    expect(creditMode(false, 'feed')).toBe('live')
+    expect(creditMode(false, 'mock')).toBeNull()
+    expect(creditMode(false, null)).toBeNull()
   })
 })

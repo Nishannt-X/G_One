@@ -1,5 +1,5 @@
 import { useT, type MessageKey } from '../lib/i18n'
-import type { CreditMode } from './speechCredit'
+import type { CreditMode } from './creditMode'
 
 const KEYS: Record<NonNullable<CreditMode>, MessageKey> = { live: 'credit_speech_live', sample: 'credit_speech_sample' }
 

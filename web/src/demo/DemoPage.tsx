@@ -12,7 +12,7 @@ import DealPanel from './DealPanel'
 import LegDock from './LegDock'
 import PhoneJoinCard from './PhoneJoinCard'
 import SpeechCredit from './SpeechCredit'
-import { creditMode } from './speechCredit'
+import { creditMode } from './creditMode'
 import { usePhoneJoin } from './phoneJoin'
 import { Avatar, Waveform } from './parts'
 import Timeline from './Timeline'
@@ -170,7 +170,7 @@ export default function DemoPage({ feed, status, dispatch, autoplay, lan }: { fe
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_23.5rem]">
         <section aria-label="Conversation" className="card relative flex h-[calc(100dvh-5rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden lg:h-auto lg:min-h-0">
           {voicedOn && voiceManifest ? <VoicedCallBar manifest={voiceManifest} state={voice} /> : <CallBar call={call} />}
-          <SpeechCredit mode={creditMode(voicedOn && voiceManifest !== null, call?.origin ?? null, lines.length > 0)} />
+          <SpeechCredit mode={creditMode(voicedOn && voiceManifest !== null, call?.origin ?? null)} />
           {voicedOn && voiceManifest ? <VoicedTimeline manifest={voiceManifest} state={voice} onReplayPhones={() => engine.replayPhones()} /> : <Timeline call={call} empty={<Intro onPlay={startSample} busy={starting || voice.status === 'loading'} label={introLabel} />} />}
           {voicedOn && voiceManifest ? (
             <div className="min-[1400px]:grid min-[1400px]:grid-cols-[11.75rem_minmax(0,1fr)_11.75rem]">

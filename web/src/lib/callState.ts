@@ -395,6 +395,9 @@ export function normalizeEvent(value: unknown): ConsoleEvent | null {
       } as ConsoleEvent
     case 'call_ended':
       return { ...base, durationMs: typeof raw.durationMs === 'number' ? raw.durationMs : 0, reason: String(raw.reason ?? '') } as ConsoleEvent
+    case 'language_changed':
+      if (typeof raw.legId !== 'string' || typeof raw.to !== 'string' || !ROLES.includes(String(raw.role))) return null
+      return { ...base, from: String(raw.from ?? ''), reason: String(raw.reason ?? '') } as ConsoleEvent
     case 'turn_measured':
       return {
         ...base,

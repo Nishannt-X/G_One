@@ -77,12 +77,15 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   )
 }
 
+/** The override's empty choice: the leg's language is worked out on the call. */
+const DETECT = ''
+
 export default function SimulatorPage() {
   const { config, error } = useSimulatorConfig()
   const demoLines = useDemoScript()
   const { state, start, stop, say, setMuted, setMicMode, setTalking, retry } = useCallSimulator()
   const [role, setRole] = useState<Role>('farmer')
-  const [lang, setLang] = useState('hi-IN')
+  const [lang, setLang] = useState(DETECT)
   const [caller, setCaller] = useState('+919876543210')
   const [callId, setCallId] = useState('')
   const [typedText, setTypedText] = useState('')
@@ -90,7 +93,7 @@ export default function SimulatorPage() {
 
   const inCall = state.status === 'connecting' || state.status === 'live' || state.status === 'reconnecting'
   const languages = config?.languages ?? []
-  const language = languages.some((l) => l.code === lang) ? lang : (languages[0]?.code ?? lang)
+  const language = languages.some((l) => l.code === lang) ? lang : DETECT
   const seconds = (n: number) => (n * 0.02).toFixed(1)
 
   const roleLines = demoLines.filter((l) => l.role === role)
@@ -179,7 +182,7 @@ export default function SimulatorPage() {
               className="btn-primary text-sm"
               onClick={() => {
                 setTextOnly(true)
-                void start({ role, lang: language, caller: caller === WITHHELD ? null : caller, callId, textOnly: true })
+                void start({ role, lang: language === DETECT ? null : language, caller: caller === WITHHELD ? null : caller, callId, textOnly: true })
               }}
             >
               Continue in Text-Only Mode
@@ -206,7 +209,7 @@ export default function SimulatorPage() {
           onSubmit={(e) => {
             e.preventDefault()
             if (inCall) stop()
-            else void start({ role, lang: language, caller: caller === WITHHELD ? null : caller, callId, textOnly })
+            else void start({ role, lang: language === DETECT ? null : language, caller: caller === WITHHELD ? null : caller, callId, textOnly })
           }}
         >
           <fieldset disabled={inCall} className="space-y-5">
@@ -238,13 +241,13 @@ export default function SimulatorPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Spoken Language">
+              <Field label="Language override (advanced)">
                 <select
                   value={language}
                   onChange={(e) => setLang(e.target.value)}
                   className={`${FIELD} ${FOCUS}`}
                 >
-                  {languages.length === 0 && <option value={language}>{language}</option>}
+                  <option value={DETECT}>None: G-One asks in English</option>
                   {languages.map((l) => (
                     <option key={l.code} value={l.code}>
                       {l.label} ({l.code})

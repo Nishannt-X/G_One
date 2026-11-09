@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { translationKey, type CallView, type TimelineItem } from '../lib/callState'
-import { duration } from '../lib/format'
+import { duration, languageLabel } from '../lib/format'
 import { useStickToBottom } from '../lib/useStickToBottom'
 import { CheckIcon, ChevronIcon, CrossIcon, LockIcon, MemoryIcon, SearchIcon, StoreIcon } from '../ui/icons'
 import { sampleGloss } from './gloss'
@@ -16,6 +16,10 @@ function buildRows(call: CallView): Row[] {
   for (const tool of call.tools) {
     const note = toolNote(tool)
     rows.push({ kind: 'note', key: tool.key, atMs: tool.atMs, tone: note.ok ? 'plain' : 'bad', icon: note.ok ? <SearchIcon /> : <CrossIcon />, text: note.text })
+  }
+  for (const note of call.languageNotes) {
+    const label = languageLabel(note.to)
+    rows.push({ kind: 'note', key: note.key, atMs: note.atMs, tone: 'plain', icon: note.role === 'farmer' ? <MemoryIcon /> : <StoreIcon />, text: note.from === 'auto' ? `${note.role === 'farmer' ? 'Farmer' : 'Buyer'} speaks ${label}` : `${note.role === 'farmer' ? 'Farmer' : 'Buyer'}: switched to ${label}` })
   }
   if (call.memory?.returning) {
     const gist = call.memory.gists[0]

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export type View = 'home' | 'demo' | 'farmers' | 'live' | 'memory' | 'buyers' | 'simulator'
+export type View = 'home' | 'demo' | 'farmers' | 'live' | 'memory' | 'buyers' | 'simulator' | 'join'
 
 export interface Route {
   view: View
@@ -9,7 +9,7 @@ export interface Route {
   query: URLSearchParams
 }
 
-const VIEWS: readonly View[] = ['demo', 'farmers', 'live', 'memory', 'buyers', 'simulator']
+const VIEWS: readonly View[] = ['demo', 'farmers', 'live', 'memory', 'buyers', 'simulator', 'join']
 
 /** The views that sit under the Advanced menu. */
 export const ADVANCED_VIEWS: readonly View[] = ['live', 'simulator', 'buyers', 'memory']

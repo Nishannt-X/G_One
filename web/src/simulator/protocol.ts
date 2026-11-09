@@ -12,12 +12,25 @@ export const FRAME_MS = 20
 
 export type Role = 'farmer' | 'buyer'
 
+/** you_said: the buyer's words. they_hear: those words as translated for the farmer. you_hear: the farmer's words translated for the buyer. g_one: G-One speaking to the buyer. */
+export type LineKind = 'you_said' | 'they_hear' | 'you_hear' | 'g_one'
+
+/** One entry of a buyer's transcript. The server sends these to buyer sockets only and never includes a whisper. */
+export interface CallLine {
+  kind: LineKind
+  language: string
+  text: string
+}
+
+const LINE_KINDS: readonly string[] = ['you_said', 'they_hear', 'you_hear', 'g_one']
+
 /** What the server sends as text. */
 export type ServerMessage =
   | { type: 'ready'; callId: string; legId: string; role: Role; language: string; sampleRate: number; memory: boolean }
   | { type: 'mark'; id: number }
   | { type: 'clear' }
   | { type: 'end' }
+  | ({ type: 'line' } & CallLine)
 
 export function parseServerMessage(text: string): ServerMessage | null {
   let value: unknown
@@ -45,6 +58,9 @@ export function parseServerMessage(text: string): ServerMessage | null {
     case 'clear':
     case 'end':
       return { type: m.type }
+    case 'line':
+      if (typeof m.kind !== 'string' || !LINE_KINDS.includes(m.kind) || typeof m.text !== 'string') return null
+      return { type: 'line', kind: m.kind as LineKind, language: typeof m.language === 'string' ? m.language : '', text: m.text }
     default:
       return null
   }

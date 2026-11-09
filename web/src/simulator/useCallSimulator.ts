@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { backoffDelay } from '../lib/backoff'
 import workletUrl from './capture.worklet.js?worker&url'
 import { PcmPlayer } from './player'
-import { PLAYBACK_RATE, parseServerMessage, socketUrl, type SocketParams } from './protocol'
+import { PLAYBACK_RATE, parseServerMessage, socketUrl, type CallLine, type SocketParams } from './protocol'
 
 export type CallStatus = 'idle' | 'connecting' | 'live' | 'ended' | 'error' | 'reconnecting'
 export type MicMode = 'hands-free' | 'push-to-talk'
@@ -23,6 +23,10 @@ export interface SimulatorState {
   framesReceived: number
   turnsSent: number
   micError: string | null
+  /** The server turned this connection down, and `message` says why. Retrying the same call would not help. */
+  refused: boolean
+  /** A buyer's transcript. Stays empty for a farmer. */
+  lines: CallLine[]
 }
 
 const IDLE: SimulatorState = {
@@ -39,21 +43,30 @@ const IDLE: SimulatorState = {
   framesReceived: 0,
   turnsSent: 0,
   micError: null,
+  refused: false,
+  lines: [],
 }
 
 const RETRY_CONFIG = { baseMs: 1000, maxMs: 8000, jitter: 0.2 }
 const MAX_BUFFERED_BYTES = 8000 * 2
+const MAX_LINES = 80
+/** The server closes with these when it will not take the connection: policy violation, overload. */
+const REFUSED_CODES = [1008, 1013]
 
 /**
  * A context at the rate the backend streams at, so playback needs no resampling in our code, on larger output buffers
  * since a call favours steady audio over shaving milliseconds. Browsers that refuse the rate get their default one and
  * the player resamples instead.
  */
-function createPlaybackContext(): AudioContext {
+function createPlaybackContext(): AudioContext | null {
   try {
     return new AudioContext({ sampleRate: PLAYBACK_RATE, latencyHint: 'playback' })
   } catch {
-    return new AudioContext({ latencyHint: 'playback' })
+    try {
+      return new AudioContext({ latencyHint: 'playback' })
+    } catch {
+      return null
+    }
   }
 }
 
@@ -133,7 +146,10 @@ export function useCallSimulator() {
 
       let stream: MediaStream | null = null
       let context: AudioContext | null = null
-      let playbackContext: AudioContext | null = null
+      // Made here, inside the tap that started the call: once the microphone prompt has been answered, a phone browser
+      // may no longer count this as a user gesture and would leave the context silent.
+      const playbackContext = createPlaybackContext()
+      void playbackContext?.resume()
       let capture: AudioWorkletNode | null = null
 
       if (!params.textOnly) {
@@ -154,6 +170,7 @@ export function useCallSimulator() {
             message: msg,
             micError: msg,
           }))
+          void playbackContext?.close()
           return
         }
       }
@@ -161,9 +178,10 @@ export function useCallSimulator() {
       try {
         let player: PcmPlayer | null = null
         try {
-          playbackContext = createPlaybackContext()
-          await playbackContext.resume()
-          player = new PcmPlayer(playbackContext, playbackContext.destination)
+          if (playbackContext) {
+            void playbackContext.resume()
+            player = new PcmPlayer(playbackContext, playbackContext.destination)
+          }
 
           if (stream) {
             // The microphone keeps its own context at the browser's default rate.
@@ -279,12 +297,20 @@ export function useCallSimulator() {
             case 'end':
               finish('ended', 'The call ended.')
               break
+            case 'line':
+              setState((s) => ({ ...s, lines: [...s.lines, { kind: message.kind, language: message.language, text: message.text }].slice(-MAX_LINES) }))
+              break
           }
         }
 
         socket.onclose = (event) => {
           if (userHungUp.current || event.code === 1000) {
             finish('ended', 'The call ended.')
+            return
+          }
+          if (REFUSED_CODES.includes(event.code)) {
+            finish('error', event.reason || 'The call would not accept this connection.')
+            setState((s) => ({ ...s, refused: true }))
             return
           }
           // Unexpected drop: attempt reconnect with backoff

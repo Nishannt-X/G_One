@@ -34,7 +34,8 @@ import org.slf4j.LoggerFactory;
  *       {@code {"type":"hangup"}}.</li>
  *   <li>server to browser: binary messages of 20 ms of playback audio; text {@code {"type":"ready",...}} once on
  *       connect, {@code {"type":"mark","id":n}} after queued audio, {@code {"type":"clear"}} to drop whatever is not
- *       yet heard, {@code {"type":"end"}} when we hang up.</li>
+ *       yet heard, {@code {"type":"end"}} when we hang up; on a buyer socket only, {@code {"type":"line",...}} from
+ *       {@link BuyerLines}.</li>
  * </ul>
  * Like Twilio marks, a mark is echoed once the audio before it has played; {@link #playbackDone()} is built on them.
  * Safe to call from any thread; {@link #receive} must be called from one thread at a time (a socket does that).

@@ -21,6 +21,7 @@ dump/legacy-docs/
 # Web
 node_modules/
 web/dist/
+web/.dev-certs/
 .env.local
 
 # Old project code, untracked since be28f01; kept on local disks as reference only (see dump/LEGACY-NOTES.md)

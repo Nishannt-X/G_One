@@ -16,12 +16,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
-import java.time.OffsetDateTime;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.ClassPathResource;
 
 class MemorySeederTest {
@@ -88,6 +89,64 @@ class MemorySeederTest {
         assertThat(m.fact("district")).contains(newer);
         assertThat(m.gists()).first().isEqualTo(later);
         assertThat(m.gists()).hasSize(3);
+    }
+
+    @Test
+    void reseedingNeverUndoesLaterEditsToSeededGistsOrFacts() {
+        MemorySeeder.seed(store, bundledSeed(), ENV::get, SALT);
+        CallerKey key = CallerKey.fromPhone(PHONE, FakeLeg.SALT);
+        CallGist seeded = store.load(key).orElseThrow().gists().get(0);
+        // Later: the follow-up is marked done (the gist is rewritten without it) and the farmer corrects the village.
+        CallGist edited = new CallGist(seeded.callId(), seeded.startedMs(), seeded.endedMs(), seeded.summary(),
+                List.of());
+        store.saveGist(key, edited);
+        ProfileFact village = store.load(key).orElseThrow().fact("village").orElseThrow();
+        ProfileFact corrected = new ProfileFact("village", "Vinchur",
+                Provenance.said(CallId.of("c-1108"), village.provenance().atMs() + 1_000));
+        store.upsertFacts(key, List.of(corrected));
+
+        MemorySeeder.Result again = MemorySeeder.seed(store, bundledSeed(), ENV::get, SALT);
+
+        assertThat(again.facts()).isZero();
+        assertThat(again.gists()).isZero();
+        FarmerMemory m = store.load(key).orElseThrow();
+        assertThat(m.gists().get(0)).isEqualTo(edited);
+        assertThat(m.fact("village")).contains(corrected);
+    }
+
+    @Test
+    void aRestartWithTheSeedKeepsEditsInTheSqliteStore(@TempDir Path dir) {
+        CallerKey key = CallerKey.fromPhone(PHONE, FakeLeg.SALT);
+        CallGist edited;
+        try (SqliteMemoryStore first = SqliteMemoryStore.open(dir)) {
+            MemorySeeder.seed(first, bundledSeed(), ENV::get, SALT);
+            CallGist seeded = first.load(key).orElseThrow().gists().get(0);
+            edited = new CallGist(seeded.callId(), seeded.startedMs(), seeded.endedMs(), seeded.summary(), List.of());
+            first.saveGist(key, edited);
+        }
+
+        try (SqliteMemoryStore second = SqliteMemoryStore.open(dir)) {
+            MemorySeeder.Result again = MemorySeeder.seed(second, bundledSeed(), ENV::get, SALT);
+
+            assertThat(again.gists()).isZero();
+            assertThat(second.load(key).orElseThrow().gists().get(0)).isEqualTo(edited);
+        }
+    }
+
+    @Test
+    void aSeedFillsOnlyWhatIsMissing() {
+        CallerKey key = CallerKey.fromPhone(PHONE, FakeLeg.SALT);
+        MemorySeeder.seed(store, bundledSeed(), ENV::get, SALT);
+        FarmerMemory full = store.load(key).orElseThrow();
+        MemoryStore partial = new InMemoryMemoryStore();
+        partial.upsertFacts(key, List.of(full.fact("name").orElseThrow()));
+        partial.saveGist(key, full.gists().get(1));
+
+        MemorySeeder.Result r = MemorySeeder.seed(partial, bundledSeed(), ENV::get, SALT);
+
+        assertThat(r.facts()).isEqualTo(full.facts().size() - 1);
+        assertThat(r.gists()).isEqualTo(1);
+        assertThat(partial.load(key).orElseThrow().gists()).containsExactlyElementsOf(full.gists());
     }
 
     @Test

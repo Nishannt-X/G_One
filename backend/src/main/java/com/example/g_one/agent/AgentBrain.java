@@ -23,7 +23,7 @@ public interface AgentBrain {
     /**
      * The greeting spoken right after the farmer chose a language through the English-first question and heard its
      * confirmation. That opener already introduced G-One, so this repeats no welcome: only what the farmer still needs
-     * to hear in the chosen language (the memory notice, the withheld-number line or a returning farmer's name check).
+     * to hear in the chosen language ("how can I help", the withheld-number line or a returning farmer's name check).
      * The default is {@link #greet}.
      */
     default Reply greetAfterLanguageChoice(CallContext ctx) {

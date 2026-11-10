@@ -1,10 +1,10 @@
 {
-  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words.",
-  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
+  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). No line tells the caller about memory or forget me; whether to remember a call is asked at its end. howCanIHelp follows the language confirmation for a new or withheld caller so the line is never silent. Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words.",
+  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack and howCanIHelp lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
   "lines": {
     "hi-IN": {
       "welcome": "नमस्ते, जी-वन में आपका स्वागत है। मैं एक AI सहायक हूँ।",
-      "memoryNotice": "बेहतर मदद के लिए मैं इस बातचीत का छोटा सा नोट रखूँगी। न चाहें तो कभी भी \"मुझे भूल जाओ\" कहिए।",
+      "howCanIHelp": "आज मैं आपकी क्या मदद करूँ?",
       "withheld": "आपका नंबर नहीं दिख रहा, इसलिए यह बातचीत याद नहीं रख पाऊँगी।",
       "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
       "forgotten": "ठीक है, मैंने आपकी जानकारी मिटा दी है।",
@@ -12,7 +12,7 @@
     },
     "en-IN": {
       "welcome": "Welcome to G-One. I'm an AI assistant.",
-      "memoryNotice": "To help you better, I'll keep a short note of this call. Say \"forget me\" any time if you don't want that.",
+      "howCanIHelp": "How can I help you today?",
       "withheld": "I can't see your number, so I won't remember this call.",
       "nameCheck": "Hello, this is G-One. Am I speaking with {name} ji?",
       "forgotten": "Done, I've deleted what I had about you.",
@@ -20,7 +20,7 @@
     },
     "hi-en": {
       "welcome": "नमस्ते, जी-वन में आपका welcome है। मैं एक AI assistant हूँ।",
-      "memoryNotice": "Better help के लिए मैं इस call का एक छोटा सा note रखूँगी। न चाहें तो कभी भी forget me कहिए।",
+      "howCanIHelp": "आज मैं आपकी क्या help करूँ?",
       "withheld": "आपका number नहीं दिख रहा, इसलिए यह call याद नहीं रख पाऊँगी।",
       "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
       "forgotten": "ठीक है, मैंने आपकी जानकारी delete कर दी है।",
@@ -28,7 +28,7 @@
     },
     "bn-IN": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে স্বাগত। আমি একজন এআই সহায়ক।",
-      "memoryNotice": "আরও ভালো সাহায্যের জন্য আমি এই কলের একটা ছোট নোট রাখব। না চাইলে যেকোনো সময় \"আমাকে ভুলে যাও\" বলুন।",
+      "howCanIHelp": "আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
       "withheld": "আপনার নম্বর দেখা যাচ্ছে না, তাই এই কথাবার্তা মনে রাখতে পারব না।",
       "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
       "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা রেখেছিলাম, মুছে দিয়েছি।",
@@ -36,7 +36,7 @@
     },
     "bn-en": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে welcome। আমি একটা AI assistant।",
-      "memoryNotice": "আরও ভালো help-এর জন্য আমি এই call-এর একটা ছোট note রাখব। না চাইলে যেকোনো সময় forget me বলুন।",
+      "howCanIHelp": "আজ আমি আপনাকে কীভাবে help করতে পারি?",
       "withheld": "আপনার number দেখা যাচ্ছে না, তাই এই call মনে রাখতে পারব না।",
       "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
       "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা ছিল, delete করে দিয়েছি।",
@@ -44,7 +44,7 @@
     },
     "ta-IN": {
       "welcome": "வணக்கம், ஜி-ஒன் உங்களை வரவேற்கிறது. நான் ஒரு AI உதவியாளர்.",
-      "memoryNotice": "உங்களுக்கு நன்றாக உதவ, இந்த அழைப்பைப் பற்றி ஒரு சிறு குறிப்பு வைத்துக்கொள்வேன். வேண்டாம் என்றால், எப்போது வேண்டுமானாலும் \"என்னை மறந்துவிடு\" என்று சொல்லுங்கள்.",
+      "howCanIHelp": "இன்று நான் உங்களுக்கு எப்படி உதவலாம்?",
       "withheld": "உங்கள் எண் தெரியவில்லை, அதனால் இந்த அழைப்பை நினைவில் வைத்துக்கொள்ள மாட்டேன்.",
       "nameCheck": "வணக்கம், ஜி-ஒன் பேசுகிறேன். நீங்கள் {name} அவர்களா?",
       "forgotten": "சரி, உங்களைப் பற்றி வைத்திருந்த தகவலை அழித்துவிட்டேன்.",
@@ -52,7 +52,7 @@
     },
     "kn-IN": {
       "welcome": "ನಮಸ್ಕಾರ, ಇದು ಜಿ-ಒನ್. ನಿಮಗೆ ಸ್ವಾಗತ. ನಾನು ಒಬ್ಬ AI ಸಹಾಯಕಿ.",
-      "memoryNotice": "ನಿಮಗೆ ಚೆನ್ನಾಗಿ ಸಹಾಯ ಮಾಡಲು, ಈ ಕರೆಯ ಒಂದು ಚಿಕ್ಕ ಟಿಪ್ಪಣಿ ಇಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ. ಬೇಡವೆಂದರೆ, ಯಾವಾಗ ಬೇಕಾದರೂ \"ನನ್ನನ್ನು ಮರೆತುಬಿಡಿ\" ಎಂದು ಹೇಳಿ.",
+      "howCanIHelp": "ಇಂದು ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
       "withheld": "ನಿಮ್ಮ ನಂಬರ್ ಕಾಣುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ಈ ಕರೆಯನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳುವುದಿಲ್ಲ.",
       "nameCheck": "ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು {name} ಅವರೇ?",
       "forgotten": "ಸರಿ, ನಿಮ್ಮ ಬಗ್ಗೆ ಇಟ್ಟಿದ್ದ ಮಾಹಿತಿಯನ್ನು ಅಳಿಸಿದ್ದೇನೆ.",

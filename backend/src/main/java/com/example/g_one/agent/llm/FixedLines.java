@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Lines the assistant speaks word for word, without the language model: the greetings, the memory notice, the
+ * Lines the assistant speaks word for word, without the language model: the greetings, the "how can I help" line, the
  * withheld-number line, the returning-farmer name check, the forget-me confirmation and a goodbye. Read once from
  * {@code /prompts/fixed-lines.json} (wording from docs/call-flow.md and docs/memory.md).
  */
@@ -26,7 +26,7 @@ public class FixedLines {
     public static final String NAME = "{name}";
 
     /** One language's lines. {@code code} is the resource key they came from, which may differ from the one asked. */
-    public record Lines(String code, String welcome, String memoryNotice, String withheld, String nameCheck,
+    public record Lines(String code, String welcome, String howCanIHelp, String withheld, String nameCheck,
                         String forgotten, String goodbye) {
 
         /** The name check with the farmer's remembered name filled in. */
@@ -54,7 +54,7 @@ public class FixedLines {
     }
 
     private static Lines read(String code, JsonNode n) {
-        Lines l = new Lines(code, need(n, code, "welcome"), need(n, code, "memoryNotice"), need(n, code, "withheld"),
+        Lines l = new Lines(code, need(n, code, "welcome"), need(n, code, "howCanIHelp"), need(n, code, "withheld"),
                 need(n, code, "nameCheck"), need(n, code, "forgotten"), need(n, code, "goodbye"));
         if (!l.nameCheck().contains(NAME)) {
             throw new IllegalStateException("Fixed line nameCheck for " + code + " must contain " + NAME);

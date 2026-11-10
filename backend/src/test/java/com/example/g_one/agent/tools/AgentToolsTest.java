@@ -294,7 +294,7 @@ class AgentToolsTest {
         assertThat(lines.forLanguage("mr-IN").code()).isEqualTo("en-IN");
         for (String code : lines.languages()) {
             FixedLines.Lines l = lines.forLanguage(code);
-            for (String s : List.of(l.welcome(), l.memoryNotice(), l.withheld(), l.nameCheck(), l.forgotten(), l.goodbye())) {
+            for (String s : List.of(l.welcome(), l.howCanIHelp(), l.withheld(), l.nameCheck(), l.forgotten(), l.goodbye())) {
                 assertThat(s).doesNotContainPattern("[0-9]");
             }
         }

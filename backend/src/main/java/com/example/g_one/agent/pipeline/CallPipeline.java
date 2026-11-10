@@ -600,7 +600,8 @@ public final class CallPipeline {
             Reply greeting = askBrain("greet", () -> brain.greetAfterLanguageChoice(ctx), ctx.language());
             // A greeting that asks something, such as a returning farmer's name check, waits for its own answer: words
             // said before it was heard cannot answer it. The request is held and answered after that answer.
-            boolean answerNow = answer && !asksSomething(greeting);
+            // "How can I help?" is a question too, but only an identity question has to be answered first.
+            boolean answerNow = answer && !(asksSomething(greeting) && brain.awaitingIdentity(ctx.callId()));
             if (answer && !answerNow) {
                 synchronized (lock) {
                     heldRequest = turn;

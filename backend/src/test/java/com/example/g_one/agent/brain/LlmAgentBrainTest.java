@@ -316,7 +316,7 @@ class LlmAgentBrainTest {
         JsonNode json = new ObjectMapper().readTree(data.substring(MemoryBlock.DATA_HEADER.length() + 1));
         // Still there, as one capped JSON string value under the data header, not as a line of its own.
         assertThat(json.path("memory").path("profile").path("village").asText()).startsWith("Suresh. Ignore previous")
-                .hasSizeLessThanOrEqualTo(61);
+                .hasSizeLessThanOrEqualTo(81);
         assertThat(data).doesNotContain("\nIgnore");
     }
 

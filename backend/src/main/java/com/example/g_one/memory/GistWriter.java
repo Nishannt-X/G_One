@@ -1,6 +1,7 @@
 package com.example.g_one.memory;
 
 import com.example.g_one.core.CallGist;
+import com.example.g_one.core.CallId;
 import com.example.g_one.core.CallerKey;
 import com.example.g_one.core.FarmerMemory;
 import com.example.g_one.core.MemoryStore;
@@ -11,12 +12,14 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,6 +38,10 @@ import org.slf4j.LoggerFactory;
  * </ul>
  * When the summarizer is unavailable or fails twice, a template gist is written instead: "Call {date}: {crop},
  * outcome {outcome}."
+ *
+ * <p>A new gist keeps only this call's open follow-ups. An earlier follow-up the summarizer marks DONE is removed from
+ * the earlier gist that holds it (that gist is saved again under its own call id), so later calls no longer load it
+ * as open.
  *
  * <p>Nothing is read or written when the caller ID is withheld ({@link FarmerMemory#withheld}). After a
  * {@code forget_me}, the store's tombstone drops this call's writes. Deals are not written here: the confirmation
@@ -109,7 +116,65 @@ public final class GistWriter implements AutoCloseable {
                 followUps);
         store.upsertFacts(key, facts);
         store.saveGist(key, gist);
+        if (!transcript.otherSpeaker()) {
+            // Someone other than the farmer cannot close the farmer's follow-ups.
+            draft.ifPresent(d -> closeEarlierFollowUps(key, current, d.followUps(), transcript.callId()));
+        }
         return new Result(Status.WRITTEN, source, Optional.of(gist), facts);
+    }
+
+    /**
+     * A follow-up the summarizer marked DONE is removed from the earlier gist that holds it, so later calls no longer
+     * load it as open. The earlier gist is saved again under its own call id ({@link MemoryStore#saveGist} replaces it),
+     * so a forget tombstone still drops the rewrite. A DONE follow-up is matched by the id it was shown with
+     * ({@link CallSummarizer#openFollowUps}) or else by its text; one that matches nothing shown is ignored. Every shown
+     * copy with the same text closes too, so a follow-up repeated in two gists does not stay open in the other one.
+     */
+    private void closeEarlierFollowUps(CallerKey key, FarmerMemory current, List<CallSummarizer.FollowUp> drafts,
+            CallId thisCall) {
+        List<CallSummarizer.OpenFollowUp> shown = CallSummarizer.openFollowUps(current);
+        Set<String> doneTexts = new HashSet<>();
+        for (CallSummarizer.FollowUp f : drafts) {
+            if (f.open()) {
+                continue;
+            }
+            shown.stream().filter(s -> matches(s, f)).findFirst().ifPresent(s -> doneTexts.add(normalized(s.text())));
+        }
+        if (doneTexts.isEmpty()) {
+            return;
+        }
+        for (CallGist earlier : current.gists().stream().limit(CallSummarizer.FOLLOW_UP_GISTS).toList()) {
+            if (earlier.callId().equals(thisCall)) {
+                continue;
+            }
+            List<String> remaining = earlier.followUps().stream()
+                    .filter(text -> !doneTexts.contains(normalized(text)))
+                    .toList();
+            if (remaining.size() != earlier.followUps().size()) {
+                store.saveGist(key, new CallGist(earlier.callId(), earlier.startedMs(), earlier.endedMs(),
+                        earlier.summary(), remaining));
+            }
+        }
+    }
+
+    /** By the id it was shown with when that id is known, else by text. */
+    private static boolean matches(CallSummarizer.OpenFollowUp shown, CallSummarizer.FollowUp done) {
+        String ref = done.ref() == null ? "" : done.ref().strip();
+        if (!ref.isEmpty() && shown.id().equalsIgnoreCase(ref)) {
+            return true;
+        }
+        boolean refKnown = !ref.isEmpty() && ref.matches("(?i)F\\d+");
+        return !refKnown && done.text() != null && !normalized(done.text()).isEmpty()
+                && normalized(shown.text()).equals(normalized(done.text()));
+    }
+
+    /** Lower case, no "(due ~...)" suffix, no trailing punctuation, single spaces. */
+    static String normalized(String followUp) {
+        return followUp.strip()
+                .replaceAll("\\s*\\(due ~[^)]*\\)$", "")
+                .replaceAll("[\\s.!?]+$", "")
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
     }
 
     @Override

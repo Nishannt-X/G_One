@@ -52,8 +52,8 @@ public class ConfirmNameTool implements Tool {
         }
         MemoryGate.State after = gate.answerNameCheck(ctx, v.booleanValue());
         if (after == MemoryGate.State.CONFIRMED) {
-            return ToolResult.ok("The farmer confirmed the name. Use this memory from now on, but never read it "
-                    + "aloud:\n" + MemoryBlock.render(ctx.memory()));
+            return ToolResult.ok("The farmer confirmed the name. Their memory follows in the data message; use it, "
+                    + "but never read it aloud.");
         }
         return ToolResult.ok("This is not the remembered farmer. Treat them as a new farmer: ask what they want "
                 + "to sell. Never mention anything remembered.");

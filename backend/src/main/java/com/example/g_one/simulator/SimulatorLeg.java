@@ -175,6 +175,9 @@ public final class SimulatorLeg implements Leg {
                 failed = true;
             }
         }
+        if (!failed) {
+            log.info("Client flush sent to simulator leg {}", id);
+        }
         // The browser echoes marks it dropped too; those late echoes find nothing and are ignored.
         overtaken.forEach(f -> f.complete(PlaybackOutcome.CLEARED));
         if (failed) {

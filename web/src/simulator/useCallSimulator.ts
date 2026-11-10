@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { backoffDelay } from '../lib/backoff'
 import workletUrl from './capture.worklet.js?worker&url'
+import { MicGate } from './micGate'
 import { PcmPlayer } from './player'
 import { PLAYBACK_RATE, parseServerMessage, socketUrl, type CallLine, type SocketParams } from './protocol'
 
@@ -248,6 +249,7 @@ export function useCallSimulator() {
         session.current = live
         setState((s) => ({ ...s, message: 'Connecting to the call…', micError: null }))
 
+        const micGate = new MicGate()
         if (capture) {
           capture.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
             if (live.muted || socket.readyState !== WebSocket.OPEN || socket.bufferedAmount > MAX_BUFFERED_BYTES) {
@@ -256,14 +258,15 @@ export function useCallSimulator() {
             if (live.micMode === 'push-to-talk' && !live.talking) {
               return
             }
-            // Acoustic echo suppression:
-            // When the assistant is speaking through speakers in hands-free mode,
-            // avoid sending the speaker echo back to STT so it doesn't trigger false barge-in
-            if (player && player.playing && live.micMode === 'hands-free') {
-              return
+            // The microphone stays open while G-One speaks, so the person can talk over it (barge-in). In hands-free
+            // mode the gate keeps leftover speaker echo out; push-to-talk is the person's own choice to speak.
+            const playing = live.micMode === 'hands-free' && player !== null && player.playing
+            const { send, opened } = micGate.push(event.data, playing)
+            if (opened) console.debug('[g-one] speech over playback: microphone sent for barge-in')
+            for (const frame of send) {
+              socket.send(frame)
+              live.sent++
             }
-            socket.send(event.data)
-            live.sent++
           }
         }
 
@@ -300,6 +303,7 @@ export function useCallSimulator() {
               break
             case 'clear':
               player?.clear()
+              console.debug('[g-one] clear from the server: playback flushed')
               break
             case 'end':
               finish('ended', 'The call ended.')

@@ -63,14 +63,20 @@ final class LegVoice {
         Line stopped;
         Synthesis s;
         synchronized (lock) {
-            if (current == null || current.isProtected()) return;
+            if (current == null) return;
+            if (current.isProtected()) {
+                log.info("Barge-in ignored on leg {}: the line playing is protected (read-back or caution)", leg.id());
+                return;
+            }
             stopped = current;
             s = synthesis;
             token++;
             current = null;
             synthesis = null;
         }
+        log.info("Speech detected on leg {} while a mediation line plays: barge-in accepted", leg.id());
         cancel(s);
+        log.info("TTS cancelled on leg {}; clearing queued playback", leg.id());
         synchronized (playLock) {
             try {
                 leg.clearPlayback();

@@ -109,6 +109,32 @@ class CallPipelineLanguageTest {
     }
 
     @Test
+    void speakingOverTheLanguageQuestionStopsItAndTheTurnIsHeard() {
+        assertThat(leg.unheardFrames()).as("the language question is playing").isPositive();
+
+        stt.last().emitSpeechStart();
+
+        assertThat(leg.clearCount()).isEqualTo(1);
+        assertThat(leg.unheardFrames()).isZero();
+        say("हिंदी");
+        hearAll();
+        assertThat(spoken()).containsExactly(spoken().get(0), "ठीक है, हिंदी में बात करते हैं।", ScriptedBrain.GREETING);
+    }
+
+    @Test
+    void speakingOverTheConfirmationStopsItAfterTheRecognitionMovedLanguage() {
+        hearAll();
+        say("हिंदी");
+        assertThat(stt.last().retargets()).extracting(Language::code).containsExactly("hi-IN");
+        assertThat(leg.unheardFrames()).as("the confirmation is playing").isPositive();
+
+        stt.last().emitSpeechStart();
+
+        assertThat(leg.clearCount()).isEqualTo(1);
+        assertThat(leg.unheardFrames()).isZero();
+    }
+
+    @Test
     void speakingOverTheConfirmationDropsTheQueuedAnswer() {
         hearAll();
         say("मुझे प्याज़ का भाव बताइए");

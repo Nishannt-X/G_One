@@ -329,6 +329,50 @@ class CallPipelineTest {
         assertThat(spoken()).containsExactly(GREETING, replyTo("haan"));
     }
 
+    // ---- speaker echo ----
+
+    @Test
+    void theAssistantsOwnWordsHeardWhileItSpeaksAreEchoAndDoNotInterruptIt() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        assertThat(leg.unheardFrames()).isPositive();
+
+        session().emitTurn("G-One mein aapka swaagat"); // the greeting coming back through laptop speakers
+
+        assertThat(leg.clearCount()).isZero();
+        executor.runAll();
+        assertThat(spoken()).containsExactly(GREETING);
+        assertThat(brain.responds).isEmpty();
+    }
+
+    @Test
+    void anEchoThatArrivesJustAfterTheLineEndedIsStillIgnoredButALaterRepeatIsATurn() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        executor.runAll();
+
+        clock.addAndGet(CallPipeline.ECHO_TAIL_MS - 1);
+        session().emitTurn("namaste G-One mein aapka swaagat hai");
+        executor.runAll();
+        assertThat(brain.responds).isEmpty();
+
+        clock.addAndGet(2);
+        session().emitTurn("namaste G-One mein aapka swaagat hai");
+        executor.runAll();
+        assertThat(spoken()).containsExactly(GREETING, replyTo("namaste G-One mein aapka swaagat hai"));
+    }
+
+    @Test
+    void realSpeechOverTheAssistantStillInterruptsWithTheEchoGuardOn() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        assertThat(leg.unheardFrames()).isPositive();
+
+        session().emitTurn("ruko mujhe gehun ka bhav batao"); // words of their own, none from the greeting
+
+        assertThat(leg.clearCount()).isEqualTo(1);
+        executor.runAll();
+        assertThat(spoken()).containsExactly(GREETING, replyTo("ruko mujhe gehun ka bhav batao"));
+    }
+
     // ---- ending ----
 
     @Test

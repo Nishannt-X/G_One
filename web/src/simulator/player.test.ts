@@ -18,6 +18,7 @@ class FakeContext {
   currentTime = 0
   sampleRate: number
   started: { buffer: FakeBuffer; at: number; connected: unknown }[] = []
+  stopped = 0
   constructor(sampleRate: number) {
     this.sampleRate = sampleRate
   }
@@ -40,7 +41,9 @@ class FakeContext {
       start(at: number) {
         started.push({ buffer: node.buffer!, at, connected: node.connected })
       },
-      stop() {},
+      stop: () => {
+        this.stopped++
+      },
     }
     return node
   }
@@ -96,5 +99,27 @@ describe('PcmPlayer', () => {
     const total = context.started.reduce((n, s) => n + s.buffer.data.length, 0)
     expect(total).toBe(1600 * 6)
     expect(context.started[0].buffer.sampleRate).toBe(48000)
+  })
+
+  it('clear (barge-in) stops every scheduled block at once, drops what is pending and releases the mark waiters', () => {
+    const { context, player: p } = player(24000, 24000)
+    for (let i = 0; i < 100; i++) p.enqueue(ramp(i * 480, 480)) // 2 s of G-One queued ahead of the audio clock
+    p.enqueue(ramp(0, 240)) // a part block still waiting to be scheduled
+    let marked = 0
+    p.whenPlayed(() => marked++)
+    const scheduled = context.started.length
+    expect(scheduled).toBeGreaterThan(1)
+    expect(p.playing).toBe(true)
+
+    p.clear()
+
+    expect(context.stopped).toBe(scheduled)
+    expect(p.playing).toBe(false)
+    expect(marked).toBe(1)
+
+    // The next reply starts fresh, a short lead after now rather than after the dropped audio.
+    context.currentTime = 0.5
+    p.enqueue(ramp(0, 3840))
+    expect(context.started[scheduled].at).toBeCloseTo(0.5 + 0.14, 9)
   })
 })

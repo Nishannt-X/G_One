@@ -266,9 +266,17 @@ export function legByRole(call: CallView, role: LegRole): LegView | undefined {
 }
 
 /** The call to show: the pinned one, else the newest running call, else the newest call. */
+/**
+ * The call a page follows: the pinned one, else the newest call still running, else the newest call. "Newest" is the
+ * call's own start time, not when it reached this tab: a console reconnect resends running calls and appends them to
+ * `order`, which would otherwise put an older call ahead of one started after it.
+ */
 export function pickCall(state: FeedState, pinned: string | null): CallView | null {
   if (pinned && state.calls[pinned]) return state.calls[pinned]
-  const newestFirst = [...state.order].reverse().map((id) => state.calls[id])
+  const newestFirst = state.order
+    .map((id, arrived) => ({ call: state.calls[id], arrived }))
+    .sort((a, b) => b.call.startedMs - a.call.startedMs || b.arrived - a.arrived)
+    .map((entry) => entry.call)
   return newestFirst.find((c) => !c.ended) ?? newestFirst[0] ?? null
 }
 

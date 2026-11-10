@@ -79,19 +79,23 @@ final class WelcomeBack {
         if (name.isEmpty() || key == null) return Optional.empty();
         Lines l = byCode.get(key);
         boolean hindi = FixedLines.prefix(key).equals("hi");
-        Optional<String> open = newestOpen(memory);
-        Kind kind = open.map(WelcomeBack::kindOf).orElse(Kind.PLAIN);
-        Optional<String> crop = open.flatMap(o -> cropIn(o, memory));
-        if (crop.isEmpty()) crop = lastCrop(memory);
+        Optional<OpenItem> open = newestOpen(memory);
+        Kind kind = open.map(o -> kindOf(o.text())).orElse(Kind.PLAIN);
+        Optional<String> crop = open.isPresent()
+                ? cropIn(open.get().text(), memory).or(() -> cropIn(open.get().gist().summary(), memory))
+                : lastCrop(memory);
         if (kind == Kind.PLAIN || kind == Kind.CROP) kind = crop.isPresent() ? Kind.CROP : Kind.PLAIN;
         String cropWord = crop.map(c -> hindi ? HINDI_CROPS.getOrDefault(c, c) : c).orElse(l.cropUnknown());
         return Optional.of(new Spoken(key, l.byKind().get(kind).replace(FixedLines.NAME, name.get()).replace(CROP, cropWord)));
     }
 
     /** The newest open follow-up of the farmer's own gists (gists are newest first). */
-    private static Optional<String> newestOpen(FarmerMemory memory) {
-        return MemoryBlock.ownGists(memory).stream().flatMap(g -> g.followUps().stream())
-                .filter(f -> !f.isBlank()).findFirst();
+    private record OpenItem(String text, CallGist gist) {}
+
+    private static Optional<OpenItem> newestOpen(FarmerMemory memory) {
+        return MemoryBlock.ownGists(memory).stream()
+                .flatMap(g -> g.followUps().stream().filter(f -> !f.isBlank()).map(f -> new OpenItem(f, g)))
+                .findFirst();
     }
 
     static Kind kindOf(String followUp) {

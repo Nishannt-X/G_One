@@ -148,7 +148,10 @@ class OfflineDemoTest {
         registry.register(first);
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
         sleep();
-        typed.say(first.id(), "मेरा नाम रमेश है");
+        typed.say(first.id(), "प्याज़ का भाव बताइए");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
+        sleep();
+        typed.say(first.id(), "रमेश");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
                 .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
         first.remoteHangup();

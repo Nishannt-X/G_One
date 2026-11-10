@@ -22,7 +22,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>No gist is written for a call that would only add noise to the farmer's memory (see {@link #action}): one the
  * brain never saw (fail closed: its state may have been forgotten), one whose name check failed or was never answered,
- * and a near-empty call (fewer than {@value #MIN_FARMER_TURNS} farmer turns or shorter than {@value #MIN_CALL_MS} ms)
+ * an unnamed caller whose number already has a profile (identity was never established, so their history is neither
+ * extended nor sent to the summarizer), and a near-empty call (fewer than {@value #MIN_FARMER_TURNS} farmer turns or shorter than {@value #MIN_CALL_MS} ms)
  * without a confirmed deal. A junk gist would otherwise become the newest one and drive the next call's recall.
  */
 @Component
@@ -77,14 +78,16 @@ public class GistOnHangup implements CallEndHandler {
     }
 
     /**
-     * Writes only for a new, unnamed or confirmed farmer, on a call with something worth remembering. Skips a withheld
-     * caller ID, an unknown state (fail closed), a forgotten farmer, a name check that failed or was never answered,
-     * and a near-empty call without a confirmed deal.
+     * Writes only for a new or confirmed farmer, on a call with something worth remembering. Skips a withheld caller ID,
+     * an unknown state (fail closed), a forgotten farmer, a name check that failed or was never answered, an unnamed
+     * caller with an existing profile (unconfirmed), and a near-empty call without a confirmed deal.
      */
     static Action action(EndedCall call, Optional<MemoryGate.State> state) {
         if (call.callerKey().isEmpty() || call.context().memory().isWithheld() || state.isEmpty()) return Action.SKIP;
         boolean keep = switch (state.get()) {
-            case NEW, UNNAMED, CONFIRMED -> true;
+            case NEW, CONFIRMED -> true;
+            // Memory exists but has no name to check it with: whoever is calling was never confirmed as its owner.
+            case UNNAMED -> call.context().memory().isEmpty();
             case WITHHELD, FORGOTTEN, NAME_CHECK, OTHER_SPEAKER -> false;
         };
         if (!keep) return Action.SKIP;

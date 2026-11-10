@@ -48,9 +48,13 @@ class GistOnHangupTest {
     }
 
     private static EndedCall call(long durationMs, String dealSummary, String... farmerLines) {
+        return call(FarmerMemory.empty(FakeLeg.FARMER_KEY), durationMs, dealSummary, farmerLines);
+    }
+
+    private static EndedCall call(FarmerMemory memory, long durationMs, String dealSummary, String... farmerLines) {
         CallId id = CallId.random();
         FakeLeg leg = new FakeLeg(id, LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, FakeLeg.FARMER_KEY);
-        CallContext ctx = new CallContext(id, leg, FakeLeg.HINDI, FarmerMemory.empty(FakeLeg.FARMER_KEY));
+        CallContext ctx = new CallContext(id, leg, FakeLeg.HINDI, memory);
         List<AgentBrain.Line> lines = new ArrayList<>();
         lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "नमस्ते, जी-वन में आपका स्वागत है।"));
         for (String l : farmerLines) {
@@ -103,8 +107,36 @@ class GistOnHangupTest {
     }
 
     @Test
+    void anUnnamedCallerWithAnExistingProfileWritesNoGistAndNeverReachesTheSummarizer() {
+        java.util.concurrent.atomic.AtomicInteger summarized = new java.util.concurrent.atomic.AtomicInteger();
+        CallSummarizer counting = new CallSummarizer() {
+            @Override
+            public boolean available() {
+                return true;
+            }
+
+            @Override
+            public Draft summarize(CallTranscript transcript, FarmerMemory current) {
+                summarized.incrementAndGet();
+                throw new IllegalStateException("must not be called");
+            }
+        };
+        MemoryStore own = new InMemoryMemoryStore();
+        own.upsertFacts(FakeLeg.FARMER_KEY, List.of(new com.example.g_one.core.ProfileFact("district", "Nashik",
+                com.example.g_one.core.Provenance.said(CallId.random(), START))));
+        FarmerMemory existing = own.load(FakeLeg.FARMER_KEY).orElseThrow();
+        try (GistWriter w = new GistWriter(own, counting)) {
+            new GistOnHangup(w, id -> Optional.of(MemoryGate.State.UNNAMED), released::add)
+                    .callEnded(call(existing, 60_000, "Deal summary confirmed: 20 quintal onion.", "प्याज़ बेचना है", "हाँ"));
+        }
+        assertThat(summarized).hasValue(0);
+        assertThat(own.load(FakeLeg.FARMER_KEY).orElseThrow().gists()).isEmpty();
+    }
+
+    @Test
     void theActionTableFollowsTheMemoryState() {
         EndedCall real = call(60_000, null, "प्याज़ का भाव बताइए", "धन्यवाद");
+        // UNNAMED with no stored memory is a first-time caller in all but name: the gist is still written.
         assertThat(GistOnHangup.action(real, Optional.of(MemoryGate.State.UNNAMED))).isEqualTo(GistOnHangup.Action.WRITE);
         assertThat(GistOnHangup.action(real, Optional.of(MemoryGate.State.WITHHELD))).isEqualTo(GistOnHangup.Action.SKIP);
         assertThat(GistOnHangup.action(real, Optional.empty())).isEqualTo(GistOnHangup.Action.SKIP);

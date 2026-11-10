@@ -93,10 +93,11 @@ class LlmAgentBrainTest {
         Reply r = f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "नमस्ते")), said(ctx, "प्याज का भाव क्या है?"));
 
         assertThat(r.text()).isEqualTo("AGMARKNET के अनुसार चार नवंबर को Lasalgaon में लाल प्याज़ का भाव चार हज़ार पाँच सौ "
-                + "रुपये प्रति क्विंटल लिखा था। यह उसी तारीख की जानकारी है। क्या आप इसे बेचना चाहते हैं?");
+                + "रुपये प्रति क्विंटल लिखा था। यह उसी तारीख की जानकारी है। और आपका नाम क्या है?");
         assertThat(r.language()).isEqualTo(HINDI);
         assertThat(r.endCall()).isFalse();
         assertThat(f.llm.requests()).as("the price is spoken from code, with no second model call").hasSize(1);
+        assertThat(r.text()).contains("आपका नाम क्या है?");
 
         JsonNode first = f.llm.requests().get(0);
         assertThat(toolNames(first)).containsExactly("end_call", "get_mandi_price", "save_profile_fact");
@@ -344,7 +345,7 @@ class LlmAgentBrainTest {
         CallContext ctx = BrainFixture.newFarmer(HINDI);
         f.llm.replyText("बताइए, कितना प्याज़ है?");
         f.brain.respond(ctx, List.of(), said(ctx, "मुझे प्याज़ बेचना है"));
-        assertThat(systemPrompt(0)).doesNotContain(LlmAgentBrain.NAME_ASK);
+        assertThat(systemPrompt(0)).contains(LlmAgentBrain.NAME_ASK);
 
         f.llm.replyText("ठीक है। आपका नाम क्या है?");
         f.brain.respond(ctx, List.of(), said(ctx, "बीस क्विंटल प्याज़ बेचना है"));
@@ -353,6 +354,15 @@ class LlmAgentBrainTest {
         f.llm.replyText("ठीक है।");
         f.brain.respond(ctx, List.of(), said(ctx, "अभी नहीं बताना"));
         assertThat(systemPrompt(2)).doesNotContain(LlmAgentBrain.NAME_ASK).contains("do not ask again");
+    }
+
+    @Test
+    void shortNameAnswersAreRecognisedOnlyWhenAsked() {
+        for (String answer : List.of("Ramesh", "रमेश", "Ramesh hai", "main Ramesh")) {
+            assertThat(TurnIntent.shortName(answer)).isPresent();
+        }
+        assertThat(TurnIntent.shortName("नहीं बताना")).isEmpty();
+        assertThat(TurnIntent.shortName("onion price")).isEmpty();
     }
 
     @Test

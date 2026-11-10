@@ -112,28 +112,32 @@ public class DemoChat implements ChatClient.Scripted {
             return tool("end_call", json.createObjectNode());
         }
         Optional<String> name = TurnIntent.statedName(turn);
+        if (name.isEmpty() && request.messages().stream().filter(m -> "assistant".equals(m.role()) && m.content() != null)
+                .reduce((a, b) -> b).map(m -> TurnIntent.asksName(m.content())).orElse(false)) {
+            name = TurnIntent.shortName(turn);
+        }
         if (name.isPresent()) {
             return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। प्याज़ का भाव बताऊँ या ख़रीदार ढूँढूँ?"
                     : "Thank you, " + name.get() + " ji, I have noted your name. Shall I tell you the onion price or find a buyer?");
         }
-        return text(hindi ? "मैं प्याज़ का भाव बता सकती हूँ या ख़रीदार ढूँढ सकती हूँ। क्या करना है?"
-                : "I can tell you the onion price or find you a buyer. Which would you like?");
+        return text(withNameAsk(hindi ? "मैं प्याज़ का भाव बता सकती हूँ या ख़रीदार ढूँढ सकती हूँ। क्या करना है?"
+                : "I can tell you the onion price or find you a buyer. Which would you like?", askName, hindi));
     }
 
     private String afterTool(List<ChatMessage> messages, ChatMessage last, boolean hindi, boolean askName) {
         String tool = toolNameFor(messages, last.toolCallId());
         String result = last.content();
         return switch (tool) {
-            case "find_buyers" -> buyersLine(result, hindi);
+            case "find_buyers" -> withNameAsk(buyersLine(result, hindi), askName, hindi);
             case "connect_buyer" -> result.startsWith("Calling")
                     ? (hindi ? "फ़ोन लगा रही हूँ। लाइन पर बने रहिए।" : "Calling them now. Please stay on the line.")
                     : (hindi ? "माफ़ कीजिए, फ़ोन नहीं लगा पाई।" : "Sorry, I could not place that call.");
             case "confirm_name" -> hindi ? "धन्यवाद। बताइए, आज क्या बेचना है?" : "Thank you. What would you like to sell today?";
             case "forget_me" -> result.contains("exactly:") ? result.substring(result.indexOf("exactly:") + 8).strip() : result;
             case "end_call" -> hindi ? "धन्यवाद। नमस्ते।" : "Thank you. Goodbye.";
-            case "save_profile_fact" -> hindi ? "ठीक है, मैंने नोट कर लिया।" : "All right, I have noted that.";
+            case "save_profile_fact" -> withNameAsk(hindi ? "ठीक है, मैंने नोट कर लिया।" : "All right, I have noted that.", askName, hindi);
             case "get_mandi_price" -> withNameAsk(result, askName, hindi);
-            default -> result;
+            default -> withNameAsk(result, askName, hindi);
         };
     }
 

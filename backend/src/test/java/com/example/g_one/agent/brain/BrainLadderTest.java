@@ -206,8 +206,8 @@ class BrainLadderTest {
         CallContext ctx = BrainFixture.newFarmer(HINDI);
         f.llm.replyText("जी।").replyText("जी।").replyText("जी।");
         f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
-        assertThat(f.llm.requests().get(0).toString()).as("the first business turn is helped first")
-                .doesNotContain(LlmAgentBrain.NAME_ASK);
+        assertThat(f.llm.requests().get(0).toString()).as("the first business turn is helped before the name question")
+                .contains(LlmAgentBrain.NAME_ASK);
         f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
         assertThat(f.llm.requests().get(1).toString()).contains(LlmAgentBrain.NAME_ASK);
 

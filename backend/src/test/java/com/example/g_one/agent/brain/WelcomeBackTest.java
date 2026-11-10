@@ -67,6 +67,22 @@ class WelcomeBackTest {
     }
 
     @Test
+    void pickupUsesItsOwnGistRatherThanANewerUnrelatedCrop() {
+        FarmerMemory m = memory(List.of(NAME), List.of(
+                new CallGist(NEWER, BrainFixture.PAST_MS, BrainFixture.PAST_MS + 1,
+                        "Asked about red onion prices.", List.of()),
+                new CallGist(OLD, BrainFixture.PAST_MS - DAY, BrainFixture.PAST_MS - DAY + 1,
+                        "A tomato deal was agreed.", List.of("Check pickup and payment"))));
+        assertThat(WELCOME.line("en-IN", m).orElseThrow().text()).contains("tomato deal").doesNotContain("red onion");
+        FarmerMemory unknown = memory(List.of(NAME), List.of(
+                new CallGist(NEWER, BrainFixture.PAST_MS, BrainFixture.PAST_MS + 1,
+                        "Asked about red onion prices.", List.of()),
+                new CallGist(OLD, BrainFixture.PAST_MS - DAY, BrainFixture.PAST_MS - DAY + 1,
+                        "A deal was agreed.", List.of("Check pickup and payment"))));
+        assertThat(WELCOME.line("en-IN", unknown).orElseThrow().text()).contains("crop deal").doesNotContain("red onion");
+    }
+
+    @Test
     void withNoOpenItemTheLastCallsCropIsNamedElseTheNewestCropFact() {
         FarmerMemory fromGist = memory(List.of(NAME, fact("crop:tomato", "tomato", BrainFixture.PAST_MS)),
                 List.of(new CallGist(NEWER, BrainFixture.PAST_MS, BrainFixture.PAST_MS + 1,

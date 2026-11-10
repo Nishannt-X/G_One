@@ -3,7 +3,7 @@ import { languageLabel } from '../lib/format'
 import { parseJoinCall } from '../lib/lan'
 import { useDemoLines, useSimulatorConfig } from '../lib/useSimulatorSetup'
 import { useStickToBottom } from '../lib/useStickToBottom'
-import { MicIcon, MicOffIcon, PhoneIcon, SendIcon } from '../ui/icons'
+import { AlertIcon, Logo, MicIcon, MicOffIcon, PhoneIcon, SendIcon, StoreIcon } from '../ui/icons'
 import { joinStage, type JoinStage } from './joinStage'
 import type { CallLine, LineKind } from './protocol'
 import { useCallSimulator } from './useCallSimulator'
@@ -36,9 +36,10 @@ const BADGE: Record<JoinStage, string> = {
   unreachable: 'No connection',
 }
 
-function Notice({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+function Notice({ title, children, action, tone = 'plain' }: { title: string; children?: ReactNode; action?: ReactNode; tone?: 'plain' | 'bad' }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center" role="status">
+      <span aria-hidden="true" className={`mb-1 grid h-16 w-16 place-items-center rounded-full text-3xl ${tone === 'bad' ? 'bg-bad-soft text-bad' : 'bg-buyer-soft text-buyer'}`}>{tone === 'bad' ? <AlertIcon /> : <StoreIcon />}</span>
       <h1 className="text-3xl leading-tight font-bold">{title}</h1>
       {children && <p className="max-w-sm text-lg text-muted">{children}</p>}
       {action}
@@ -109,15 +110,15 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
   return (
     <main className="flex h-dvh flex-col bg-page text-ink">
       <header className="flex items-center justify-between border-b border-line px-4 py-3">
-        <p className="text-xl font-bold">G-One <span className="font-medium text-muted">· Buyer</span></p>
+        <p className="flex items-center gap-2 text-xl font-bold"><Logo className="text-[1.05rem]" />G-One <span className="font-medium text-muted">· Buyer</span></p>
         <span className="flex items-center gap-2">
           {onLine && state.language && <span className="text-sm font-medium text-muted" data-testid="join-language">{languageLabel(state.language)}</span>}
           <span className="badge" data-testid="join-stage" data-stage={stage}>{BADGE[stage]}</span>
         </span>
       </header>
 
-      {stage === 'bad-link' && <Notice title="This link has no call in it">Scan the QR code on the laptop again.</Notice>}
-      {stage === 'insecure' && <Notice title="This page is not secure">A phone can only use its microphone on https. Open the https link from the QR code.</Notice>}
+      {stage === 'bad-link' && <Notice tone="bad" title="This link has no call in it">Scan the QR code on the laptop again.</Notice>}
+      {stage === 'insecure' && <Notice tone="bad" title="This page is not secure">A phone can only use its microphone on https. Open the https link from the QR code.</Notice>}
       {stage === 'ready' && (
         <div className="flex flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
           <div>
@@ -125,7 +126,8 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
             <p className="mt-2 text-lg text-muted">G-One translates between you. It will ask which language you want, then ask you to say yes before you are connected.</p>
           </div>
           {failed && <p role="alert" className="font-medium text-bad">Could not reach the laptop. Check that the backend is running.</p>}
-          <button type="button" aria-label="Join call" className="btn-primary grid size-40 place-items-center rounded-full text-xl font-bold" onClick={() => join()}>
+          <button type="button" aria-label="Join call" className="btn-primary relative grid size-40 place-items-center rounded-full text-xl font-bold" onClick={() => join()}>
+            <span aria-hidden="true" className="animate-beat absolute inset-0 rounded-full border-2 border-brand" />
             <span className="flex flex-col items-center gap-1"><MicIcon className="size-10" /> Join call</span>
           </button>
           <p className="text-sm text-muted">Your browser will ask for the microphone.</p>
@@ -135,13 +137,13 @@ export default function JoinPage({ query }: { query: URLSearchParams }) {
       {stage === 'reconnecting' && <Notice title="Reconnecting…">{state.message}</Notice>}
       {stage === 'ended' && <Notice title="The call ended">{state.message === 'You hung up.' ? 'You left the call.' : 'Thank you.'}</Notice>}
       {stage === 'mic-denied' && (
-        <Notice title="The microphone is blocked" action={<div className="flex flex-col items-center gap-2">{tryAgain}{typingOffered && <button type="button" className="font-semibold underline" onClick={() => join(true)}>Type instead (demo)</button>}</div>}>
+        <Notice tone="bad" title="The microphone is blocked" action={<div className="flex flex-col items-center gap-2">{tryAgain}{typingOffered && <button type="button" className="font-semibold underline" onClick={() => join(true)}>Type instead (demo)</button>}</div>}>
           Allow the microphone for this site in your browser settings, then try again.
         </Notice>
       )}
-      {stage === 'refused' && <Notice title="Could not join this call">{state.message} Ask for a new QR code on the laptop.</Notice>}
+      {stage === 'refused' && <Notice tone="bad" title="Could not join this call">{state.message} Ask for a new QR code on the laptop.</Notice>}
       {stage === 'unreachable' && (
-        <Notice title="Could not reach the laptop" action={tryAgain}>
+        <Notice tone="bad" title="Could not reach the laptop" action={tryAgain}>
           Stay on the same hotspot. If the browser warned about the certificate, open the page again and accept it once.
         </Notice>
       )}

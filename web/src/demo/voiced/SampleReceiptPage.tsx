@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { rupees } from '../../lib/format'
+import { DoubleCheckIcon, Logo } from '../../ui/icons'
 import { MANIFEST_BASE, type Manifest } from './manifest'
 import { sampleReceipt, type SampleReceipt } from './sampleReceipt'
 
@@ -15,12 +16,17 @@ function Item({ hi, en, value }: { hi: string; en: string; value: string | null 
 export function ReceiptCard({ receipt }: { receipt: SampleReceipt }) {
   const agreed = (yes: boolean) => (yes ? 'Yes' : 'Not yet')
   return (
-    <article className="card w-full max-w-[40rem] p-5 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-2">
+    <article className="card relative w-full max-w-[40rem] overflow-hidden p-5 sm:p-6">
+      <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1.5 bg-[linear-gradient(90deg,var(--farmer),var(--accent),var(--buyer))]" />
+      <p className="flex items-center gap-2 text-sm font-bold text-muted"><Logo className="text-[0.95rem]" /> G-One</p>
+      <header className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold"><span lang="hi">सौदा पर्ची</span> / Sauda Parchi</h1>
         <span className="badge badge-warn">Scripted sample, synthetic</span>
       </header>
-      <div className="mt-4 rounded-xl bg-ok-soft p-4 text-center">
+      <div className="relative mt-4 rounded-xl border border-dashed border-ok/40 bg-ok-soft p-4 text-center">
+        {receipt.farmerYes && receipt.buyerYes && (
+          <span className="absolute top-3 right-3 hidden -rotate-6 items-center gap-1 rounded-lg border-2 border-ok px-2 py-0.5 text-xs font-bold tracking-wide text-ok uppercase sm:inline-flex"><DoubleCheckIcon /> Two yeses</span>
+        )}
         <p className="text-sm font-semibold text-ok"><span lang="hi">कुल राशि</span> / Total</p>
         <p className="text-3xl font-bold tabular-nums">{receipt.total !== null ? rupees(receipt.total) : '—'}</p>
         <p className="text-base font-medium">{receipt.quantity} × {receipt.price !== null ? rupees(receipt.price) : '—'} / {receipt.unit}</p>
@@ -63,7 +69,7 @@ export default function SampleReceiptPage() {
     }
   }, [])
   return (
-    <main className="flex min-h-dvh items-start justify-center p-4 sm:p-6">
+    <main className="dots flex min-h-dvh items-start justify-center p-4 sm:p-10">
       {receipt ? <ReceiptCard receipt={receipt} /> : failed ? <p role="alert" className="font-medium text-bad">The sample receipt could not be loaded.</p> : <p className="text-muted">Loading…</p>}
     </main>
   )

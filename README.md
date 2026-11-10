@@ -42,13 +42,23 @@ The variables last only for that terminal; load them again in a new one.
 The browser simulator hashes caller numbers with `G_ONE_MEMORY_HMAC_KEY` too, so **Caller A is Suresh**. Without the
 key the seed is skipped (startup logs a warning) and the simulator falls back to its built-in dev salt.
 
-**Reset memory between takes.** Every take should start from the seed:
+**Start a fresh take.** Stop the backend (Ctrl+C), then select a new empty data directory in the same terminal before
+restarting it. The scripts create a unique directory and print its path; they never delete an existing database.
 
-1. Stop the backend (Ctrl+C).
-2. Delete `backend/data/g-one.db`, `g-one.db-wal` and `g-one.db-shm`, or run `pwsh scripts/reset-memory.ps1`
-   (Windows) / `sh scripts/reset-memory.sh`. The scripts refuse to run while anything listens on the backend port (`PORT`, default
-   8080), or when they cannot check the port, and delete only those three files.
-3. Start the backend again and check the log for `Farmer memory seeded from classpath:memory/seed-suresh.json`.
+```powershell
+# PowerShell (Windows), from the repo root after loading .env.local
+$env:G_ONE_DATA_DIR = (& pwsh scripts/reset-memory.ps1)
+cd backend; .\mvnw.cmd spring-boot:run
+```
+
+```sh
+# bash / Git Bash / macOS, from the repo root after loading .env.local
+export G_ONE_DATA_DIR="$(sh scripts/reset-memory.sh)"
+cd backend && ./mvnw spring-boot:run
+```
+
+Check the log for `Farmer memory seeded from classpath:memory/seed-suresh.json`. Each fresh directory keeps its own
+take history; stop every backend using an old directory before cleaning old data by hand.
 
 **Take plan.**
 
@@ -56,8 +66,8 @@ key the seed is skipped (startup logs a warning) and the simulator falls back to
 2. Caller B: a first call. Say your name (for example "मेरा नाम रमेश है"). Hang up and wait for the
    "Saved for next time" note before redialing (it appears only once this call's own summary is stored; "Couldn't
    confirm" means check the memory profile before redialing). Call again as Caller B: G-One asks for that name.
-3. Use **Caller B, never Caller A,** for "forget me" (मुझे भूल जाओ). A forget is permanent: it blocks the seed for
-   Suresh until the database files are deleted with the server stopped (step 2 above).
+3. Use **Caller B, never Caller A,** for "forget me" (मुझे भूल जाओ). A forget blocks the seed for that caller in the
+   current data directory. Select a fresh directory for another take.
 
 ## Phone as the buyer (local demo)
 

@@ -128,24 +128,23 @@ export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>):
   return out
 }
 
-/** How many of the newest gists hold open follow-ups; matches the backend's CallSummarizer.FOLLOW_UP_GISTS. */
-export const FOLLOW_UP_GISTS = 3
+/** The assistant receives at most five open follow-ups from all stored gists. */
+export const MAX_OPEN_FOLLOW_UPS = 5
 
 /**
- * The follow-ups still open, as the backend tracks them (CallSummarizer.openFollowUps): those of the three newest
- * gists, newest first, once each. Each gist keeps only its own open items, and when a later call marks one DONE the
- * backend removes it from the gist that held it, so this set is already reconciled. Older gists are left out because
- * the backend no longer offers their items for closing.
+ * The follow-ups the assistant receives from MemoryBlock: all stored gists, newest first, once each, capped at five.
+ * The backend removes DONE items from their original gists, so this set is already reconciled.
  */
 export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUps: string[] }>): string[] {
   const out: string[] = []
   const seen = new Set<string>()
-  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs).slice(0, FOLLOW_UP_GISTS)) {
+  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs)) {
     for (const item of g.followUps) {
       const key = item.trim().replace(/\s+/g, ' ').toLowerCase()
       if (key && !seen.has(key)) {
         seen.add(key)
         out.push(item)
+        if (out.length === MAX_OPEN_FOLLOW_UPS) return out
       }
     }
   }

@@ -13,8 +13,7 @@ import java.util.Optional;
  * What the gist writer gets at hang-up: the call's lines (farmer and buyer turns plus what the assistant said), kept in
  * RAM only. docs/memory.md: transcripts are never stored; this object is dropped once the gist is written.
  *
- * @param otherSpeaker true when the name check failed (someone else on the farmer's phone): the gist is still written,
- *     flagged, but no profile fact is changed
+ * @param otherSpeaker true when the name check failed (someone else on the farmer's phone): nothing is written
  * @param outcome what the call ended with, when code knows it (the deal state machine); used by the template gist
  */
 public record CallTranscript(CallId callId, long startedMs, long endedMs, List<Line> lines, boolean otherSpeaker,

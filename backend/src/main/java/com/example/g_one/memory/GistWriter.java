@@ -1,5 +1,6 @@
 package com.example.g_one.memory;
 
+import com.example.g_one.agent.tools.memory.MemoryBlock;
 import com.example.g_one.core.CallGist;
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.CallerKey;
@@ -51,13 +52,14 @@ public final class GistWriter implements AutoCloseable {
     public static final int MAX_GIST_WORDS = 80;
     static final int MAX_FOLLOW_UPS = 5;
     static final int MAX_FOLLOW_UP_WORDS = 25;
-    static final String OTHER_SPEAKER_PREFIX = "Other speaker (the name check failed): ";
+    /** How an older build flagged another speaker's gist; see {@link MemoryBlock#isOtherSpeaker}. */
+    static final String OTHER_SPEAKER_PREFIX = MemoryBlock.OTHER_SPEAKER_PREFIX;
     /** How the confirmed deal line starts in a transcript (see DealDesk.summary). */
     static final String DEAL_LINE_START = "Deal summary confirmed";
     private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
     private static final Logger log = LoggerFactory.getLogger(GistWriter.class);
 
-    public enum Status { SKIPPED_WITHHELD, WRITTEN }
+    public enum Status { SKIPPED_WITHHELD, SKIPPED_OTHER_SPEAKER, WRITTEN }
 
     public enum Source { NONE, SUMMARIZER, TEMPLATE }
 
@@ -66,7 +68,10 @@ public final class GistWriter implements AutoCloseable {
      */
     public record Result(Status status, Source source, Optional<CallGist> gist, List<ProfileFact> facts) {
         static final Result WITHHELD = new Result(Status.SKIPPED_WITHHELD, Source.NONE, Optional.empty(), List.of());
+        static final Result OTHER_SPEAKER = new Result(Status.SKIPPED_OTHER_SPEAKER, Source.NONE, Optional.empty(),
+                List.of());
     }
+
 
     private final MemoryStore store;
     private final CallSummarizer summarizer;
@@ -93,6 +98,10 @@ public final class GistWriter implements AutoCloseable {
         if (memoryAtStart.isWithheld()) {
             return Result.WITHHELD;
         }
+        if (transcript.otherSpeaker()) {
+            // Someone else on the farmer's phone: their call is not the farmer's history, and they cannot change it.
+            return Result.OTHER_SPEAKER;
+        }
         CallerKey key = memoryAtStart.callerKey().orElseThrow();
         FarmerMemory current = store.load(key).orElse(FarmerMemory.empty(key));
         CallTranscript scrubbed = scrubbed(transcript);
@@ -104,22 +113,14 @@ public final class GistWriter implements AutoCloseable {
             summary = template(transcript, current);
             source = Source.TEMPLATE;
         }
-        if (transcript.otherSpeaker()) {
-            summary = capWords(OTHER_SPEAKER_PREFIX + summary, MAX_GIST_WORDS);
-        }
         List<String> followUps = draft.map(d -> followUps(d.followUps())).orElse(List.of());
-        List<ProfileFact> facts = transcript.otherSpeaker() || draft.isEmpty()
-                ? List.of()
-                : facts(draft.get().profileUpdates(), transcript);
+        List<ProfileFact> facts = draft.isEmpty() ? List.of() : facts(draft.get().profileUpdates(), transcript);
 
         CallGist gist = new CallGist(transcript.callId(), transcript.startedMs(), transcript.endedMs(), summary,
                 followUps);
         store.upsertFacts(key, facts);
         store.saveGist(key, gist);
-        if (!transcript.otherSpeaker()) {
-            // Someone other than the farmer cannot close the farmer's follow-ups.
-            draft.ifPresent(d -> closeEarlierFollowUps(key, current, d.followUps(), transcript.callId()));
-        }
+        draft.ifPresent(d -> closeEarlierFollowUps(key, current, d.followUps(), transcript.callId()));
         return new Result(Status.WRITTEN, source, Optional.of(gist), facts);
     }
 
@@ -143,7 +144,8 @@ public final class GistWriter implements AutoCloseable {
         if (doneTexts.isEmpty()) {
             return;
         }
-        for (CallGist earlier : current.gists().stream().limit(CallSummarizer.FOLLOW_UP_GISTS).toList()) {
+        for (CallGist earlier : current.gists().stream().filter(g -> !MemoryBlock.isOtherSpeaker(g))
+                .limit(CallSummarizer.FOLLOW_UP_GISTS).toList()) {
             if (earlier.callId().equals(thisCall)) {
                 continue;
             }

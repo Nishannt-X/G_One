@@ -1,5 +1,6 @@
 package com.example.g_one.memory;
 
+import com.example.g_one.agent.tools.memory.MemoryBlock;
 import com.example.g_one.core.CallGist;
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.FarmerMemory;
@@ -54,7 +55,8 @@ public interface CallSummarizer {
      */
     static List<OpenFollowUp> openFollowUps(FarmerMemory current) {
         List<OpenFollowUp> out = new ArrayList<>();
-        for (CallGist g : current.gists().stream().limit(FOLLOW_UP_GISTS).toList()) {
+        for (CallGist g : current.gists().stream().filter(g -> !MemoryBlock.isOtherSpeaker(g)).limit(FOLLOW_UP_GISTS)
+                .toList()) {
             for (String text : g.followUps()) {
                 out.add(new OpenFollowUp("F" + (out.size() + 1), g.callId(), text));
             }

@@ -252,17 +252,17 @@ class GistWriterTest {
     }
 
     @Test
-    void anotherSpeakerGetsAFlaggedGistAndNoProfileChange() throws Exception {
+    void anotherSpeakerWritesNoGistAndNoProfileChange() throws Exception {
         llmAnswers(Map.of("gist", "Someone asked about onion prices.", "followUps", List.of(),
                 "profileUpdates", List.of(Map.of("field", "name", "value", "Ramesh"))));
 
         GistWriter.Result r = writer.write(FarmerMemory.empty(SURESH),
                 transcript("Nahin, main Ramesh hoon").withOtherSpeaker(true));
 
+        assertThat(r.status()).isEqualTo(GistWriter.Status.SKIPPED_OTHER_SPEAKER);
         assertThat(r.facts()).isEmpty();
         assertThat(memory().facts()).containsExactly(SAID_DISTRICT, SAID_CROP);
-        assertThat(memory().gists().get(0).summary())
-                .isEqualTo(GistWriter.OTHER_SPEAKER_PREFIX + "Someone asked about onion prices.");
+        assertThat(memory().gists()).isEmpty();
     }
 
     private static CallTranscript call(CallId id, long start, String farmerLine) {

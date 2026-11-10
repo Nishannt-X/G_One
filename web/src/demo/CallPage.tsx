@@ -1,106 +1,114 @@
-import { useEffect, useRef, useState, type Dispatch } from 'react'
-import { legByRole, pickCall, type FeedAction, type FeedState } from '../lib/callState'
+import { useMemo, useState } from 'react'
+import { legByRole, pickCall, type FeedState } from '../lib/callState'
 import type { FeedStatus } from '../lib/useConsoleFeed'
 import { useDemoLines, useSimulatorConfig } from '../lib/useSimulatorSetup'
 import { useCallSimulator } from '../simulator/useCallSimulator'
-import { PlayIcon } from '../ui/icons'
+import { ChevronIcon } from '../ui/icons'
 import CallBar, { CallClock, FeedStatusLabel } from './CallBar'
+import DealPanel from './DealPanel'
 import LegDock from './LegDock'
 import PhoneJoinCard from './PhoneJoinCard'
 import SpeechCredit from './SpeechCredit'
-import Stage from './Stage'
 import Timeline from './Timeline'
 import { creditMode } from './creditMode'
 import { usePhoneJoin } from './phoneJoin'
-import { useSyntheticCall } from './useSyntheticCall'
 
-function Intro({ onSynthetic, busy }: { onSynthetic: () => void; busy: boolean }) {
+function Intro() {
   return (
-    <div className="flex h-full flex-col items-center justify-center px-4 py-8 text-center">
-      <h2 className="text-3xl leading-tight font-semibold md:text-4xl">Talk to G-One from this browser.</h2>
-      <p className="mt-2 max-w-lg text-lg text-muted">Tap Call as farmer below and speak into your microphone. Once you are on the call, a buyer can join from a phone by scanning the code, or from this tab. No phone number is dialled.</p>
-      <p className="mt-3 text-sm text-faint">
-        No microphone? <button type="button" className="font-semibold underline" disabled={busy} onClick={onSynthetic}>Play a synthetic call</button>, a scripted text call with no speech.
-      </p>
+    <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center">
+      <h2 className="text-2xl leading-tight font-semibold">No call yet</h2>
+      <p className="mt-2 max-w-md text-muted">Start a call as the farmer above, then speak or type. Once you are on the call, a buyer can join from a phone or from this tab.</p>
     </div>
   )
+}
+
+/** Only calls from the live feed belong on this page: scripted and mock calls have their own pages. */
+function liveOnly(feed: FeedState): FeedState {
+  const order = feed.order.filter((id) => feed.calls[id].origin === 'feed')
+  return order.length === feed.order.length ? feed : { order, calls: Object.fromEntries(order.map((id) => [id, feed.calls[id]])) }
 }
 
 interface Props {
   feed: FeedState
   status: FeedStatus
-  dispatch: Dispatch<FeedAction>
   lan: string | null
-  /** Set by #/call?synthetic=1: play the synthetic call once on arrival. */
-  synthetic: boolean
 }
 
-/** The browser call: the farmer on this tab's microphone, the buyer on a phone or a second panel, and G-One between them. */
-export default function CallPage({ feed, status, dispatch, lan, synthetic }: Props) {
+/** The browser call, as a working tool: the farmer on this tab's microphone, the buyer on a phone or this tab, G-One between. */
+export default function CallPage({ feed, status, lan }: Props) {
   const farmer = useCallSimulator()
   const buyer = useCallSimulator()
   const { config, failed } = useSimulatorConfig()
   const lines = useDemoLines()
-  const { play, starting } = useSyntheticCall(dispatch)
-  const autoplayed = useRef(false)
+  const live = useMemo(() => liveOnly(feed), [feed])
 
   const onCall = farmer.state.status === 'live' || farmer.state.status === 'connecting' || farmer.state.status === 'reconnecting'
-  // Follow this tab's call only while it runs, so a synthetic call played afterwards takes over the view.
+  // Follow this tab's call while it runs; otherwise the newest live call.
   const ownCallId = onCall ? farmer.state.callId : null
-  const call = pickCall(feed, ownCallId)
-  const syntheticRunning = Boolean(call && call.origin !== 'feed' && !call.ended)
+  const call = pickCall(live, ownCallId)
 
-  useEffect(() => {
-    if (!synthetic || autoplayed.current) return
-    autoplayed.current = true
-    // Drop the flag, so a reload does not replay it.
-    history.replaceState(null, '', '#/call')
-    void play()
-  }, [synthetic, play])
-
-  const buyerCallId = ownCallId ?? (call && !call.ended && call.origin === 'feed' ? call.callId : '')
+  const buyerCallId = ownCallId ?? (call && !call.ended ? call.callId : '')
   const buyerReady = Boolean(buyerCallId)
   const phone = usePhoneJoin(buyerCallId, lan)
   const [buyerInThisTab, setBuyerInThisTab] = useState(false)
   const buyerLeg = call ? legByRole(call, 'buyer') : undefined
   const buyerDocked = buyer.state.status === 'live' || buyer.state.status === 'connecting' || buyer.state.status === 'reconnecting'
   const showPhoneCard = phone.kind === 'ready' && !buyerInThisTab && !buyerDocked && (!buyerLeg || Boolean(buyerLeg.ended))
-  const syntheticShown = Boolean(call && call.origin !== 'feed')
-  const mode = syntheticShown
-    ? { text: 'Synthetic call, no speech', tone: 'badge-warn' as const }
-    : { text: 'Live browser call', tone: call && !call.ended ? ('badge-ok' as const) : ('' as const) }
+  const running = Boolean(call && !call.ended)
 
   return (
-    <Stage
-      title="Try a call"
-      mode={mode}
-      extra={call && <CallClock call={call} />}
-      actions={
-        <>
-          <FeedStatusLabel status={status} />
-          <button type="button" className="btn-quiet" disabled={starting || syntheticRunning || onCall} onClick={() => void play()}>
-            <PlayIcon /> {syntheticRunning ? 'Playing…' : 'Play a synthetic call'}
-          </button>
-        </>
-      }
-      dealCall={call}
-      footer={failed && <p role="alert" className="text-sm font-medium text-bad">The backend did not answer, so calls cannot start. A synthetic call still plays.</p>}
-    >
-      <CallBar call={call} />
-      <SpeechCredit mode={creditMode(false, call?.origin ?? null)} />
-      <Timeline call={call} empty={<Intro onSynthetic={() => void play()} busy={starting} />} />
-      <div className="grid border-t border-line bg-page/60 md:grid-cols-2 md:divide-x md:divide-line">
-        <div className="p-3 md:h-[10.25rem]">
-          <LegDock role="farmer" sim={farmer} config={config} lines={lines} callId="" canStart={!syntheticRunning && status !== 'offline'} lockedReason={syntheticRunning ? 'Wait for the synthetic call to finish.' : 'The engine is offline, so calls cannot start.'} />
+    <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6 lg:py-8">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold">Try a call</h1>
+            <span data-testid="page-mode" className={`badge ${running ? 'badge-ok' : ''}`}>Live browser call</span>
+          </div>
+          <p className="mt-1 text-muted">Talk to G-One from this browser. No phone number is dialled.</p>
         </div>
-        <div className="border-t border-line p-3 md:h-[10.25rem] md:border-t-0">
-          {showPhoneCard ? (
-            <PhoneJoinCard hosts={phone.hosts} port={phone.port} callId={buyerCallId} onUseThisTab={() => setBuyerInThisTab(true)} />
-          ) : (
-            <LegDock role="buyer" sim={buyer} config={config} lines={lines} callId={buyerCallId} canStart={buyerReady} lockedReason="Opens once a farmer is on a call." hint={phone.kind === 'ready' ? 'Or play the buyer from this tab.' : phone.hint} />
-          )}
+        <div className="flex items-center gap-4 text-sm">
+          {call && <span className="text-muted">Call time <CallClock call={call} /></span>}
+          <FeedStatusLabel status={status} />
+        </div>
+      </header>
+
+      <div className="mt-6 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20.5rem]">
+        <div className="min-w-0 space-y-5">
+          <section aria-labelledby="call-box" className="card p-4 sm:p-5">
+            <h2 id="call-box" className="mb-3 text-sm font-bold tracking-wide text-muted">You, as the farmer</h2>
+            <LegDock role="farmer" sim={farmer} config={config} lines={lines} callId="" canStart={status !== 'offline'} lockedReason="The engine is offline, so calls cannot start." />
+            {failed && <p role="alert" className="mt-3 text-sm font-medium text-bad">The backend did not answer, so calls cannot start.</p>}
+          </section>
+
+          <section aria-label="Conversation" className="card flex h-[34rem] min-w-0 flex-col overflow-hidden lg:h-[clamp(30rem,calc(100dvh-24rem),44rem)]">
+            <CallBar call={call} />
+            <SpeechCredit mode={creditMode(false, call?.origin ?? null)} />
+            <Timeline call={call} empty={<Intro />} />
+          </section>
+        </div>
+
+        <div className="min-w-0 space-y-5">
+          <DealPanel call={call} compact />
+          <section aria-labelledby="buyer-box" className="card p-4">
+            {showPhoneCard ? (
+              <details open className="group">
+                <summary className="flex cursor-pointer items-center justify-between gap-2 rounded-lg">
+                  <h2 id="buyer-box" className="text-sm font-bold tracking-wide text-muted">Buyer joins from a phone</h2>
+                  <ChevronIcon aria-hidden="true" className="text-muted transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-3 h-36">
+                  <PhoneJoinCard hosts={phone.hosts} port={phone.port} callId={buyerCallId} onUseThisTab={() => setBuyerInThisTab(true)} />
+                </div>
+              </details>
+            ) : (
+              <>
+                <h2 id="buyer-box" className="mb-3 text-sm font-bold tracking-wide text-muted">The buyer</h2>
+                <LegDock role="buyer" sim={buyer} config={config} lines={lines} callId={buyerCallId} canStart={buyerReady} lockedReason="Opens once a farmer is on a call." hint={phone.kind === 'ready' ? 'Or play the buyer from this tab.' : phone.hint} />
+              </>
+            )}
+          </section>
         </div>
       </div>
-    </Stage>
+    </div>
   )
 }

@@ -380,7 +380,7 @@ export default function LandingPage({ section }: { section: string | null }) {
         <Furrows className="text-night-line" />
         <div className="shell relative py-24 text-center md:py-32">
           <h2 className="mx-auto max-w-3xl text-headline font-semibold">Hear a deal happen across two languages.</h2>
-          <p className="mx-auto mt-4 max-w-xl text-xl text-on-night-muted">The sample call needs no setup and takes about 25 seconds.</p>
+          <p className="mx-auto mt-4 max-w-xl text-xl text-on-night-muted">The sample call needs no setup and runs for about three minutes.</p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <a href="#/demo?autoplay=1" className="btn-accent btn-lg"><PlayIcon /> Play the sample call</a>
             <a href="#/call" className="btn-night btn-lg"><PhoneIcon /> Try a call</a>

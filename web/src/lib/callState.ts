@@ -409,7 +409,7 @@ export function normalizeEvent(value: unknown): ConsoleEvent | null {
       return { ...base, from: String(raw.from ?? ''), reason: String(raw.reason ?? '') } as ConsoleEvent
     case 'consent_recorded':
       if (!ROLES.includes(String(raw.role))) return null
-      return { ...base, consent: String(raw.consent ?? 'NONE') } as ConsoleEvent
+      return { ...base, consent: raw.consent === 'YES' || raw.consent === 'NO' ? raw.consent : 'NONE' } as ConsoleEvent
     case 'turn_measured':
       return {
         ...base,

@@ -189,11 +189,15 @@ export interface LanguageChanged {
   reason: string
 }
 
-/** What one party answered when asked whether G-One may remember this call. Sent once per role, before call_ended. */
+/**
+ * One party's answer, before the call ended, to "may we remember the main points of this call?". Sent once per role
+ * (farmer, buyer) right before call_ended. NONE: not asked, no clear answer, silence, or hung up first.
+ */
 export interface ConsentRecorded {
   type: 'consent_recorded'
   callId: string
   role: LegRole
+  /** "YES", "NO" or "NONE". */
   consent: string
   atMs: number
 }

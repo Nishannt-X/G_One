@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.g_one.agent.AgentBrain.Line;
 import com.example.g_one.agent.AgentBrain.Speaker;
+import com.example.g_one.agent.llm.FallbackLines;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.agent.pipeline.CallEndHandler.EndedCall;
 import com.example.g_one.core.AudioFrame;
 import com.example.g_one.core.CallGist;
@@ -25,6 +27,7 @@ import com.example.g_one.core.TextToSpeech;
 import com.example.g_one.fakes.FakeLeg;
 import com.example.g_one.fakes.FakeSpeechToText;
 import com.example.g_one.fakes.FakeTextToSpeech;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -540,6 +543,38 @@ class CallPipelineTest {
         executor.runAll();
 
         assertThat(spoken()).containsExactly(CallPipeline.HINDI_APOLOGY, CallPipeline.HINDI_APOLOGY, replyTo("y"));
+    }
+
+    @Test
+    void modelThinkingIsNeverSpokenShownOrKeptInTheTranscript() {
+        String apology = new FallbackLines(new ObjectMapper()).apology("hi-IN");
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+
+        brain.replyText = "<think>The farmer wants the wheat price.</think> Gehun ka bhav 2400 hai.";
+        session().say("x");
+        executor.runAll();
+        leg.finishPlayback();
+
+        brain.replyText = "<thinking>cut off by the token limit";
+        session().say("y");
+        executor.runAll();
+        leg.finishPlayback();
+
+        brain.replyText = "plan only</think>";
+        session().say("z");
+        executor.runAll();
+
+        assertThat(spoken()).containsExactly(GREETING, "Gehun ka bhav 2400 hai.", apology, apology);
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).extracting(ConsoleEvent.AssistantSaid::text)
+                .containsExactly(GREETING, "Gehun ka bhav 2400 hai.", apology, apology);
+        assertThat(spoken()).noneMatch(ReasoningText::hasTag);
+
+        leg.finishPlayback();
+        leg.remoteHangup();
+        executor.runAll();
+        assertThat(endedCalls).singleElement().satisfies(c ->
+                assertThat(c.transcript()).extracting(Line::text).noneMatch(ReasoningText::hasTag).contains(apology));
     }
 
     @Test

@@ -6,6 +6,7 @@ import com.example.g_one.agent.AgentBrain.Reply;
 import com.example.g_one.agent.AgentBrain.Speaker;
 import com.example.g_one.agent.language.LanguageFlow;
 import com.example.g_one.agent.language.LanguageLines;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.agent.mediation.MediationEngine;
 import com.example.g_one.agent.mediation.MediationSession;
 import com.example.g_one.agent.mediation.ScamPatterns;
@@ -595,12 +596,14 @@ public final class CallPipeline {
 
         /** @param next runs on the executor once the person has heard all of {@code reply}; null for nothing */
         private void deliver(long replyGeneration, Reply reply, Runnable next) {
+            // The last check before the console and speech: model thinking is never shown or spoken.
+            String spoken = ReasoningText.speakable(reply.text(), reply.language().code());
             synchronized (lock) {
                 if (ended || generation.get() != replyGeneration) {
                     log.debug("Dropping a superseded reply on leg {}", leg.id());
                     return;
                 }
-                lines.add(new Line(Speaker.ASSISTANT, reply.text()));
+                lines.add(new Line(Speaker.ASSISTANT, spoken));
                 speaking = true;
                 lastSaid = reply.text();
                 // A leg that follows its own turns changes language only through its LanguageFlow, never on one reply.
@@ -609,11 +612,11 @@ public final class CallPipeline {
                 }
             }
             publish(new ConsoleEvent.AssistantSaid(callId, now(), leg.id(), LegRole.FARMER, reply.language().code(),
-                    reply.text()));
+                    spoken));
 
             Synthesis started;
             try {
-                started = textToSpeech.speak(reply.text(), reply.language(), leg.playbackSampleRate(),
+                started = textToSpeech.speak(spoken, reply.language(), leg.playbackSampleRate(),
                         frame -> playFrame(replyGeneration, frame));
             } catch (RuntimeException e) {
                 log.warn("Speech synthesis failed to start on leg {}", leg.id(), e);

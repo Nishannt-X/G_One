@@ -89,7 +89,7 @@ class SpeechClientsTest {
     }
 
     @Test
-    void llmSendsReasoningEffortOnlyWhenConfigured() {
+    void llmNeverSendsReasoningFieldsToANonGroqEndpoint() {
         fake.llmContent = "{\"text\":\"bhav\"}";
         new LlmClient(props, JSON).askJson("test_failed", "system", "user");
         assertThat(fake.llm.get(0).bodyText()).doesNotContain("reasoning_effort");
@@ -97,7 +97,57 @@ class SpeechClientsTest {
         GOneProperties low = new GOneProperties(props.languages(), "", null, props.gnani(),
                 new GOneProperties.Llm(fake.baseUrl(), FakeUpstreams.KEY, "test-model", 5, "low"));
         new LlmClient(low, JSON).askJson("test_failed", "system", "user");
-        assertThat(fake.llm.get(1).bodyText()).contains("\"reasoning_effort\":\"low\"");
+        assertThat(fake.llm.get(1).bodyText()).doesNotContain("reasoning_effort").doesNotContain("reasoning_format")
+                .doesNotContain("include_reasoning");
+    }
+
+    @Test
+    void llmStripsModelThinkingBeforeReadingTheJson() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "<think>\nThe farmer said bhav.\n</think>\n{\"text\":\"bhav\"}";
+        assertThat(llm.askJson("test_failed", "system", "user").path("text").asText()).isEqualTo("bhav");
+
+        fake.llmContent = "plan first</think>{\"text\":\"bhav\"}";
+        assertThat(llm.askJson("test_failed", "system", "user").path("text").asText()).isEqualTo("bhav");
+
+        fake.llmContent = "<think>The farmer said";
+        assertThatThrownBy(() -> llm.askJson("test_failed", "system", "user"))
+                .isInstanceOfSatisfying(UpstreamException.class, e -> assertThat(e.stage()).isEqualTo("test_failed"));
+    }
+
+    @Test
+    void llmStripsEscapedReasoningFromDecodedNestedJsonStrings() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "{\"gist\":\"\\u003cthink>secret\\u003c/think>Farmer asked about wheat.\","
+                + "\"nested\":[{\"text\":\"Visible \\u003cthink>secret\"},\"Safe \\u003cthi\",42,null],"
+                + "\"plain\":\"  keep spaces  \"}";
+        var answer = llm.askJson("test_failed", "system", "user");
+        assertThat(answer.path("gist").asText()).isEqualTo("Farmer asked about wheat.");
+        assertThat(answer.path("nested").get(0).path("text").asText()).isEqualTo("Visible");
+        assertThat(answer.path("nested").get(1).asText()).isEqualTo("Safe");
+        assertThat(answer.path("nested").get(2).asInt()).isEqualTo(42);
+        assertThat(answer.path("nested").get(3).isNull()).isTrue();
+        assertThat(answer.path("plain").asText()).isEqualTo("  keep spaces  ");
+    }
+
+    @Test
+    void llmPreservesJsonFieldsWhenReasoningTagsMixEscapedAndLiteralForms() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "{\"gist\":\"\\u003cthink>secret</think>Answer\",\"keep\":42}";
+        var mixed = llm.askJson("test_failed", "system", "user");
+        assertThat(mixed.path("gist").asText()).isEqualTo("Answer");
+        assertThat(mixed.path("keep").asInt()).isEqualTo(42);
+
+        fake.llmContent = "{\"gist\":\"hidden</think>Answer\",\"keep\":42}";
+        var loneClose = llm.askJson("test_failed", "system", "user");
+        assertThat(loneClose.path("gist").asText()).isEqualTo("Answer");
+        assertThat(loneClose.path("keep").asInt()).isEqualTo(42);
+
+        fake.llmContent = "{\"gist\":\"Visible <think>secret\",\"other\":\"secret</think>safe\",\"keep\":42}";
+        var acrossFields = llm.askJson("test_failed", "system", "user");
+        assertThat(acrossFields.path("gist").asText()).isEqualTo("Visible");
+        assertThat(acrossFields.path("other").asText()).isEqualTo("safe");
+        assertThat(acrossFields.path("keep").asInt()).isEqualTo(42);
     }
 
     @Test

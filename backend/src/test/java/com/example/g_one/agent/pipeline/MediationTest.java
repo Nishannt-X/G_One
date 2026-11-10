@@ -8,6 +8,11 @@ import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.mediation.MediationEngine;
 import com.example.g_one.agent.mediation.MediationLines;
 import com.example.g_one.agent.mediation.TurnReader;
+import com.example.g_one.agent.mediation.TurnTranslator;
+import com.example.g_one.speech.SarvamTranslator;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import com.example.g_one.agent.pipeline.CallEndHandler.EndedCall;
 import com.example.g_one.agent.tools.buyers.Buyer;
 import com.example.g_one.agent.tools.buyers.BuyerConsent;
@@ -350,6 +355,65 @@ class MediationTest {
         });
         assertThat(spokenTo(buyer)).contains("Twenty quintals of red onion");
         assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).anySatisfy(t -> assertThat(t.text()).contains("laal pyaaz"));
+    }
+
+    private void assertTranslationAndTranscriptAreClean(String expected) {
+        assertThat(lastTranslated().text()).isEqualTo(expected);
+        assertThat(spokenTo(farmer)).contains(expected);
+        farmer.remoteHangup();
+        executor.runAll();
+        assertThat(ended).singleElement().satisfies(e -> {
+            assertThat(e.transcript()).extracting(line -> line.text()).contains(expected);
+            assertThat(e.transcript()).extracting(line -> line.text())
+                    .noneMatch(text -> text.contains("<think") || text.contains("secret"));
+        });
+    }
+
+    @Test
+    void decodedReasoningInModelTranslationNeverReachesConsoleTranscriptOrSpeech() {
+        buyerJoinsAndAgrees();
+        buyerSaid("We will collect it", "\\u003cthink\\u003esecret\\u003c/think\\u003eहम इसे ले जाएंगे");
+        assertTranslationAndTranscriptAreClean("हम इसे ले जाएंगे");
+    }
+
+    @Test
+    void sarvamReasoningNeverReachesConsoleTranscriptOrSpeech() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/translate", exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] response = "{\"translated_text\":\"<think>secret</think>हम इसे ले जाएंगे\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            GOneProperties props = new GOneProperties(List.of("hi-IN:Hindi:Nalini", "en-IN:English:Kaveri"), "",
+                    new GOneProperties.Agmarknet("http://127.0.0.1:9", "", "", "", "", "", "", 5, 3, 30), null,
+                    new GOneProperties.Llm(llm.baseUrl(), FakeLlm.KEY, "fake-model", 5),
+                    new GOneProperties.Translate("auto", "http://127.0.0.1:" + server.getAddress().getPort(),
+                            "test-key", "mayura:v1", "formal", 2));
+            ChatClient chat = new ChatClient(props, JSON);
+            TurnTranslator translator = new TurnTranslator(chat, JSON, new SarvamTranslator(props, JSON), props);
+            MandiCatalog catalog = new MandiCatalog(JSON);
+            engine = new MediationEngine(new TurnReader(chat, JSON, translator), new MediationLines(JSON),
+                    new MandiQuote(new MandiSource(props, JSON), catalog), catalog, consent,
+                    new MemoryGate(), bus, languages, clock);
+            registry = new LegRegistry();
+            new CallPipeline(brain, stt, tts, store, bus, List.of(ended::add), executor, now::get, engine).attach(registry);
+            farmer = FakeLeg.farmer(call);
+            registry.register(farmer);
+            executor.runAll();
+            farmer.finishPlayback();
+            buyerJoinsAndAgrees();
+            llm.replyText(reading("unused", NO_OFFER, NO_CAUTION, "none"));
+            session(LegRole.BUYER).say("We will collect it");
+            executor.runAll();
+            finishAll();
+            assertTranslationAndTranscriptAreClean("हम इसे ले जाएंगे");
+        } finally {
+            server.stop(0);
+        }
     }
 
     @Test

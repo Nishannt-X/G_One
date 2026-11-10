@@ -8,6 +8,7 @@ import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.Terms;
 import com.example.g_one.agent.language.LanguageFlow;
 import com.example.g_one.agent.language.LanguageLines;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.agent.llm.SpokenNumbers;
 import com.example.g_one.agent.tools.buyers.BuyerConnector.ConnectRequest;
 import com.example.g_one.agent.tools.mandi.MandiAnswer;
@@ -415,8 +416,9 @@ public final class MediationSession {
             if (warned) oneMoment();
         }
 
-        String spoken = read.translation();
-        if (spoken == null && sameLanguage) spoken = turn.text();
+        // Cleaned once here, so the console, the transcript and the voice all get the same text without model thinking.
+        String spoken = withoutThinking(read.translation());
+        if (spoken == null && sameLanguage) spoken = withoutThinking(turn.text());
         if (read.withheld()) {
             sayAssistant(speaker, lines.get("unsafeTranslation", language(speaker).code()), false, null);
         } else if (spoken == null) {
@@ -586,12 +588,31 @@ public final class MediationSession {
     /** The fixed line itself where it is written in this language, otherwise its translation, English if that fails. */
     private String rendered(String line, Language lang) {
         if (lines.hasOwnLines(lang.code())) return line;
-        return localizedPhrases.computeIfAbsent(lang.code() + "|" + line, k -> reader.localize(line, lang));
+        return localizedPhrases.computeIfAbsent(lang.code() + "|" + line, k -> {
+            String t = withoutThinking(reader.localize(line, lang));
+            return t == null ? line : t;
+        });
     }
 
     /** Cached, so the model is asked once, outside the deal lock, and both read-back steps say the same words. */
     private String localized(String phrase, Language lang) {
-        return localizedPhrases.computeIfAbsent(lang.code() + "|" + phrase, k -> reader.localize(phrase, lang));
+        // The phrase came from the model's reading of a turn, and English returns it untranslated: clean both ends.
+        String source = withoutThinking(phrase);
+        if (source == null) return lines.get("notStated", lineCode(lang));
+        return localizedPhrases.computeIfAbsent(lang.code() + "|" + source, k -> {
+            String t = withoutThinking(reader.localize(source, lang));
+            return t == null ? source : t;
+        });
+    }
+
+    /**
+     * Model or translator output with any reasoning removed, including tags that only appeared once the JSON was
+     * decoded (a unicode-escaped {@code <think>} in the JSON string). Null when nothing clean is left, so the caller treats it as no answer.
+     */
+    static String withoutThinking(String text) {
+        if (text == null) return null;
+        String clean = ReasoningText.strip(text);
+        return clean.isEmpty() || ReasoningText.hasTag(clean) ? null : clean;
     }
 
     private void agreed(Terms terms) {

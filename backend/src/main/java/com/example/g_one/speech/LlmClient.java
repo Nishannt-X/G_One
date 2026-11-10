@@ -1,6 +1,7 @@
 package com.example.g_one.speech;
 
 import com.example.g_one.GOneProperties;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.llm.ModelRouter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,8 +62,7 @@ public class LlmClient {
                 "messages", List.of(
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", user))));
-        String effort = cfg.reasoningEffortFor(slot.model());
-        if (!effort.isEmpty()) body.put("reasoning_effort", effort);
+        body.putAll(cfg.reasoningFields(slot.model()));
         boolean extra = cfg.isExtra(slot.model()) && extraClient != null;
         Http.Result r = Http.call(stage, (extra ? extraClient : client).post().uri("/chat/completions")
                 .header("Authorization", "Bearer " + (extra ? cfg.extraApiKey() : cfg.apiKey()))
@@ -81,9 +81,20 @@ public class LlmClient {
             JsonNode root = json.readTree(r.body());
             slot.spent(root.path("usage").path("total_tokens").asInt(0));
             String content = root.path("choices").path(0).path("message").path("content").asText("");
-            JsonNode answer = json.readTree(content);
-            if (!answer.isObject()) throw new IOException("not an object");
-            return answer;
+            JsonNode answer;
+            try {
+                // Parse valid JSON untouched: stripping its serialized form can join separate fields.
+                answer = json.readTree(content);
+            } catch (IOException invalidJson) {
+                // A reasoning preface outside the JSON is the only case that needs raw text stripping.
+                String prefix = content.substring(0, Math.max(0, content.indexOf('{')));
+                if (!ReasoningText.hasTag(prefix)) throw invalidJson;
+                String clean = ReasoningText.strip(content);
+                if (clean.isEmpty()) throw new IOException("only reasoning");
+                answer = json.readTree(clean);
+            }
+            if (answer == null || !answer.isObject()) throw new IOException("not an object");
+            return ReasoningText.stripJsonValues(answer);
         } catch (IOException e) {
             throw new UpstreamException(stage, "Translation service returned an unreadable answer.");
         }

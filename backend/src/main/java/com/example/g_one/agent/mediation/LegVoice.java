@@ -1,5 +1,6 @@
 package com.example.g_one.agent.mediation;
 
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.core.AudioFrame;
 import com.example.g_one.core.Language;
 import com.example.g_one.core.Leg;
@@ -114,7 +115,9 @@ final class LegVoice {
         }
         Synthesis started;
         try {
-            started = tts.speak(next.text(), next.language(), leg.playbackSampleRate(), frame -> play(mine, frame));
+            // The last check before speech: model thinking is never spoken.
+            String spoken = ReasoningText.speakable(next.text(), next.language().code());
+            started = tts.speak(spoken, next.language(), leg.playbackSampleRate(), frame -> play(mine, frame));
         } catch (RuntimeException e) {
             log.warn("Speech synthesis failed to start on leg {}", leg.id(), e);
             finish(mine, next, PlaybackOutcome.CLEARED);

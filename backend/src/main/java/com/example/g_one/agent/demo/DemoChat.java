@@ -97,6 +97,13 @@ public class DemoChat implements ChatClient.Scripted {
             name = TurnIntent.shortName(turn);
         }
         if (name.isPresent()) {
+            Optional<Buyer> pendingBuyer = buyerNamedBeforeNameQuestion(request.messages());
+            if (pendingBuyer.isPresent()) {
+                String buyerName = pendingBuyer.get().name();
+                return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। क्या मैं अभी " + buyerName
+                                + " को फ़ोन लगाऊँ?"
+                        : "Thank you, " + name.get() + " ji, I have noted your name. Shall I call " + buyerName + " now?");
+            }
             return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। प्याज़ का भाव बताऊँ या ख़रीदार ढूँढूँ?"
                     : "Thank you, " + name.get() + " ji, I have noted your name. Shall I tell you the onion price or find a buyer?");
         }
@@ -151,9 +158,8 @@ public class DemoChat implements ChatClient.Scripted {
             String range = first.path("listedRange").asText();
             if (nameFirst) {
                 return hindi ? place + " के " + name + " प्याज़ ख़रीदते हैं, हमारी सूची में उनका भाव "
-                        + hindiRange(first.path("buyerId").asText()) + " रुपये प्रति क्विंटल लिखा है। क्या मैं अभी "
-                        + name + " को फ़ोन लगाऊँ?"
-                        : name + " in " + place + " buy onions, listed at " + range + ". Shall I call " + name + " now?";
+                        + hindiRange(first.path("buyerId").asText()) + " रुपये प्रति क्विंटल लिखा है।"
+                        : name + " in " + place + " buy onions, listed at " + range + ".";
             }
             return hindi
                     ? place + " के " + name + " प्याज़ ख़रीदते हैं। हमारी सूची में उनका भाव " + hindiRange(first.path("buyerId").asText())
@@ -180,6 +186,17 @@ public class DemoChat implements ChatClient.Scripted {
             String said = m.content();
             if (!said.contains("फ़ोन लगाऊँ") && !said.contains("Shall I call")) return Optional.empty();
             return directory.all().stream().filter(b -> said.contains(b.name())).findFirst();
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Buyer> buyerNamedBeforeNameQuestion(List<ChatMessage> messages) {
+        for (int i = messages.size() - 2; i >= 0; i--) {
+            ChatMessage m = messages.get(i);
+            if (!"assistant".equals(m.role()) || m.content() == null) continue;
+            return TurnIntent.asksName(m.content())
+                    ? directory.all().stream().filter(b -> m.content().contains(b.name())).findFirst()
+                    : Optional.empty();
         }
         return Optional.empty();
     }

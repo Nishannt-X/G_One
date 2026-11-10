@@ -63,7 +63,7 @@ public final class TurnIntent {
     private static final Set<String> QUESTION_WORDS = Set.of("क्या", "क्यों", "kya", "kyun", "what", "কী", "কি", "ki", "kaise", "कैसे");
     private static final Pattern NAME_QUESTION = Pattern.compile("(?iu)(नाम|\\bname\\b|নাম|\\bnaam\\b)[^.।!]*\\?");
     private static final Pattern NAME_REQUEST = Pattern.compile(
-            "(?iu)\\b(?:tell|give|share)\\s+(?:me\\s+)?your\\s+name\\b"
+            "(?iu)\\b(?:tell|give|share)\\s+(?:me\\s+)?your\\s+name\\b|\\b(?:state|say)\\s+your\\s+name\\b"
             + "|(?:अपना|आपका|आपके) नाम[^.।!?]*(?:बताइए|बताएं|बताएँ|बताओ)"
             + "|(?:apna|aapka|aapke) naam[^.?!]*(?:bataye|batayen|batao)"
             + "|(?:আপনার|তোমার) নাম[^.।!?]*(?:বলুন|বলো)");

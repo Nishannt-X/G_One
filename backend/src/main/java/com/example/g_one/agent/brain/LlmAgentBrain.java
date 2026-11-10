@@ -88,11 +88,10 @@ public class LlmAgentBrain implements AgentBrain {
     private static final Pattern MARKUP = Pattern.compile("[*#`]+");
     private static final Pattern SPACES = Pattern.compile("\\s+");
     private static final Pattern DIGIT = Pattern.compile("\\d");
-    private static final Pattern NAME_ASKED = Pattern.compile("नाम|\\bname\\b|নাম|\\bnaam\\b");
     private static final String SENTENCE_ENDS = "।.?!॥";
     /** Added to the memory rules while a first-time caller's name is unknown and not yet asked. */
-    public static final String NAME_ASK = "The name is unknown: after fully answering this turn, ask their name once, "
-            + "in one short question, so they can be recognised next time.";
+    public static final String NAME_ASK = "The name is unknown: answer this turn in at most two sentences, then ask their name "
+            + "once in a third short question, so they can be recognised next time.";
     private static final int MAX_SENTENCES = 3;
     private static final int MAX_MEMOS = 2_000;
     private static final Pattern MONEY_WORD = Pattern.compile("(?i)₹|रुपय|रुपए|rupee|টাকা");
@@ -386,11 +385,18 @@ public class LlmAgentBrain implements AgentBrain {
             if (!reply.wantsTools()) {
                 String text = spoken(reply);
                 if (text.isEmpty()) break;
+                if (!memo.askedName && memo.name() == null && state.maySave()
+                        && !(state.usesMemory() && rememberedName(ctx) != null)
+                        && TurnIntent.asksName(speakable(reply.content())) && !TurnIntent.asksName(text)) {
+                    String question = FixedLines.prefix(expected.code()).equals("hi")
+                            ? "और आपका नाम क्या है?" : "May I know your name?";
+                    text = cappedSentences(text, MAX_SENTENCES - 1) + " " + question;
+                }
                 text = inRightLanguage(text, expected, messages, turn);
                 text = withoutUngroundedAmounts(text, expected, past, latest, called);
                 memo.failures = 0;
                 memo.modelTurns++;
-                if (NAME_ASKED.matcher(text).find()) memo.askedName = true;
+                if (TurnIntent.asksName(text)) memo.askedName = true;
                 Language lang = ReplyLanguage.of(text, ctx.language(), languages);
                 return new Reply(SpokenNumbers.digitsToWords(text.replace("₹", " "), lang.code()).strip(), lang, turn.endCall);
             }
@@ -647,9 +653,13 @@ public class LlmAgentBrain implements AgentBrain {
 
     /** Voice replies stay short even if the model runs on. */
     private static String capped3(String text) {
+        return cappedSentences(text, MAX_SENTENCES);
+    }
+
+    private static String cappedSentences(String text, int maxSentences) {
         int seen = 0;
         for (int i = 0; i < text.length(); i++) {
-            if (SENTENCE_ENDS.indexOf(text.charAt(i)) >= 0 && (i + 1 == text.length() || Character.isWhitespace(text.charAt(i + 1))) && ++seen == MAX_SENTENCES) {
+            if (SENTENCE_ENDS.indexOf(text.charAt(i)) >= 0 && (i + 1 == text.length() || Character.isWhitespace(text.charAt(i + 1))) && ++seen == maxSentences) {
                 return text.substring(0, i + 1);
             }
         }

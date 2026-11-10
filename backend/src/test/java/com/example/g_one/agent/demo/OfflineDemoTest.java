@@ -87,7 +87,12 @@ class OfflineDemoTest {
         typed.say(farmer.id(), "मुझे बीस क्विंटल लाल प्याज़ बेचना है");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).anyMatch(t -> t.tool().equals("find_buyers") && t.ok()));
         waitForSaid(2);
-        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(1).text()).contains("Mehta Agro Traders").contains("फ़ोन लगाऊँ");
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(1).text()).contains("Mehta Agro Traders").contains("आपका नाम क्या है?")
+                .doesNotContain("फ़ोन लगाऊँ");
+        sleep();
+        typed.say(farmer.id(), "रमेश");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी") && a.text().contains("फ़ोन लगाऊँ")));
         sleep();
 
         typed.say(farmer.id(), "हाँ, फ़ोन लगा दीजिए");
@@ -181,10 +186,35 @@ class OfflineDemoTest {
         typed.say(farmer.id(), "मुझे प्याज़ बेचना है");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
                 .anyMatch(a -> a.text().contains("Mehta Agro Traders") && a.text().contains("आपका नाम क्या है?")));
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).noneMatch(a -> a.text().contains("फ़ोन लगाऊँ"));
         sleep();
         typed.say(farmer.id(), "रमेश");
         waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी") && a.text().contains("फ़ोन लगाऊँ")));
+        sleep();
+        typed.say(farmer.id(), "हाँ");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.ToolCalled.class))
+                .anyMatch(t -> t.tool().equals("connect_buyer") && t.ok()));
+        farmer.remoteHangup();
+    }
+
+    @Test
+    void aYesToTheNameQuestionDoesNotCallTheBuyer() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550009", FakeLeg.SALT);
+        FakeLeg farmer = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
+        keepHearing(farmer);
+        registry.register(farmer);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        sleep();
+        typed.say(farmer.id(), "मुझे प्याज़ बेचना है");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
+        int replies = eventsOf(ConsoleEvent.AssistantSaid.class).size();
+        sleep();
+        typed.say(farmer.id(), "हाँ");
+        waitForSaid(replies + 1);
+        assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).noneMatch(t -> t.tool().equals("connect_buyer"));
         farmer.remoteHangup();
     }
 

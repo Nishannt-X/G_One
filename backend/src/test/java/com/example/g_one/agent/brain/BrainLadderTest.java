@@ -198,6 +198,29 @@ class BrainLadderTest {
     }
 
     @Test
+    void aStateYourNameRequestSavesTheNextBareName() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("I can help with your crop. Please state your name.");
+        Reply prompt = f.brain.respond(ctx, List.of(), said(ctx, "How can I sell my crop?"));
+        assertThat(prompt.text()).contains("Please state your name.");
+        f.llm.replyText("Thank you, Ramesh.");
+        f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, prompt.text())), said(ctx, "Ramesh"));
+        assertThat(f.toolEvents).anySatisfy(e -> {
+            assertThat(e.tool()).isEqualTo("save_profile_fact");
+            assertThat(e.args().path("value").asText()).isEqualTo("Ramesh");
+        });
+    }
+
+    @Test
+    void theNameQuestionRemainsAudibleAfterAThreeSentenceBusinessAnswer() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("The buyer purchases onions. Their listed price is available. I can help you call them. May I know your name?");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "I want to sell onions to a buyer"));
+        assertThat(r.text()).contains("The buyer purchases onions.").contains("May I know your name?")
+                .doesNotContain("I can help you call them.");
+    }
+
+    @Test
     void noModelOnASaleSaysItHeardTheSale() {
         CallContext ctx = BrainFixture.newFarmer(ENGLISH);
         f.llm.failures.set(1);

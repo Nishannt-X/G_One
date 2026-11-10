@@ -151,7 +151,7 @@ class OfflineDemoTest {
         FakeLeg first = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
         keepHearing(first);
         registry.register(first);
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(first.id(), "प्याज़ का भाव बताइए");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
@@ -186,7 +186,7 @@ class OfflineDemoTest {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("Which language")));
         sleep();
         typed.say(first.id(), "हिंदी");
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(first.id(), "प्याज़ का भाव बताइए");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
@@ -228,7 +228,7 @@ class OfflineDemoTest {
         List<String> said = eventsOf(ConsoleEvent.AssistantSaid.class).stream().map(ConsoleEvent.AssistantSaid::text).toList();
         assertThat(said).hasSize(3);
         assertThat(said.get(1)).isEqualTo("சரி, தமிழில் பேசலாம்.");
-        assertThat(said.get(2)).contains("என்னை மறந்துவிடு").containsPattern("\\p{InTamil}")
+        assertThat(said.get(2)).contains("எப்படி உதவலாம்").doesNotContain("மறந்துவிடு").containsPattern("\\p{InTamil}")
                 .doesNotContain("Welcome").doesNotContain("Speak Hindi or English").doesNotContain("forget me");
         leg.remoteHangup();
     }
@@ -241,7 +241,7 @@ class OfflineDemoTest {
         FakeLeg first = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
         keepHearing(first);
         registry.register(first);
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(first.id(), "मेरा नाम सुरेश है");
         waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("सुरेश"));
@@ -276,7 +276,7 @@ class OfflineDemoTest {
         FakeLeg farmer = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
         keepHearing(farmer);
         registry.register(farmer);
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(farmer.id(), "मुझे प्याज़ बेचना है");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
@@ -301,7 +301,7 @@ class OfflineDemoTest {
         FakeLeg farmer = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
         keepHearing(farmer);
         registry.register(farmer);
-        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(farmer.id(), "मुझे प्याज़ बेचना है");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));

@@ -81,7 +81,7 @@ class GreetingLanguagesTest {
         assertThat(f.lines.languages()).as("fixed lines for %s", lang.code()).contains(lang.code());
         FixedLines.Lines l = f.lines.forLanguage(lang.code());
         assertThat(l.code()).isEqualTo(lang.code());
-        for (String s : List.of(l.welcome(), l.memoryNotice(), l.withheld(), l.nameCheck(), l.forgotten(), l.goodbye())) {
+        for (String s : List.of(l.welcome(), l.howCanIHelp(), l.withheld(), l.nameCheck(), l.forgotten(), l.goodbye())) {
             assertThat(s).isNotBlank().doesNotContainPattern("[0-9]");
             inItsScript(s, lang);
             noOldWelcome(s);
@@ -97,10 +97,10 @@ class GreetingLanguagesTest {
 
     @ParameterizedTest
     @MethodSource("configured")
-    void afterTheLanguageChoiceANewFarmerHearsOnlyTheMemoryNoticeInThatLanguage(Language lang) {
+    void afterTheLanguageChoiceANewFarmerHearsOnlyHowCanIHelpInThatLanguage(Language lang) {
         FixedLines.Lines l = f.lines.forLanguage(lang.code());
         Reply r = f.brain.greetAfterLanguageChoice(BrainFixture.newFarmer(lang));
-        assertThat(r.text()).isEqualTo(l.memoryNotice());
+        assertThat(r.text()).isEqualTo(l.howCanIHelp());
         assertThat(r.text()).doesNotContain(l.welcome()).doesNotContain("Welcome to G-One");
         noOldWelcome(r.text());
         inItsScript(r.text(), lang);
@@ -114,7 +114,7 @@ class GreetingLanguagesTest {
     void afterTheLanguageChoiceAWithheldCallerHearsOnlyTheWithheldLine(Language lang) {
         FixedLines.Lines l = f.lines.forLanguage(lang.code());
         Reply r = f.brain.greetAfterLanguageChoice(BrainFixture.withheld(lang));
-        assertThat(r.text()).isEqualTo(l.withheld());
+        assertThat(r.text()).isEqualTo(l.withheld() + " " + l.howCanIHelp());
         assertThat(r.language()).isEqualTo(lang);
     }
 
@@ -132,10 +132,10 @@ class GreetingLanguagesTest {
     void aCallStartedInAFixedLanguageKeepsAWelcomeThatOffersNoLanguagePair(Language lang) {
         FixedLines.Lines l = f.lines.forLanguage(lang.code());
         Reply r = f.brain.greet(BrainFixture.newFarmer(lang));
-        assertThat(r.text()).isEqualTo(l.welcome() + " " + l.memoryNotice());
+        assertThat(r.text()).isEqualTo(l.welcome() + " " + l.howCanIHelp());
         noOldWelcome(r.text());
         assertThat(r.language()).isEqualTo(lang);
-        assertThat(f.brain.greet(BrainFixture.withheld(lang)).text()).isEqualTo(l.welcome() + " " + l.withheld());
+        assertThat(f.brain.greet(BrainFixture.withheld(lang)).text()).isEqualTo(l.welcome() + " " + l.withheld() + " " + l.howCanIHelp());
     }
 
     @Test

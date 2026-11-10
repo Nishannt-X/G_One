@@ -53,8 +53,8 @@ import org.springframework.stereotype.Component;
  * The agent brain: an OpenAI-compatible model with tool calling behind {@link AgentBrain}.
  *
  * <ul>
- *   <li>{@link #greet} speaks fixed lines (docs/call-flow.md, variant B): a new farmer hears the welcome and the memory
- *       notice, a withheld caller ID hears the welcome and that nothing will be remembered, and a returning farmer
+ *   <li>{@link #greet} speaks fixed lines (docs/call-flow.md, variant B): a new farmer hears the welcome and "how can I
+ *       help", a withheld caller ID hears the welcome, that nothing will be remembered and "how can I help", and a returning farmer
  *       hears only the name check. No model call, so the greeting cannot fail on the model.
  *       {@link #greetAfterLanguageChoice} is the same without the welcome, which the English-first opener already
  *       gave.</li>
@@ -179,9 +179,10 @@ public class LlmAgentBrain implements AgentBrain {
             Language lang = spokenIn(l.code(), ctx.language());
             String hello = welcome ? l.welcome() + " " : "";
             String text = switch (state) {
-                case WITHHELD -> hello + l.withheld();
+                case WITHHELD -> hello + l.withheld() + " " + l.howCanIHelp();
                 case NAME_CHECK -> l.nameCheck(MemoryBlock.rememberedName(ctx.memory()).orElseThrow());
-                case NEW, UNNAMED -> hello + l.memoryNotice();
+                // No memory notice: whether to remember the call is asked at its end, with a yes or no.
+                case NEW, UNNAMED -> hello + l.howCanIHelp();
                 // Not reached at the start of a call (these states follow a name check or a forget), kept non-blank.
                 case CONFIRMED, OTHER_SPEAKER, FORGOTTEN -> l.welcome();
             };

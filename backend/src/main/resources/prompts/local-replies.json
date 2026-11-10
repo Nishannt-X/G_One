@@ -3,7 +3,7 @@
   "replies": {
     "hi-IN": {
       "identity": "मैं जी-वन हूँ, किसानों के लिए एक AI फ़ोन सहायक। मैं मंडी का तारीख वाला भाव, मौसम का अनुमान, खेती की सलाह और खरीदार से बात कराने में मदद करती हूँ। आप क्या जानना चाहेंगे?",
-      "nameEarlierCall": "आपने इसी नंबर से पहले बात की थी और {name} नाम बताया था, इसलिए मुझे पता है। न चाहें तो कभी भी मुझे भूल जाओ कहिए।",
+      "nameEarlierCall": "आपने इसी नंबर से पहले बात की थी और {name} नाम बताया था, इसलिए मुझे पता है।",
       "nameThisCall": "आपने अभी इसी बातचीत में अपना नाम {name} बताया था, इसलिए मुझे पता है।",
       "nameUnknown": "मुझे अभी आपका नाम नहीं पता, यह इस नंबर से आपकी पहली बात है। आपका नाम क्या है?",
       "nameWithheld": "आपका नंबर नहीं दिख रहा, इसलिए मुझे आपका नाम नहीं पता और मैं याद भी नहीं रखूँगी। मैं आपको क्या कहकर बुलाऊँ?",
@@ -28,7 +28,7 @@
     },
     "hi-en": {
       "identity": "मैं जी-वन हूँ, farmers के लिए एक AI phone assistant। मैं mandi का dated rate, weather और buyer से बात कराने में help करती हूँ। आपको क्या जानना है?",
-      "nameEarlierCall": "आपने इसी number से पहले call की थी और {name} नाम बताया था, इसलिए मुझे पता है। न चाहें तो कभी भी forget me कहिए।",
+      "nameEarlierCall": "आपने इसी number से पहले call की थी और {name} नाम बताया था, इसलिए मुझे पता है।",
       "nameThisCall": "आपने अभी इसी call में अपना नाम {name} बताया था, इसलिए मुझे पता है।",
       "nameUnknown": "मुझे अभी आपका नाम नहीं पता, इस number से यह आपकी पहली call है। आपका नाम क्या है?",
       "nameWithheld": "आपका number नहीं दिख रहा, इसलिए मुझे नाम नहीं पता और मैं save भी नहीं करूँगी। मैं आपको क्या कहकर बुलाऊँ?",
@@ -53,7 +53,7 @@
     },
     "en-IN": {
       "identity": "I am G-One, an AI phone assistant for farmers. I help with dated mandi references, the weather forecast, farming advice and talking to buyers. What would you like to know?",
-      "nameEarlierCall": "You called from this number before and told me your name is {name}, so that is how I know. Say forget me any time if you do not want that.",
+      "nameEarlierCall": "You called from this number before and told me your name is {name}, so that is how I know.",
       "nameThisCall": "You told me your name, {name}, earlier on this call, so that is how I know.",
       "nameUnknown": "I do not know your name yet, this is your first call from this number. What is your name?",
       "nameWithheld": "I cannot see your number, so I do not know your name and I will not remember this call. What should I call you?",
@@ -78,7 +78,7 @@
     },
     "bn-IN": {
       "identity": "আমি জি-ওয়ান, কৃষকদের জন্য একজন এআই ফোন সহায়ক। আমি তারিখ দেওয়া বাজারদর, আবহাওয়ার পূর্বাভাস, চাষের পরামর্শ আর ক্রেতার সঙ্গে কথা বলাতে সাহায্য করি। আপনি কী জানতে চান?",
-      "nameEarlierCall": "আপনি এই নম্বর থেকে আগে কথা বলেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি। না চাইলে যেকোনো সময় আমাকে ভুলে যাও বলুন।",
+      "nameEarlierCall": "আপনি এই নম্বর থেকে আগে কথা বলেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি।",
       "nameThisCall": "আপনি এই কলেই আপনার নাম {name} বলেছিলেন, তাই আমি জানি।",
       "nameUnknown": "আমি এখনো আপনার নাম জানি না, এই নম্বর থেকে এটা আপনার প্রথম কল। আপনার নাম কী?",
       "nameWithheld": "আপনার নম্বর দেখা যাচ্ছে না, তাই আপনার নাম জানি না আর মনেও রাখব না। আপনাকে কী বলে ডাকব?",
@@ -103,7 +103,7 @@
     },
     "bn-en": {
       "identity": "আমি জি-ওয়ান, farmer-দের জন্য একটা AI phone assistant। আমি mandi-র dated rate, weather আর buyer-এর সঙ্গে কথা বলাতে help করি। আপনি কী জানতে চান?",
-      "nameEarlierCall": "আপনি এই number থেকে আগে call করেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি। না চাইলে যেকোনো সময় forget me বলুন।",
+      "nameEarlierCall": "আপনি এই number থেকে আগে call করেছিলেন আর {name} নামটা বলেছিলেন, তাই আমি জানি।",
       "nameThisCall": "আপনি এই call-এই আপনার নাম {name} বলেছিলেন, তাই আমি জানি।",
       "nameUnknown": "আমি এখনো আপনার নাম জানি না, এই number থেকে এটা আপনার প্রথম call। আপনার নাম কী?",
       "nameWithheld": "আপনার number দেখা যাচ্ছে না, তাই নাম জানি না আর save-ও করব না। আপনাকে কী বলে ডাকব?",

@@ -42,14 +42,14 @@ class LlmAgentBrainTest {
     // ---- greeting ---------------------------------------------------------------------------------------------
 
     @Test
-    void newFarmerHearsTheWelcomeAndTheMemoryNoticeWithoutAModelCall() {
+    void newFarmerHearsTheWelcomeAndHowCanIHelpWithoutAModelCall() {
         Reply hi = f.brain.greet(BrainFixture.newFarmer(HINDI));
-        assertThat(hi.text()).startsWith("नमस्ते, जी-वन में आपका स्वागत है।").contains("मुझे भूल जाओ");
+        assertThat(hi.text()).startsWith("नमस्ते, जी-वन में आपका स्वागत है।").endsWith("आज मैं आपकी क्या मदद करूँ?").doesNotContain("भूल जाओ");
         assertThat(hi.language()).isEqualTo(HINDI);
         assertThat(hi.endCall()).isFalse();
 
         Reply en = f.brain.greet(BrainFixture.newFarmer(ENGLISH));
-        assertThat(en.text()).startsWith("Welcome to G-One.").contains("forget me");
+        assertThat(en.text()).startsWith("Welcome to G-One.").endsWith("How can I help you today?").doesNotContain("forget me");
         assertThat(en.language()).isEqualTo(ENGLISH);
         assertThat(f.llm.requests()).isEmpty();
     }

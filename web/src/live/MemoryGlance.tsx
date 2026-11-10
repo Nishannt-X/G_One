@@ -4,7 +4,9 @@ import { useI18n } from '../lib/i18n'
 import { Card } from '../ui/parts'
 import { ProvenanceChip } from '../views/ProvenanceChip'
 
-/** What the assistant already knew when this call began. */
+const rank = (field: string) => (field === 'name' ? 0 : field.startsWith('crop:') ? 1 : 2)
+
+/** What the assistant already knew when this call began. Name and crops first, so five rows still show the crops. */
 export default function MemoryGlance({ call }: { call: CallView }) {
   const { t, lang } = useI18n()
   const memory = call.memory
@@ -20,9 +22,9 @@ export default function MemoryGlance({ call }: { call: CallView }) {
       ) : (
         <div className="space-y-3">
           <ul className="space-y-1.5">
-            {memory.facts.slice(0, 5).map((fact) => (
+            {[...memory.facts].sort((a, b) => rank(a.field) - rank(b.field)).slice(0, 5).map((fact) => (
               <li key={fact.field} className="flex flex-wrap items-center justify-between gap-x-3">
-                <span><span className="text-sm text-muted capitalize">{humanize(fact.field)}</span> <span className="font-bold">{fact.value}</span></span>
+                <span><span className="text-sm text-muted capitalize">{fact.field.startsWith('crop:') ? 'crop' : humanize(fact.field)}</span> <span className="font-bold">{fact.value}</span></span>
                 <ProvenanceChip origin={fact.provenance.saidOrInferred} />
               </li>
             ))}

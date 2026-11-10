@@ -109,15 +109,42 @@ function factValue(facts: MemoryFact[], ...fields: string[]): string | null {
   return null
 }
 
+const CROP_PREFIX = 'crop:'
+
+/**
+ * The farmer's crops, in stored order and without duplicates. The backend keeps one fact per crop, `crop:<name>`
+ * (for example `crop:red onion`); older or hand-made records may hold a comma list under `crops`, `crop` or `main_crop`.
+ */
+export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>): string[] {
+  const out: string[] = []
+  const add = (crop: string) => {
+    const c = crop.trim()
+    if (c && !out.some((o) => o.toLowerCase() === c.toLowerCase())) out.push(c)
+  }
+  for (const f of facts) {
+    if (f.field.startsWith(CROP_PREFIX)) add(f.value.trim() || f.field.slice(CROP_PREFIX.length))
+    else if (f.field === 'crops' || f.field === 'crop' || f.field === 'main_crop') f.value.split(/[,/]/).forEach(add)
+  }
+  return out
+}
+
+/** Follow-ups from every stored gist, newest gist first, without repeats. Gists list only items still open. */
+export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUps: string[] }>): string[] {
+  const out: string[] = []
+  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs)) {
+    for (const item of g.followUps) if (item.trim() && !out.includes(item)) out.push(item)
+  }
+  return out
+}
+
 export function toFarmer(callerKey: string, origin: FarmerOrigin, language: string, seenMs: number, facts: MemoryFact[], gists: MemoryGist[], deals?: FarmerDeal[]): Farmer {
-  const crops = factValue(facts, 'crops', 'main_crop', 'crop')
   return {
     callerKey,
     origin,
     name: factValue(facts, 'name'),
     district: factValue(facts, 'district', 'village'),
     language: factValue(facts, 'language') ?? language,
-    crops: crops ? crops.split(/[,/]/).map((c) => c.trim()).filter(Boolean) : [],
+    crops: cropsOf(facts),
     lastCallMs: gists[0]?.startedMs || seenMs,
     callCount: gists.length,
     facts,

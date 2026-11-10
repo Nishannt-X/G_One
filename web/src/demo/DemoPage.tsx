@@ -14,6 +14,7 @@ import PhoneJoinCard from './PhoneJoinCard'
 import SpeechCredit from './SpeechCredit'
 import { creditMode } from './creditMode'
 import { usePhoneJoin } from './phoneJoin'
+import { useSavedGist } from './savedGist'
 import { Avatar, Waveform } from './parts'
 import Timeline from './Timeline'
 import ControlStrip from './voiced/ControlStrip'
@@ -109,6 +110,7 @@ export default function DemoPage({ feed, status, dispatch, autoplay, lan }: { fe
   const ownCallId = onCall ? farmer.state.callId : null
   const call = pickCall(feed, ownCallId)
   const sampleRunning = Boolean(call && call.origin !== 'feed' && !call.ended)
+  const saved = useSavedGist(call)
 
   const playSample = useCallback(async () => {
     setStarting(true)
@@ -171,7 +173,7 @@ export default function DemoPage({ feed, status, dispatch, autoplay, lan }: { fe
         <section aria-label="Conversation" className="card relative flex h-[calc(100dvh-5rem)] min-h-[34rem] min-w-0 flex-col overflow-hidden lg:h-auto lg:min-h-0">
           {voicedOn && voiceManifest ? <VoicedCallBar manifest={voiceManifest} state={voice} /> : <CallBar call={call} />}
           <SpeechCredit mode={creditMode(voicedOn && voiceManifest !== null, call?.origin ?? null)} />
-          {voicedOn && voiceManifest ? <VoicedTimeline manifest={voiceManifest} state={voice} onReplayPhones={() => engine.replayPhones()} /> : <Timeline call={call} empty={<Intro onPlay={startSample} busy={starting || voice.status === 'loading'} label={introLabel} />} />}
+          {voicedOn && voiceManifest ? <VoicedTimeline manifest={voiceManifest} state={voice} onReplayPhones={() => engine.replayPhones()} /> : <Timeline call={call} saved={saved} empty={<Intro onPlay={startSample} busy={starting || voice.status === 'loading'} label={introLabel} />} />}
           {voicedOn && voiceManifest ? (
             <div className="min-[1400px]:grid min-[1400px]:grid-cols-[11.75rem_minmax(0,1fr)_11.75rem]">
               <PhoneRail party="farmer" manifest={voiceManifest} state={voice} />
@@ -201,7 +203,7 @@ export default function DemoPage({ feed, status, dispatch, autoplay, lan }: { fe
         </section>
         {voicedOn && voiceManifest && <PhoneStrip manifest={voiceManifest} state={voice} className="min-w-0 lg:hidden" />}
         <div className="min-h-0 min-w-0">
-          <DealPanel call={voicedOn ? voicedView : call} />
+          <DealPanel call={voicedOn ? voicedView : call} saved={voicedOn ? null : saved} />
         </div>
       </div>
       {failed && <p role="alert" className="text-sm font-medium text-bad">The backend did not answer, so calls cannot start. The sample still plays.</p>}

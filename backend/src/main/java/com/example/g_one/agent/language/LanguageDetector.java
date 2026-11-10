@@ -67,6 +67,19 @@ public final class LanguageDetector {
             "আমি", "আমার", "ভাষা", "বলব", "বলতে", "চাই", "কথা", "হ্যাঁ", "ami", "bolbo", "bolte", "chai",
             "நான்", "பேச", "பேசுவேன்", "வேண்டும்", "ನಾನು", "ಮಾತನಾಡುತ್ತೇನೆ", "ಮಾತಾಡ್ತೀನಿ", "ಬೇಕು"));
 
+    /**
+     * Farming words that make even a short turn a request ("Hindi wheat price", "gehun bhav"): a price, a sale, the
+     * weather, a quantity or a common crop.
+     */
+    private static final Set<String> BUSINESS_WORDS = normalized(Set.of(
+            "price", "rate", "rates", "bhav", "bhaav", "daam", "dam", "mandi", "quintal", "quintals", "kilo", "kg", "ton",
+            "sell", "sale", "bechna", "bech", "buyer", "buyers", "khareedar", "kharidar", "weather", "mausam", "forecast",
+            "wheat", "gehun", "gehu", "onion", "pyaz", "pyaaz", "tomato", "tamatar", "potato", "aloo", "rice", "paddy",
+            "dhan", "cotton", "kapas", "soybean", "garlic", "lahsun", "chilli", "mirch", "maize", "makka", "mustard",
+            "भाव", "दाम", "मंडी", "क्विंटल", "किलो", "बेचना", "बेचनी", "ख़रीदार", "खरीदार", "मौसम", "गेहूँ", "गेहूं", "प्याज़",
+            "प्याज", "टमाटर", "आलू", "धान", "कपास", "सोयाबीन", "लहसुन", "मिर्च", "मक्का", "सरसों",
+            "দাম", "দর", "বিক্রি", "আবহাওয়া", "পেঁয়াজ", "আলু", "ধান", "গম"));
+
     /** Said in any language, so they tell nothing about which one. */
     private static final Set<String> LATIN_GREETINGS = Set.of("hello", "helo", "hi", "hey", "namaste", "namaskar",
             "namaskara", "vanakkam", "nomoshkar", "nomoskar");
@@ -97,7 +110,25 @@ public final class LanguageDetector {
         Set<String> codes = words.stream().map(NAMES::get).filter(c -> c != null).collect(Collectors.toSet());
         if (codes.size() != 1) return null; // none, or several: "Hindi or English" names no choice
         long other = words.stream().filter(w -> !NAMES.containsKey(w) && !REQUEST_WORDS.contains(w)).count();
-        return other > MAX_WORDS_BESIDE_NAME ? null : new Detection(codes.iterator().next(), Source.NAMED, false);
+        return other > MAX_WORDS_BESIDE_NAME ? null : new Detection(codes.iterator().next(), Source.NAMED, saysMore(words));
+    }
+
+    /**
+     * True when the turn says something besides naming a language and asking to speak it: once language names, request
+     * words and greetings are gone, two or more words remain, or a farming word, or a number. "Hindi", "हिंदी में बात
+     * करेंगे" and "English please" say nothing more; "Hindi wheat price" and "Hindi twenty quintal" do.
+     */
+    public static boolean saysMoreThanALanguage(String text) {
+        if (text == null || text.isBlank()) return false;
+        if (text.codePoints().anyMatch(Character::isDigit)) return true;
+        return saysMore(words(text));
+    }
+
+    private static boolean saysMore(List<String> words) {
+        List<String> rest = words.stream()
+                .filter(w -> !NAMES.containsKey(w) && !REQUEST_WORDS.contains(w) && !LATIN_GREETINGS.contains(w))
+                .toList();
+        return rest.size() >= 2 || rest.stream().anyMatch(BUSINESS_WORDS::contains);
     }
 
     private static Detection byScript(List<String> words) {

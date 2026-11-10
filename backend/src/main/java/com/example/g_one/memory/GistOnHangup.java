@@ -108,7 +108,7 @@ public class GistOnHangup implements CallEndHandler {
             if (l.speaker() == AgentBrain.Speaker.ASSISTANT) {
                 asked = l.text();
             } else if (l.speaker() == AgentBrain.Speaker.FARMER && l.text() != null && !l.text().isBlank()
-                    && !(LanguageLines.asksLanguage(asked) && !LanguageDetector.detect(l.text()).hasContent())) {
+                    && !(LanguageLines.asksLanguage(asked) && !LanguageDetector.saysMoreThanALanguage(l.text()))) {
                 turns++;
             }
         }

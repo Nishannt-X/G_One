@@ -43,6 +43,32 @@ class LanguageDetectorTest {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', textBlock = """
+            Hindi                    | false
+            हिंदी                     | false
+            English please           | false
+            Hinglish                 | false
+            हिंदी में बात करेंगे जी       | false
+            hello Hindi              | false
+            Hindi bhai               | false
+            Hindi wheat price        | true
+            हिंदी, गेहूँ का भाव         | true
+            Hindi 20 quintal         | true
+            English, what is the rate | true
+            """)
+    void onlyALanguageNameAndRequestWordsSayNothingMore(String text, boolean more) {
+        assertThat(LanguageDetector.saysMoreThanALanguage(text)).isEqualTo(more);
+    }
+
+    @org.junit.jupiter.api.Test
+    void aShortRequestBesideTheLanguageNameStillChoosesItAndCountsAsContent() {
+        Detection d = LanguageDetector.detect("Hindi wheat price");
+        assertThat(d.code()).isEqualTo("hi-IN");
+        assertThat(d.source()).isEqualTo(Source.NAMED);
+        assertThat(d.hasContent()).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', textBlock = """
             मुझे प्याज़ का भाव बताइए             | hi-IN
             আমি পেঁয়াজ বিক্রি করতে চাই           | bn-IN
             எனக்கு வெங்காயம் விலை சொல்லுங்கள்  | ta-IN

@@ -163,6 +163,36 @@ class GistOnHangupTest {
         assertThat(gistWritten()).isTrue();
     }
 
+    private static EndedCall afterTheLanguageQuestion(String... farmerTurns) {
+        CallId id = CallId.random();
+        FakeLeg leg = new FakeLeg(id, LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, FakeLeg.FARMER_KEY);
+        CallContext ctx = new CallContext(id, leg, FakeLeg.HINDI, FarmerMemory.empty(FakeLeg.FARMER_KEY));
+        List<AgentBrain.Line> lines = new ArrayList<>();
+        lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.opener(LegRole.FARMER)));
+        lines.add(new AgentBrain.Line(AgentBrain.Speaker.FARMER, farmerTurns[0]));
+        lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.confirmation("hi-IN")));
+        for (int i = 1; i < farmerTurns.length; i++) {
+            lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "ठीक है।"));
+            lines.add(new AgentBrain.Line(AgentBrain.Speaker.FARMER, farmerTurns[i]));
+        }
+        return new EndedCall(ctx, lines, START, START + 60_000, "hangup", null, null);
+    }
+
+    @Test
+    void aShortRequestGivenWithTheLanguageCountsAsARealTurn() {
+        assertThat(GistOnHangup.farmerTurns(afterTheLanguageQuestion("Hindi wheat price", "बीस क्विंटल है"))).isEqualTo(2);
+        hangUp(afterTheLanguageQuestion("Hindi wheat price", "बीस क्विंटल है"), MemoryGate.State.NEW);
+        assertThat(gistWritten()).isTrue();
+    }
+
+    @Test
+    void onlyNamingTheLanguageNeverMakesACallWorthAGist() {
+        assertThat(GistOnHangup.farmerTurns(afterTheLanguageQuestion("Hindi"))).isZero();
+        assertThat(GistOnHangup.farmerTurns(afterTheLanguageQuestion("English please"))).isZero();
+        hangUp(afterTheLanguageQuestion("हिंदी", "ठीक है"), MemoryGate.State.NEW);
+        assertThat(gistWritten()).isFalse();
+    }
+
     @Test
     void theActionTableFollowsTheMemoryState() {
         EndedCall real = call(60_000, null, "प्याज़ का भाव बताइए", "धन्यवाद");

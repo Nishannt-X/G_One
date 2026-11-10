@@ -489,6 +489,32 @@ class MediationTest {
     }
 
     @Test
+    void buyerLeavingBeforeTheFarmerFinishesAReplyReleasesTheHeldVoice() {
+        farmerReplyStillPlaying();
+        int heard = spokenTo(farmer).size();
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+
+        buyer.remoteHangup();
+        executor.runAll();
+        assertThat(farmer.clearCount()).isZero();
+        assertThat(spokenTo(farmer)).as("the existing reply keeps the leg").hasSize(heard);
+
+        farmer.finishPlayback();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("the joined line starts after the reply").hasSize(heard + 1);
+        farmer.finishPlayback();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("the departure line follows").hasSize(heard + 2);
+        farmer.finishPlayback();
+        executor.runAll();
+        session(LegRole.FARMER).say("ab kya");
+        executor.runAll();
+        assertThat(brain.responds).as("the farmer's assistant resumes").isNotEmpty();
+    }
+
+    @Test
     void aTurnHeardWhileTheDeclineLinePlaysIsAnsweredAfterIt() {
         aBuyerJoinsAndHearsTheIntro();
         session(LegRole.BUYER).say("No");
@@ -504,6 +530,23 @@ class MediationTest {
 
         assertThat(brain.responds).as("answered once the assistant has the farmer back").singleElement()
                 .extracting(call -> call.latest().text()).isEqualTo("aur kya");
+    }
+
+    @Test
+    void aNewFarmerTurnSupersedesTheHeldTurnBeforeItRuns() {
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("No");
+        executor.runAll();
+        session(LegRole.FARMER).say("first");
+        executor.runAll();
+        assertThat(brain.responds).isEmpty();
+
+        farmer.finishPlayback(); // release queues the held turn without running it yet
+        session(LegRole.FARMER).say("second");
+        executor.runAll();
+
+        assertThat(brain.responds).as("the stale held turn must not answer after the newer one")
+                .singleElement().extracting(call -> call.latest().text()).isEqualTo("second");
     }
 
     @Test

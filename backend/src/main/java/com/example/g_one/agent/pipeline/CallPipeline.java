@@ -217,12 +217,14 @@ public final class CallPipeline {
         private boolean intakeClosed;
         /**
          * Runs once nothing the intake said is playing any more. Taken by whichever step supersedes that reply, so it
-         * is never left waiting on a reply that no longer exists. Guarded by {@link #lock}.
+         * is never left waiting on a reply that no longer exists. Hand-offs chain in the order they were deferred, so
+         * one that a later hand-off supersedes still runs, ahead of the later one. Guarded by {@link #lock}.
          */
         private Runnable whenFree;
         /**
-         * A turn heard while mediation had the leg, answered once the assistant has it back. Guarded by
-         * {@link #lock}.
+         * A turn heard while mediation had the leg, written under the same lock that reads {@link #intakeClosed}, so a
+         * release either sees it or made it unnecessary. Answered by {@link #release()} once the assistant has the leg
+         * back, at the generation that release binds it to. Guarded by {@link #lock}.
          */
         private Turn heldTurn;
         /** Null for a leg started with a fixed language. */
@@ -345,41 +347,73 @@ public final class CallPipeline {
         @Override
         public void takeOver(Runnable then) {
             Synthesis toCancel = null;
-            boolean runNow;
+            Runnable runNow = null;
             synchronized (lock) {
                 intakeClosed = true;
+                // A hand-off deferred earlier still has to run: it may be what frees the farmer's voice, so letting a
+                // second one replace it would leave that voice muted for the rest of the call.
+                Runnable pending = whenFree;
+                whenFree = null;
+                Runnable both = chain(pending, then);
                 if (speaking) {
                     // The reply already playing is heard to its end; the line that follows waits for it.
-                    whenFree = then;
-                    runNow = false;
+                    whenFree = both;
                 } else {
                     generation.incrementAndGet(); // a reply that has not started yet must not start
                     toCancel = synthesis;
                     synthesis = null;
-                    runNow = true;
+                    runNow = both;
                 }
             }
-            if (!runNow) {
+            if (runNow == null) {
                 return;
             }
             cancelQuietly(toCancel);
-            submit("take over", then);
+            submit("take over", runNow);
+        }
+
+        /** Runs {@code first} then {@code next}: a hand-off that fails must not take the one behind it with it. */
+        private static Runnable chain(Runnable first, Runnable next) {
+            if (first == null) {
+                return next;
+            }
+            return () -> {
+                try {
+                    first.run();
+                } finally {
+                    next.run();
+                }
+            };
         }
 
         @Override
         public void release() {
+            Runnable free;
             Turn held;
+            long heldGeneration;
             synchronized (lock) {
                 mediationSession = null;
                 intakeClosed = false;
-                // A pending hand-off only exists while mediation still owns the leg, so a release first makes it moot.
-                whenFree = null;
+                // A hand-off still waiting was queued for a reply that never got to finish. Running it is what frees a
+                // voice it holds, so it is taken rather than dropped.
+                free = takeWhenFree();
                 held = heldTurn;
                 heldTurn = null;
+                // Bound here, not when the answer is prepared: a turn heard after this release supersedes the held one.
+                heldGeneration = generation.incrementAndGet();
             }
-            if (held != null) {
-                submit("held turn", () -> answerHeldTurn(held));
+            if (free == null && held == null) {
+                return;
             }
+            // One step, so the leg is free before the held turn is answered on it.
+            submit("resume", () -> {
+                if (free != null) {
+                    free.run();
+                }
+                if (held != null) {
+                    answerHeldTurn(held, heldGeneration);
+                }
+            });
         }
 
         @Override
@@ -506,6 +540,11 @@ public final class CallPipeline {
                 ctx = context;
                 closed = intakeClosed;
                 free = takeWhenFree();
+                if (closed) {
+                    // Held under the same lock that decided it: a release that runs afterwards sees this turn, and one
+                    // that ran before it made closed false, so the turn cannot be written where nobody reads it.
+                    heldTurn = answerTo;
+                }
             }
             if (wasSpeaking) {
                 log.info("Turn heard on leg {} while the assistant is speaking: barge-in accepted", leg.id());
@@ -518,7 +557,6 @@ public final class CallPipeline {
             if (closed) {
                 // Mediation has the leg: no brain call now, and no reply of ours over its lines. It is answered once
                 // the assistant has the farmer back.
-                holdTurn(answerTo);
                 return;
             }
             submit("respond", () -> {
@@ -555,28 +593,23 @@ public final class CallPipeline {
             return free;
         }
 
-        private void holdTurn(Turn turn) {
-            synchronized (lock) {
-                heldTurn = turn;
-            }
-        }
-
-        /** Answers a turn heard while mediation had the leg, now that the assistant has it back. */
-        private void answerHeldTurn(Turn turn) {
+        /**
+         * Answers a turn heard while mediation had the leg, now that the assistant has it back. {@code replyGeneration}
+         * is the one {@link #release()} bound it to: a turn heard since then supersedes it, as it would any other reply.
+         */
+        private void answerHeldTurn(Turn turn, long replyGeneration) {
             CallContext ctx;
             List<Line> history;
-            long turnGeneration;
             synchronized (lock) {
-                if (ended || context == null) {
+                if (ended || context == null || intakeClosed || generation.get() != replyGeneration) {
                     return;
                 }
                 ctx = context;
                 history = List.copyOf(lines);
-                turnGeneration = generation.get();
             }
             Turn heard = withLanguage(turn, ctx.language());
             Reply reply = askBrain("respond", () -> brain.respond(ctx, history, heard), ctx.language());
-            deliver(turnGeneration, reply);
+            deliver(replyGeneration, reply);
         }
 
         /**

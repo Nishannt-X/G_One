@@ -82,11 +82,26 @@ class WelcomeBackTest {
     }
 
     @Test
-    void aLongOrMessyItemIsReadBackShortAndOnOneLine() {
-        String item = WelcomeBack.spokenItem("Find a buyer\nfor onion " + "and more ".repeat(30));
-        assertThat(item).doesNotContain("\n").startsWith("find a buyer for onion");
-        assertThat(item.length()).isLessThanOrEqualTo(WelcomeBack.MAX_ITEM_CHARS);
+    void aMessyItemIsReadBackOnOneLineAndNeverShortened() {
+        assertThat(WelcomeBack.spokenItem("Find a buyer\nfor onion")).isEqualTo("find a buyer for onion");
         assertThat(WelcomeBack.spokenItem("APMC visit on Monday.")).isEqualTo("APMC visit on Monday");
+        String long_ = "Check with Shinde Traders about the twenty quintal onion pickup on Monday morning at the farm "
+                + "gate and the payment on delivery, but do not call the buyer";
+        assertThat(WelcomeBack.spokenItem(long_)).endsWith("do not call the buyer");
+    }
+
+    @Test
+    void anItemTooLongToReadWholeIsMentionedWithoutItsWordsSoNoNegationIsLost() {
+        String long_ = "Check with Shinde Traders about the twenty quintal onion pickup on Monday morning at the farm "
+                + "gate and the payment on delivery, but do not call the buyer";
+        assertThat(long_.length()).isGreaterThan(WelcomeBack.MAX_ITEM_CHARS);
+        FarmerMemory m = memory(List.of(NAME), List.of(new CallGist(NEWER, BrainFixture.PAST_MS, BrainFixture.PAST_MS + 1,
+                "Talked about onion.", List.of(long_))));
+
+        assertThat(WELCOME.line("en-IN", m).orElseThrow().text()).isEqualTo("Welcome back, Suresh ji. Earlier I noted "
+                + "something to follow up. Shall we look at that, or can I help with something else?");
+        assertThat(WELCOME.line("hi-IN", m).orElseThrow().text()).contains("एक बात नोट की थी").doesNotContain("Shinde")
+                .doesNotContain("buyer");
     }
 
     @Test

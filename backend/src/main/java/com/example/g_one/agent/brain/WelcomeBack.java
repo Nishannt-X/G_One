@@ -33,15 +33,21 @@ import java.util.regex.Pattern;
 final class WelcomeBack {
     static final String CROP = "{crop}";
     static final String ITEM = "{item}";
-    /** A follow-up read back is at most this long, cut at a word, so the greeting stays short. */
+    /**
+     * A follow-up is read back only when it fits in this many characters whole. A longer one is never cut, since a cut
+     * can drop a qualifier or a negation ("... do not call the buyer"): the line then only says something is noted.
+     */
     static final int MAX_ITEM_CHARS = 120;
     /** English crop words and their Hindi names; the longer name wins when both match ("red onion" over "onion"). */
     private static final Map<String, String> HINDI_CROPS = hindiCrops();
     private static final Pattern CONTROL = Pattern.compile("[\\p{Cc}\\p{Zl}\\p{Zp}]+");
     private static final Pattern SPACES = Pattern.compile("\\s+");
 
-    /** OPEN: an open follow-up to read back; CROP: a remembered crop and nothing open; PLAIN: nothing to mention. */
-    enum Kind { OPEN, CROP, PLAIN }
+    /**
+     * OPEN: an open follow-up to read back; OPEN_LONG: one too long to read back whole, mentioned without its words;
+     * CROP: a remembered crop and nothing open; PLAIN: nothing to mention.
+     */
+    enum Kind { OPEN, OPEN_LONG, CROP, PLAIN }
 
     /** A line to speak and the resource key ({@code hi-IN}, {@code en-IN}) it was written for. */
     record Spoken(String code, String text) {}
@@ -61,12 +67,17 @@ final class WelcomeBack {
         }
     }
 
+    /** The resource key of a kind: {@code open}, {@code openLong}, {@code crop}, {@code plain}. */
+    private static String key(Kind k) {
+        return k == Kind.OPEN_LONG ? "openLong" : k.name().toLowerCase(Locale.ROOT);
+    }
+
     private static Lines read(String code, JsonNode n) {
         Map<Kind, String> byKind = new LinkedHashMap<>();
         for (Kind k : Kind.values()) {
-            String v = n.path(k.name().toLowerCase(Locale.ROOT)).asText("");
+            String v = n.path(key(k)).asText("");
             if (v.isBlank() || !v.contains(FixedLines.NAME)) {
-                throw new IllegalStateException("welcomeBack." + k.name().toLowerCase(Locale.ROOT) + " for " + code
+                throw new IllegalStateException("welcomeBack." + key(k) + " for " + code
                         + " must be set and contain " + FixedLines.NAME);
             }
             byKind.put(k, v);
@@ -89,7 +100,9 @@ final class WelcomeBack {
         String line = l.byKind().get(Kind.PLAIN);
         Optional<String> open = newestOpen(memory);
         if (open.isPresent()) {
-            line = l.byKind().get(Kind.OPEN).replace(ITEM, open.get());
+            line = open.get().length() <= MAX_ITEM_CHARS
+                    ? l.byKind().get(Kind.OPEN).replace(ITEM, open.get())
+                    : l.byKind().get(Kind.OPEN_LONG);
         } else {
             Optional<String> crop = lastCrop(memory);
             if (crop.isPresent()) {
@@ -110,17 +123,12 @@ final class WelcomeBack {
 
     /**
      * A stored follow-up as it is read back: one line, "~" said as "about", digits as English words (the text is
-     * English), no closing full stop or comma, a lower-case start unless it opens with an acronym, at most
-     * {@value #MAX_ITEM_CHARS} characters cut at a word.
+     * English), no closing full stop or comma, a lower-case start unless it opens with an acronym. Never shortened.
      */
     static String spokenItem(String followUp) {
         String t = SPACES.matcher(CONTROL.matcher(followUp == null ? "" : followUp).replaceAll(" ")).replaceAll(" ").strip();
         t = SpokenNumbers.digitsToWords(t.replace("~", "about "), "en-IN");
         t = SPACES.matcher(t).replaceAll(" ").strip();
-        if (t.length() > MAX_ITEM_CHARS) {
-            int cut = t.lastIndexOf(' ', MAX_ITEM_CHARS);
-            t = t.substring(0, cut > 0 ? cut : MAX_ITEM_CHARS);
-        }
         t = t.replaceAll("[.,;:!?।\\s]+$", "");
         if (t.length() > 1 && Character.isUpperCase(t.charAt(0)) && !Character.isUpperCase(t.charAt(1))) {
             t = Character.toLowerCase(t.charAt(0)) + t.substring(1);

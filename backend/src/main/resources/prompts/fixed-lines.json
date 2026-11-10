@@ -18,15 +18,17 @@
       "goodbye": "Thank you. Goodbye."
     }
   },
-  "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",
+  "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. openLong: an open item too long to read back whole (WelcomeBack.MAX_ITEM_CHARS), mentioned without its words, never cut. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",
   "welcomeBack": {
     "hi-IN": {
       "open": "नमस्ते {name} जी, फिर से स्वागत है। पहले मैंने आगे देखने के लिए यह बात नोट की थी: {item}। क्या यह हो गया, या कुछ और मदद करूँ?",
+      "openLong": "नमस्ते {name} जी, फिर से स्वागत है। पहले मैंने आगे देखने के लिए एक बात नोट की थी। क्या उसमें मदद करूँ, या कुछ और?",
       "crop": "नमस्ते {name} जी, फिर से स्वागत है। पहले आपने {crop} की बात की थी। आज क्या मदद करूँ?",
       "plain": "नमस्ते {name} जी, फिर से स्वागत है। आज क्या मदद करूँ?"
     },
     "en-IN": {
       "open": "Welcome back, {name} ji. Earlier I noted this to follow up: {item}. Did that get done, or can I help with something else?",
+      "openLong": "Welcome back, {name} ji. Earlier I noted something to follow up. Shall we look at that, or can I help with something else?",
       "crop": "Welcome back, {name} ji. Earlier we talked about your {crop}. How can I help today?",
       "plain": "Welcome back, {name} ji. How can I help today?"
     }

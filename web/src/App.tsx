@@ -47,7 +47,7 @@ function Console({ route }: { route: Route }) {
       ) : route.view === 'farmers' ? (
         <FarmersPage openKey={route.param} seed={route.query.get('seed') === '1'} />
       ) : route.view === 'analytics' ? (
-        <Legacy><AnalyticsPage feed={feed} status={status} dispatch={dispatch} /></Legacy>
+        <Legacy><AnalyticsPage feed={feed} status={status} dispatch={dispatch} param={route.param} query={route.query} /></Legacy>
       ) : route.view === 'buyers' ? (
         <Legacy><BuyersView /></Legacy>
       ) : route.view === 'memory' ? (

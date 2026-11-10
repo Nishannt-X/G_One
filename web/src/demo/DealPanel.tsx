@@ -1,8 +1,10 @@
 import type { CallView } from '../lib/callState'
-import { humanize, rupees, shortDate } from '../lib/format'
+import { rupees } from '../lib/format'
 import { comparePrice, dealValue, latestReference, meterPosition, METER_RANGE_PCT } from '../lib/pricing'
 import type { DealState } from '../types/console'
 import { CheckIcon, CrossIcon } from '../ui/icons'
+import MemoryPanel from './MemoryPanel'
+import type { SavedGist } from './savedGist'
 
 const STEPS: { state: DealState; label: string }[] = [
   { state: 'draft', label: 'Draft' },
@@ -68,37 +70,8 @@ function Meter({ call }: { call: CallView | null }) {
   )
 }
 
-function Remembered({ call }: { call: CallView | null }) {
-  const memory = call?.memory ?? null
-  const facts = memory?.facts.slice(0, 4) ?? []
-  const gist = memory?.gists[0]
-  return (
-    <section aria-label="What G-One remembered" className="border-t border-line pt-4">
-      <h3 className="font-semibold">What G-One remembered</h3>
-      <div className="mt-1.5 min-h-[4.5rem] text-[0.9375rem] leading-snug">
-        {!memory ? (
-          <p className="text-muted">Loaded at the start of the call.</p>
-        ) : !memory.returning && facts.length === 0 ? (
-          <p className="text-muted">First call from this number. Nothing on file yet.</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-1.5">
-              {facts.map((f) => (
-                <span key={f.field} className="badge" title={f.provenance.saidOrInferred === 'said' ? 'The farmer said this' : 'The assistant inferred this'}>
-                  <span className="font-medium text-faint capitalize">{humanize(f.field)}</span> {f.value}
-                </span>
-              ))}
-            </div>
-            {gist && <p key={gist.callId} className="animate-fill mt-2 rounded text-muted"><span className="font-semibold text-ink">{shortDate(gist.startedMs)}:</span> {gist.summary}</p>}
-          </>
-        )}
-      </div>
-    </section>
-  )
-}
-
 /** The deal as it stands. Every slot is there from the start, so nothing moves while the terms fill in. */
-export default function DealPanel({ call }: { call: CallView | null }) {
+export default function DealPanel({ call, saved = null }: { call: CallView | null; saved?: SavedGist | null }) {
   const deal = call?.deal ?? null
   const closed = deal?.state === 'closed'
   const reached = deal ? STEPS.findIndex((s) => s.state === deal.state) : -1
@@ -134,7 +107,7 @@ export default function DealPanel({ call }: { call: CallView | null }) {
         {agreed && call?.origin === 'feed' && <> <a className="font-semibold text-brand underline" href={`/api/deals/${encodeURIComponent(call.callId)}/receipt.html`} target="_blank" rel="noreferrer">Open the receipt</a></>}
       </p>
       <Meter call={call} />
-      <Remembered call={call} />
+      <MemoryPanel call={call} saved={saved} />
     </aside>
   )
 }

@@ -109,15 +109,63 @@ function factValue(facts: MemoryFact[], ...fields: string[]): string | null {
   return null
 }
 
+const CROP_PREFIX = 'crop:'
+
+/**
+ * The farmer's crops, in stored order and without duplicates. The backend keeps one fact per crop, `crop:<name>`
+ * (for example `crop:red onion`); older or hand-made records may hold a comma list under `crops`, `crop` or `main_crop`.
+ */
+export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>): string[] {
+  const out: string[] = []
+  const add = (crop: string) => {
+    const c = crop.trim()
+    if (c && !out.some((o) => o.toLowerCase() === c.toLowerCase())) out.push(c)
+  }
+  for (const f of facts) {
+    if (f.field.startsWith(CROP_PREFIX)) add(f.value.trim() || f.field.slice(CROP_PREFIX.length))
+    else if (f.field === 'crops' || f.field === 'crop' || f.field === 'main_crop') f.value.split(/[,/]/).forEach(add)
+  }
+  return out
+}
+
+/** The assistant receives at most five open follow-ups from all stored gists. */
+export const MAX_OPEN_FOLLOW_UPS = 5
+const MAX_FOLLOW_UP_CHARS = 160
+
+function cleanFollowUp(text: string): string {
+  const flat = text.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+  const points = Array.from(flat)
+  return points.length <= MAX_FOLLOW_UP_CHARS ? flat : points.slice(0, MAX_FOLLOW_UP_CHARS).join('').trimEnd() + '…'
+}
+
+/**
+ * The follow-ups the assistant receives from MemoryBlock: all stored gists, newest first, once each, capped at five.
+ * The backend removes DONE items from their original gists, so this set is already reconciled.
+ */
+export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUps: string[] }>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs)) {
+    for (const item of g.followUps) {
+      const key = cleanFollowUp(item)
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        out.push(key)
+        if (out.length === MAX_OPEN_FOLLOW_UPS) return out
+      }
+    }
+  }
+  return out
+}
+
 export function toFarmer(callerKey: string, origin: FarmerOrigin, language: string, seenMs: number, facts: MemoryFact[], gists: MemoryGist[], deals?: FarmerDeal[]): Farmer {
-  const crops = factValue(facts, 'crops', 'main_crop', 'crop')
   return {
     callerKey,
     origin,
     name: factValue(facts, 'name'),
     district: factValue(facts, 'district', 'village'),
     language: factValue(facts, 'language') ?? language,
-    crops: crops ? crops.split(/[,/]/).map((c) => c.trim()).filter(Boolean) : [],
+    crops: cropsOf(facts),
     lastCallMs: gists[0]?.startedMs || seenMs,
     callCount: gists.length,
     facts,

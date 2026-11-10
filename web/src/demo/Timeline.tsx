@@ -1,9 +1,11 @@
 import { useMemo, type ReactNode } from 'react'
 import { translationKey, type CallView, type TimelineItem } from '../lib/callState'
+import { cropsOf, openFollowUps } from '../lib/farmers'
 import { duration, languageLabel } from '../lib/format'
 import { useStickToBottom } from '../lib/useStickToBottom'
 import { CheckIcon, ChevronIcon, CrossIcon, LanguageIcon, LockIcon, MemoryIcon, SearchIcon, StoreIcon } from '../ui/icons'
 import { sampleGloss } from './gloss'
+import { savedGistText, type SavedGist } from './savedGist'
 import { toolNote } from './toolNote'
 import { Avatar } from './parts'
 
@@ -11,7 +13,7 @@ type Row =
   | { kind: 'item'; key: string; atMs: number; item: TimelineItem }
   | { kind: 'note'; key: string; atMs: number; tone: 'plain' | 'ok' | 'bad'; icon: ReactNode; text: string }
 
-function buildRows(call: CallView): Row[] {
+function buildRows(call: CallView, saved: SavedGist | null): Row[] {
   const rows: Row[] = call.items.map((item) => ({ kind: 'item', key: item.key, atMs: item.atMs, item }))
   for (const tool of call.tools) {
     const note = toolNote(tool)
@@ -23,13 +25,17 @@ function buildRows(call: CallView): Row[] {
   }
   if (call.memory?.returning) {
     const gist = call.memory.gists[0]
-    rows.push({ kind: 'note', key: 'memory', atMs: call.memory.atMs, tone: 'plain', icon: <MemoryIcon />, text: gist ? `Returning caller. Last call: ${gist.summary}` : 'Returning caller' })
+    const crops = cropsOf(call.memory.facts)
+    const open = openFollowUps(call.memory.gists)
+    const parts = ['Returning caller.', gist && `Last call: ${gist.summary}`, crops.length > 0 && `Crops: ${crops.join(', ')}.`, open.length > 0 && `Open: ${open.join('; ')}`]
+    rows.push({ kind: 'note', key: 'memory', atMs: call.memory.atMs, tone: 'plain', icon: <MemoryIcon />, text: parts.filter(Boolean).join(' ') })
   }
   for (const leg of call.legs) {
     if (leg.role === 'buyer') rows.push({ kind: 'note', key: `join-${leg.legId}`, atMs: leg.joinedMs, tone: 'ok', icon: <StoreIcon />, text: 'Buyer joined on a second line' })
   }
   if (call.deal?.state === 'agreed') rows.push({ kind: 'note', key: 'agreed', atMs: call.deal.atMs, tone: 'ok', icon: <CheckIcon />, text: 'Both sides said yes. The terms are recorded.' })
   if (call.ended) rows.push({ kind: 'note', key: 'ended', atMs: call.ended.atMs, tone: 'plain', icon: <CheckIcon />, text: `Call ended after ${duration(call.ended.durationMs)}` })
+  if (call.ended && saved) rows.push({ kind: 'note', key: 'saved', atMs: call.ended.atMs + 1, tone: saved.state === 'saved' ? 'ok' : 'plain', icon: <MemoryIcon />, text: savedGistText(saved) })
   return rows.sort((a, b) => a.atMs - b.atMs)
 }
 
@@ -121,8 +127,8 @@ export function Note({ row }: { row: Pick<Extract<Row, { kind: 'note' }>, 'tone'
   )
 }
 
-export default function Timeline({ call, empty }: { call: CallView | null; empty: ReactNode }) {
-  const rows = useMemo(() => (call ? buildRows(call) : []), [call])
+export default function Timeline({ call, empty, saved = null }: { call: CallView | null; empty: ReactNode; saved?: SavedGist | null }) {
+  const rows = useMemo(() => (call ? buildRows(call, saved) : []), [call, saved])
   const { ref, onScroll, away, jump } = useStickToBottom(rows.length + (call ? Object.keys(call.translations).length : 0))
   return (
     <div className="relative min-h-0 flex-1">

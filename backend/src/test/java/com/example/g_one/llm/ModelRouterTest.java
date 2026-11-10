@@ -254,7 +254,8 @@ class ModelRouterTest {
                 assertThat(r.path("model").asText()).isEqualTo("sarvam-105b-conversations");
                 assertThat(r.has("reasoning_effort")).isFalse();
             });
-            assertThat(primary.requests().get(0).path("reasoning_effort").asText()).isEqualTo("low");
+            // A non-Groq primary never gets reasoning fields, even with an effort configured.
+            assertThat(primary.requests().get(0).has("reasoning_effort")).isFalse();
         }
     }
 }

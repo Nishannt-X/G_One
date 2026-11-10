@@ -89,7 +89,7 @@ class SpeechClientsTest {
     }
 
     @Test
-    void llmSendsReasoningEffortOnlyWhenConfigured() {
+    void llmNeverSendsReasoningFieldsToANonGroqEndpoint() {
         fake.llmContent = "{\"text\":\"bhav\"}";
         new LlmClient(props, JSON).askJson("test_failed", "system", "user");
         assertThat(fake.llm.get(0).bodyText()).doesNotContain("reasoning_effort");
@@ -97,7 +97,8 @@ class SpeechClientsTest {
         GOneProperties low = new GOneProperties(props.languages(), "", null, props.gnani(),
                 new GOneProperties.Llm(fake.baseUrl(), FakeUpstreams.KEY, "test-model", 5, "low"));
         new LlmClient(low, JSON).askJson("test_failed", "system", "user");
-        assertThat(fake.llm.get(1).bodyText()).contains("\"reasoning_effort\":\"low\"");
+        assertThat(fake.llm.get(1).bodyText()).doesNotContain("reasoning_effort").doesNotContain("reasoning_format")
+                .doesNotContain("include_reasoning");
     }
 
     @Test

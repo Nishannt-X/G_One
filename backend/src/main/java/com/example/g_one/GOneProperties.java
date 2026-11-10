@@ -53,9 +53,9 @@ public record GOneProperties(
     }
 
     /**
-     * @param reasoningEffort sent as {@code reasoning_effort} when not blank. Reasoning models need it, because hidden
-     *     reasoning spends the same token budget as the answer; other providers reject the unknown field, so blank
-     *     means it is left out. Qwen on Groq always gets {@code none}, set or not (see {@link #reasoningFields})
+     * @param reasoningEffort sent as {@code reasoning_effort} to Groq when not blank. Reasoning models need it, because
+     *     hidden reasoning spends the same token budget as the answer. Other endpoints never get it, and Qwen on Groq
+     *     always gets {@code none}, set or not (see {@link Llm#reasoningFields})
      * @param fallbackModels tried in order after {@code model} when it is rate limited or down
      * @param numericUnsafeModels substrings naming models that must never handle figures
      * @param tokensPerMinute each model's limit, so a call that would be refused is not sent; 0 turns the budget off
@@ -110,27 +110,16 @@ public record GOneProperties(
             return extraModels.contains(routedModel);
         }
 
-        /** The effort to send for this model; Qwen on Groq rejects the OpenAI values, so it gets its own. */
-        public String reasoningEffortFor(String routedModel) {
-            if (reasoningEffort.isEmpty() || isExtra(routedModel)) return "";
-            return isQwen(routedModel) ? "none" : reasoningEffort;
-        }
-
         /**
          * The reasoning fields to add to a request for this model. Thinking must never reach a caller, so on Groq the
          * request asks for none: Qwen always gets {@code reasoning_effort: none} and {@code reasoning_format: hidden};
          * gpt-oss, which supports neither {@code none} nor {@code reasoning_format}, gets {@code include_reasoning:
-         * false}. Other providers reject unknown fields, so off Groq only a configured {@link #reasoningEffortFor} is
-         * sent. See https://console.groq.com/docs/reasoning.
+         * false}. Other providers may reject these fields with a 400, so off Groq nothing is sent, even when
+         * {@code reasoningEffort} is set. See https://console.groq.com/docs/reasoning.
          */
         public java.util.Map<String, Object> reasoningFields(String routedModel) {
             java.util.Map<String, Object> fields = new java.util.LinkedHashMap<>();
-            boolean extra = isExtra(routedModel);
-            if (!isGroq(extra ? extraBaseUrl : baseUrl)) {
-                String effort = reasoningEffortFor(routedModel);
-                if (!effort.isEmpty()) fields.put("reasoning_effort", effort);
-                return fields;
-            }
+            if (!isGroq(isExtra(routedModel) ? extraBaseUrl : baseUrl)) return fields;
             String name = routedModel == null ? "" : routedModel.toLowerCase(java.util.Locale.ROOT);
             if (isQwen(routedModel)) {
                 fields.put("reasoning_effort", "none");

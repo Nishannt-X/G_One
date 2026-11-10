@@ -54,7 +54,7 @@ g-one:
     api-key: ${G_ONE_LLM_API_KEY:${GROQ_API_KEY:${XAI_API_KEY:}}}
     model: ${G_ONE_LLM_MODEL:qwen/qwen3.8-27b}
     timeout-seconds: ${G_ONE_LLM_TIMEOUT_SECONDS:15}
-    # low / medium / high for reasoning models. Empty leaves the field out, since other providers reject it.
+    # low / medium / high for reasoning models on Groq. Never sent to any other endpoint, since others may reject it.
     # On Groq, Qwen always gets reasoning_effort none + reasoning_format hidden and gpt-oss include_reasoning false,
     # whatever this says, so model thinking never reaches the caller.
     reasoning-effort: ${G_ONE_LLM_REASONING_EFFORT:}

@@ -37,6 +37,22 @@ class ReasoningTextTest {
     }
 
     @Test
+    void nestedAndTruncatedReasoningNeverEscapes() {
+        assertThat(ReasoningText.strip("<think>outer<thinking>inner</thinking>secret</think>answer"))
+                .isEqualTo("answer");
+        assertThat(ReasoningText.strip("<think>outer<think>inner</think>secret")).isEmpty();
+        assertThat(ReasoningText.strip("<think>outer<thinking>inner</think>secret")).isEmpty();
+        assertThat(ReasoningText.strip("answer <think attr")).isEqualTo("answer");
+        assertThat(ReasoningText.strip("answer <thi")).isEqualTo("answer");
+        assertThat(ReasoningText.strip("secret </thi")).isEmpty();
+        assertThat(ReasoningText.strip("secret </think attr")).isEmpty();
+        assertThat(ReasoningText.hasTag("answer <think attr")).isTrue();
+        assertThat(ReasoningText.hasTag("secret </thi")).isTrue();
+        assertThat(ReasoningText.strip("I think 2 < 3")).isEqualTo("I think 2 < 3");
+        assertThat(ReasoningText.strip("ordinary <")).isEqualTo("ordinary <");
+    }
+
+    @Test
     void plainTextIsUntouchedApartFromTrimming() {
         assertThat(ReasoningText.strip("  I think the price is 2400 <b>today</b>. ")).isEqualTo("I think the price is 2400 <b>today</b>.");
         assertThat(ReasoningText.strip("{\"text\":\"think\"}")).isEqualTo("{\"text\":\"think\"}");

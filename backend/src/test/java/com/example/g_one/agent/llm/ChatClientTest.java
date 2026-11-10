@@ -242,10 +242,10 @@ class ChatClientTest {
             new ChatRequest(List.of(ChatMessage.user("x")), List.of(), 0.1, 120);
 
     @Test
-    void reasoningEffortIsSentOnlyWhenConfigured() {
+    void aConfiguredReasoningEffortIsNeverSentToANonGroqEndpoint() {
         answer(OK);
         clientWithEffort("low").complete(SMALL);
-        assertThat(requests.get(0).path("reasoning_effort").asText()).isEqualTo("low");
+        assertThat(requests.get(0).has("reasoning_effort")).isFalse();
 
         for (String off : new String[] {"", "  ", null}) {
             requests.clear();
@@ -347,15 +347,24 @@ class ChatClientTest {
     }
 
     @Test
-    void aNonGroqEndpointGetsNoGroqOnlyFields() {
+    void aNonGroqEndpointGetsNoReasoningFieldsEvenWhenConfigured() {
         for (String base : List.of("https://api.example.com/v1", "https://api.groq.com.example.net/v1", "http://127.0.0.1:1")) {
-            for (String model : List.of("qwen/qwen3.8-27b", "openai/gpt-oss-20b")) {
-                JsonNode body = bodyFor(base, model, "");
-                assertThat(body.has("reasoning_format")).as(base + " " + model).isFalse();
-                assertThat(body.has("include_reasoning")).as(base + " " + model).isFalse();
-                assertThat(body.has("reasoning_effort")).as(base + " " + model).isFalse();
+            for (String model : List.of("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "llama-3.3-70b")) {
+                for (String effort : new String[] {"", "low", "high"}) {
+                    JsonNode body = bodyFor(base, model, effort);
+                    String as = base + " " + model + " " + effort;
+                    assertThat(body.has("reasoning_format")).as(as).isFalse();
+                    assertThat(body.has("include_reasoning")).as(as).isFalse();
+                    assertThat(body.has("reasoning_effort")).as(as).isFalse();
+                }
             }
         }
+    }
+
+    @Test
+    void groqGetsAConfiguredEffortForOtherModelsAndNothingWhenBlank() {
+        assertThat(bodyFor(GROQ, "llama-3.3-70b", "low").path("reasoning_effort").asText()).isEqualTo("low");
+        assertThat(bodyFor(GROQ, "llama-3.3-70b", "").has("reasoning_effort")).isFalse();
     }
 
     @Test
@@ -363,6 +372,10 @@ class ChatClientTest {
         GOneProperties.Llm other = new GOneProperties.Llm(GROQ, KEY, "qwen/qwen3.8-27b", 5, "", List.of(), List.of(), 0,
                 "https://extra.example.com/v1", "extra-key-not-a-secret", List.of("qwen-extra"));
         assertThat(other.reasoningFields("qwen-extra")).isEmpty();
+        GOneProperties.Llm otherHigh = new GOneProperties.Llm(GROQ, KEY, "qwen/qwen3.8-27b", 5, "high", List.of(),
+                List.of(), 0, "https://extra.example.com/v1", "extra-key-not-a-secret", List.of("qwen-extra", "gpt-oss-x"));
+        assertThat(otherHigh.reasoningFields("qwen-extra")).isEmpty();
+        assertThat(otherHigh.reasoningFields("gpt-oss-x")).isEmpty();
         assertThat(other.reasoningFields("qwen/qwen3.8-27b")).containsEntry("reasoning_effort", "none");
 
         GOneProperties.Llm groqExtra = new GOneProperties.Llm("https://api.example.com/v1", KEY, "m", 5, "", List.of(),

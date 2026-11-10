@@ -3,7 +3,11 @@ package com.example.g_one.agent.llm;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -15,19 +19,21 @@ import org.slf4j.LoggerFactory;
  * {@code reasoning_format: raw} puts the thinking inside the content in {@code <think>} tags, and an answer cut off by
  * the token limit can leave a block open. Handles {@code think}, {@code thinking} and {@code reasoning} tags in any case:
  * <ol>
- *   <li>complete blocks are removed;</li>
+ *   <li>blocks are removed with their nesting counted, so an inner close never ends an outer block;</li>
  *   <li>a closing tag with no opening one means the thinking began before the content: everything up to it goes;</li>
- *   <li>an opening tag with no closing one means the answer was cut off mid-thought: everything from it goes.</li>
+ *   <li>an opening tag left open (the answer was cut off mid-thought) removes everything from it to the end;</li>
+ *   <li>a tag cut off before its {@code >}, such as {@code <think} or {@code </thi} at the very end, is treated the
+ *       same way. A lone {@code <} and the word "think" in ordinary text are left alone.</li>
  * </ol>
  * What remains may be empty; callers treat that as a bad answer.
  */
 public final class ReasoningText {
     private static final Logger log = LoggerFactory.getLogger(ReasoningText.class);
-    private static final String NAMES = "(?:think|thinking|reasoning)";
-    private static final Pattern BLOCK = Pattern.compile("(?is)<\\s*(" + NAMES + ")\\b[^>]*>.*?<\\s*/\\s*\\1\\s*>");
-    private static final Pattern CLOSE = Pattern.compile("(?i)<\\s*/\\s*" + NAMES + "\\s*>");
-    private static final Pattern OPEN = Pattern.compile("(?i)<\\s*" + NAMES + "\\b[^>]*>");
-    private static final Pattern ANY_TAG = Pattern.compile("(?i)<\\s*/?\\s*" + NAMES + "\\b[^>]*>");
+    private static final List<String> NAMES = List.of("think", "thinking", "reasoning");
+    /** Where a reasoning tag starts; its {@code >} is looked for separately, so a tag cut off before it still counts. */
+    private static final Pattern TAG_START = Pattern.compile("(?i)<\\s*(/?)\\s*(" + String.join("|", NAMES) + ")\\b");
+    /** A word after {@code <} or {@code </} at the very end, possibly the start of a cut-off tag name. */
+    private static final Pattern TRAILING = Pattern.compile("(?i)<\\s*/?\\s*([a-z]+)$");
     private static final String DEFAULT_LANGUAGE = "en-IN";
     private static final String LAST_RESORT = "Sorry, I am having a little trouble right now. Please say that once more.";
     private static final Map<String, String> APOLOGY = apologies();
@@ -37,19 +43,53 @@ public final class ReasoningText {
     /** The answer without any thinking, trimmed. Null becomes empty. */
     public static String strip(String content) {
         if (content == null) return "";
-        String s = BLOCK.matcher(content).replaceAll("");
-        Matcher close = CLOSE.matcher(s);
-        int end = -1;
-        while (close.find()) end = close.end();
-        if (end >= 0) s = s.substring(end);
-        Matcher open = OPEN.matcher(s);
-        if (open.find()) s = s.substring(0, open.start());
-        return s.trim();
+        StringBuilder out = new StringBuilder();
+        Matcher tag = TAG_START.matcher(content);
+        Deque<String> open = new ArrayDeque<>();
+        int pos = 0;
+        boolean cut = false;
+        while (tag.find(pos)) {
+            int gt = content.indexOf('>', tag.end());
+            int lt = content.indexOf('<', tag.end());
+            if (open.isEmpty()) out.append(content, pos, tag.start());
+            if (gt < 0 || (lt >= 0 && lt < gt)) {
+                if (!tag.group(1).isEmpty() && open.isEmpty()) out.setLength(0);
+                cut = true; // a tag with no end: whatever follows cannot be trusted
+                break;
+            }
+            if (tag.group(1).isEmpty()) {
+                open.push(tag.group(2).toLowerCase(Locale.ROOT));
+            } else if (!open.isEmpty()) {
+                if (open.peek().equals(tag.group(2).toLowerCase(Locale.ROOT))) open.pop();
+            } else {
+                out.setLength(0); // a lone close: everything before it was thinking
+            }
+            pos = gt + 1;
+        }
+        if (!cut && open.isEmpty()) out.append(content, pos, content.length());
+        return withoutCutOffTag(out.toString().strip());
     }
 
-    /** True when the text still holds any reasoning tag. */
+    /** Removes a trailing {@code <thi} or {@code </reas}: the start of a tag name cut off by the token limit. */
+    private static String withoutCutOffTag(String s) {
+        Matcher m = TRAILING.matcher(s);
+        if (m.find() && isNamePrefix(m.group(1))) {
+            return s.substring(m.start(), m.end()).contains("/") ? "" : s.substring(0, m.start()).strip();
+        }
+        return s;
+    }
+
+    private static boolean isNamePrefix(String word) {
+        String w = word.toLowerCase(Locale.ROOT);
+        return NAMES.stream().anyMatch(n -> n.startsWith(w));
+    }
+
+    /** True when the text still holds any reasoning tag, including one cut off before its {@code >}. */
     public static boolean hasTag(String text) {
-        return text != null && ANY_TAG.matcher(text).find();
+        if (text == null) return false;
+        if (TAG_START.matcher(text).find()) return true;
+        Matcher m = TRAILING.matcher(text.strip());
+        return m.find() && isNamePrefix(m.group(1));
     }
 
     /**

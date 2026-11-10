@@ -448,7 +448,91 @@ class MediationTest {
     }
 
     @Test
-    void turnsAreTranslatedToTheOtherLegOnly() {        buyerJoinsAndAgrees();
+    void aFarmerBargingInWhileTheJoinedLineWaitsStillHearsIt() {
+        farmerReplyStillPlaying();
+        int heard = spokenTo(farmer).size();
+
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("the joined line waits").hasSize(heard);
+
+        session(LegRole.FARMER).say("haan bolo"); // the farmer interrupts their own reply
+        executor.runAll();
+
+        assertThat(farmer.clearCount()).as("their own reply is interrupted").isEqualTo(1);
+        assertThat(spokenTo(farmer)).as("the joined line is not lost").hasSize(heard + 1);
+    }
+
+    @Test
+    void buyerSpeechWhileTheJoinedLineWaitsNeverStartsASecondProducer() {
+        farmerReplyStillPlaying();
+        int heard = spokenTo(farmer).size();
+
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+
+        llm.replyText(reading("बीस क्विंटल लाल प्याज़", NO_OFFER, NO_CAUTION, "none"));
+        session(LegRole.BUYER).say("Twenty quintals of red onion");
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).as("nothing new starts on the farmer's leg yet").hasSize(heard);
+
+        farmer.finishPlayback();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("the joined line comes first").hasSize(heard + 1);
+
+        farmer.finishPlayback();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("then the translation").hasSize(heard + 2);
+    }
+
+    @Test
+    void aTurnHeardWhileTheDeclineLinePlaysIsAnsweredAfterIt() {
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("No");
+        executor.runAll();
+
+        session(LegRole.FARMER).say("aur kya");
+        executor.runAll();
+
+        assertThat(brain.responds).as("no answer over the decline line").isEmpty();
+
+        farmer.finishPlayback();
+        executor.runAll();
+
+        assertThat(brain.responds).as("answered once the assistant has the farmer back").singleElement()
+                .extracting(call -> call.latest().text()).isEqualTo("aur kya");
+    }
+
+    @Test
+    void aFarmerBargingInWhileTheDeclineLineWaitsStillHearsIt() {
+        farmerReplyStillPlaying();
+        int heard = spokenTo(farmer).size();
+
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("No");
+        executor.runAll();
+        assertThat(spokenTo(farmer)).as("the decline line waits").hasSize(heard);
+
+        session(LegRole.FARMER).say("haan bolo"); // the farmer interrupts their own reply
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).as("the decline line still plays").hasSize(heard + 1);
+
+        farmer.finishPlayback();
+        buyer.finishPlayback();
+        executor.runAll();
+        session(LegRole.FARMER).say("ab kya");
+        executor.runAll();
+
+        assertThat(brain.responds).as("the assistant takes back after the interrupt").isNotEmpty();
+    }
+
+    @Test
+    void turnsAreTranslatedToTheOtherLegOnly() {
+        buyerJoinsAndAgrees();
         llm.replyText(reading("Twenty quintals of red onion", NO_OFFER, NO_CAUTION, "none"));
 
         session(LegRole.FARMER).say("bees quintal laal pyaaz hai");
@@ -711,6 +795,8 @@ class MediationTest {
         executor.runAll();
 
         assertThat(spokenTo(farmer)).contains("ख़रीदार ने कॉल छोड़ दी है। अब आप मुझसे बात कर सकते हैं।");
+        farmer.finishPlayback(); // the farmer hears that line before the assistant takes back
+        executor.runAll();
         session(LegRole.FARMER).say("ab kya karein");
         executor.runAll();
         assertThat(brain.responds).isNotEmpty();

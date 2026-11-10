@@ -329,8 +329,11 @@ public final class MediationSession {
             synchronized (lock) {
                 phase = Phase.LIVE;
             }
-            side.takeOver(() -> sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
-                    Map.of("buyer", buyerName())), false, null));
+            // The reply the farmer is hearing finishes first; mediation lines queue behind it and start after.
+            farmerVoice.hold();
+            side.takeOver(farmerVoice::resume);
+            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
+                    Map.of("buyer", buyerName())), false, null);
             sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
             return;
         }

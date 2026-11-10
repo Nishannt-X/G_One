@@ -25,8 +25,10 @@ public class MediationEngine {
     public interface FarmerSide {
         /**
          * Stops the intake conversation: no reply of its own may start from now on. {@code then} speaks on the farmer's
-         * leg, so it runs once nothing the intake already said is still playing; the farmer's reply is never cut short
-         * and the two never talk over each other.
+         * leg, so it runs once nothing the intake already said is still playing: never before, and never while the
+         * farmer hears an intake reply. It also runs if the farmer interrupts that reply, or if a newer turn or the
+         * hang-up supersedes it, so it always runs once. The one exception is a reply that ends the call: the leg hangs
+         * up and there is nothing left to say.
          */
         void takeOver(Runnable then);
 

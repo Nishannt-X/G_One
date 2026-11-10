@@ -31,6 +31,8 @@ final class ScriptedBrain implements AgentBrain {
     volatile Consumer<String> whileThinking = text -> {};
     /** When set, every reply says exactly this instead of "reply to x". */
     volatile String replyText;
+    /** When set, the greeting says exactly this, as a returning farmer's name check would. */
+    volatile String greetText;
 
     static String replyTo(String turn) {
         return "reply to " + turn;
@@ -42,7 +44,7 @@ final class ScriptedBrain implements AgentBrain {
         if (failGreet) {
             throw new IllegalStateException("brain down (test)");
         }
-        String text = ctx.memory().isEmpty() ? GREETING : GREETING + " Welcome back.";
+        String text = greetText != null ? greetText : ctx.memory().isEmpty() ? GREETING : GREETING + " Welcome back.";
         return new Reply(text, ctx.language(), false);
     }
 

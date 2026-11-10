@@ -506,7 +506,10 @@ public final class CallPipeline {
             publish(new ConsoleEvent.LanguageChanged(callId, now(), leg.id(), LegRole.FARMER, from, next.code(), outcome.reason()));
         }
 
-        /** Confirms the language, greets in it, then answers the turn that chose it if that said anything else. */
+        /**
+         * Confirms the language, greets in it, then answers the turn that chose it if that said anything else, unless the
+         * greeting itself asks a question.
+         */
         private void languageChosen(Turn turn, LanguageFlow.Outcome outcome) {
             Language next = outcome.language();
             Turn heardIn = withLanguage(turn, next);
@@ -548,7 +551,10 @@ public final class CallPipeline {
                 return;
             }
             Reply greeting = askBrain("greet", () -> brain.greet(ctx), ctx.language());
-            deliver(turnGeneration, greeting, !answer ? null : () -> {
+            // A greeting that asks something, such as a returning farmer's name check, waits for its own answer: words
+            // said before it was heard cannot answer it. The turn stays in the transcript and the history.
+            boolean answerNow = answer && !asksSomething(greeting);
+            deliver(turnGeneration, greeting, !answerNow ? null : () -> {
                 if (generation.get() != turnGeneration) {
                     return;
                 }
@@ -559,6 +565,10 @@ public final class CallPipeline {
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, turn), ctx.language());
                 deliver(turnGeneration, reply);
             });
+        }
+
+        private static boolean asksSomething(Reply greeting) {
+            return ReasoningText.speakable(greeting.text(), greeting.language().code()).strip().endsWith("?");
         }
 
         private void askLanguageAgain(Turn turn) {

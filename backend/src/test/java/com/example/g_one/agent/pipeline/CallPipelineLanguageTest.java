@@ -3,6 +3,7 @@ package com.example.g_one.agent.pipeline;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.g_one.GOneProperties;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.ConsoleEvent;
@@ -106,6 +107,45 @@ class CallPipelineLanguageTest {
             assertThat(r.ctx().language().code()).isEqualTo("hi-IN");
             assertThat(r.history()).noneMatch(l -> l.text().equals("मुझे प्याज़ का भाव बताइए"));
         });
+    }
+
+    @Test
+    void aSentenceThatChoosesTheLanguageIsNotTakenAsTheAnswerToTheNameCheckThatFollows() {
+        brain.greetText = "क्या मैं Suresh जी से बात कर रही हूँ?";
+        hearAll();
+        say("हाँ, मुझे प्याज़ का भाव बताइए");
+        hearAll();
+
+        assertThat(spoken()).endsWith("ठीक है, हिंदी में बात करते हैं।", "क्या मैं Suresh जी से बात कर रही हूँ?");
+        assertThat(brain.responds).as("the farmer had not heard the name check yet").isEmpty();
+
+        say("हाँ");
+        hearAll();
+        assertThat(brain.responds).singleElement().satisfies(r -> {
+            assertThat(r.latest().text()).isEqualTo("हाँ");
+            assertThat(r.history()).extracting(com.example.g_one.agent.AgentBrain.Line::text)
+                    .contains("हाँ, मुझे प्याज़ का भाव बताइए", "क्या मैं Suresh जी से बात कर रही हूँ?");
+        });
+    }
+
+    @Test
+    void modelThinkingOnTheLanguagePathIsNeverSpokenShownOrKeptInTheHistory() {
+        brain.greetText = "<think>greet them warmly</think>नमस्ते, जी-वन में आपका स्वागत है।";
+        brain.replyText = "<think>price question</think>प्याज़ का भाव बताती हूँ।";
+        hearAll();
+        say("मुझे प्याज़ का भाव बताइए");
+        hearAll();
+        say("और टमाटर का");
+        hearAll();
+
+        assertThat(spoken()).noneMatch(ReasoningText::hasTag).noneMatch(t -> t.contains("price question"))
+                .contains("ठीक है, हिंदी में बात करते हैं।", "नमस्ते, जी-वन में आपका स्वागत है।", "प्याज़ का भाव बताती हूँ।");
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).extracting(ConsoleEvent.AssistantSaid::text)
+                .noneMatch(ReasoningText::hasTag).contains("नमस्ते, जी-वन में आपका स्वागत है।");
+        assertThat(brain.responds).hasSize(2).allSatisfy(r ->
+                assertThat(r.history()).extracting(com.example.g_one.agent.AgentBrain.Line::text).noneMatch(ReasoningText::hasTag));
+        assertThat(brain.responds.get(1).history()).extracting(com.example.g_one.agent.AgentBrain.Line::text)
+                .contains("नमस्ते, जी-वन में आपका स्वागत है।", "प्याज़ का भाव बताती हूँ।");
     }
 
     @Test

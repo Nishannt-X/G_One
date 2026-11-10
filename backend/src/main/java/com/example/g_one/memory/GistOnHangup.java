@@ -2,6 +2,8 @@ package com.example.g_one.memory;
 
 import com.example.g_one.agent.AgentBrain;
 import com.example.g_one.agent.brain.LlmAgentBrain;
+import com.example.g_one.agent.language.LanguageDetector;
+import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.pipeline.CallEndHandler;
 import com.example.g_one.agent.tools.memory.MemoryGate;
 import com.example.g_one.core.CallId;
@@ -95,10 +97,22 @@ public class GistOnHangup implements CallEndHandler {
         return farmerTurns(call) < MIN_FARMER_TURNS || duration(call) < MIN_CALL_MS ? Action.SKIP : Action.WRITE;
     }
 
-    private static long farmerTurns(EndedCall call) {
-        return call.transcript().stream()
-                .filter(l -> l.speaker() == AgentBrain.Speaker.FARMER && l.text() != null && !l.text().isBlank())
-                .count();
+    /**
+     * The farmer turns that said something. An answer to the language question that only names a language (or could
+     * not be understood) is call setup, not content, so it does not count towards {@value #MIN_FARMER_TURNS}.
+     */
+    static long farmerTurns(EndedCall call) {
+        long turns = 0;
+        String asked = null;
+        for (AgentBrain.Line l : call.transcript()) {
+            if (l.speaker() == AgentBrain.Speaker.ASSISTANT) {
+                asked = l.text();
+            } else if (l.speaker() == AgentBrain.Speaker.FARMER && l.text() != null && !l.text().isBlank()
+                    && !(LanguageLines.asksLanguage(asked) && !LanguageDetector.detect(l.text()).hasContent())) {
+                turns++;
+            }
+        }
+        return turns;
     }
 
     private static long duration(EndedCall call) {

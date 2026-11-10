@@ -3,6 +3,7 @@ package com.example.g_one.memory;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.g_one.agent.AgentBrain;
+import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.pipeline.CallEndHandler.EndedCall;
 import com.example.g_one.agent.tools.memory.MemoryGate;
 import com.example.g_one.core.CallContext;
@@ -131,6 +132,35 @@ class GistOnHangupTest {
         }
         assertThat(summarized).hasValue(0);
         assertThat(own.load(FakeLeg.FARMER_KEY).orElseThrow().gists()).isEmpty();
+    }
+
+    @Test
+    void namingTheLanguageIsCallSetupAndDoesNotCountAsAFarmerTurn() {
+        CallId id = CallId.random();
+        FakeLeg leg = new FakeLeg(id, LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, FakeLeg.FARMER_KEY);
+        CallContext ctx = new CallContext(id, leg, FakeLeg.HINDI, FarmerMemory.empty(FakeLeg.FARMER_KEY));
+        List<AgentBrain.Line> setupOnly = List.of(
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.opener(LegRole.FARMER)),
+                new AgentBrain.Line(AgentBrain.Speaker.FARMER, "umm"),
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.reask()),
+                new AgentBrain.Line(AgentBrain.Speaker.FARMER, "हिंदी"),
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.confirmation("hi-IN")),
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "नमस्ते, जी-वन में आपका स्वागत है।"),
+                new AgentBrain.Line(AgentBrain.Speaker.FARMER, "प्याज़ का भाव"));
+        EndedCall setup = new EndedCall(ctx, setupOnly, START, START + 60_000, "hangup", null, null);
+        assertThat(GistOnHangup.farmerTurns(setup)).isEqualTo(1);
+        hangUp(setup, MemoryGate.State.NEW);
+        assertThat(gistWritten()).as("two setup answers and one real turn are a near-empty call").isFalse();
+
+        List<AgentBrain.Line> withContent = List.of(
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.opener(LegRole.FARMER)),
+                new AgentBrain.Line(AgentBrain.Speaker.FARMER, "हिंदी में, मुझे प्याज़ का भाव बताइए"),
+                new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.confirmation("hi-IN")),
+                new AgentBrain.Line(AgentBrain.Speaker.FARMER, "बीस क्विंटल है"));
+        EndedCall real = new EndedCall(ctx, withContent, START, START + 60_000, "hangup", null, null);
+        assertThat(GistOnHangup.farmerTurns(real)).as("a language answer that also asks something counts").isEqualTo(2);
+        hangUp(real, MemoryGate.State.NEW);
+        assertThat(gistWritten()).isTrue();
     }
 
     @Test

@@ -35,6 +35,13 @@ public final class LanguageLines {
         return "Sorry, I did not catch that. Please say the language you want: " + CHOICES + " कृपया अपनी भाषा का नाम बोलिए।";
     }
 
+    /** True for the farmer leg's opening question and its re-ask: the lines that ask which language to speak. */
+    public static boolean asksLanguage(String line) {
+        if (line == null) return false;
+        String l = line.strip();
+        return l.equals(opener(LegRole.FARMER)) || l.equals(reask());
+    }
+
     /** The line to speak once {@code code} is chosen; English for a language with no line of its own. */
     public static String confirmation(String code) {
         return CONFIRM.getOrDefault(code, CONFIRM.get(ENGLISH));

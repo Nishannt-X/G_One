@@ -174,6 +174,44 @@ class OfflineDemoTest {
         second.remoteHangup();
     }
 
+    /** Both calls open with the English language question; memory is used only after the name check, in Hindi. */
+    @Test
+    void aReturningFarmerHearsTheLanguageQuestionThenTheNameCheckThenTheirMemory() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550010", FakeLeg.SALT);
+
+        FakeLeg first = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
+        keepHearing(first);
+        registry.register(first);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("Which language")));
+        sleep();
+        typed.say(first.id(), "हिंदी");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        sleep();
+        typed.say(first.id(), "प्याज़ का भाव बताइए");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
+        sleep();
+        typed.say(first.id(), "रमेश");
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
+        first.remoteHangup();
+
+        events.clear();
+        FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
+        keepHearing(second);
+        registry.register(second);
+        waitForSaid(1);
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(0).text()).contains("Which language").doesNotContain("रमेश");
+        sleep();
+        typed.say(second.id(), "हिंदी");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("क्या मैं रमेश जी से बात कर रही हूँ?")));
+        sleep();
+        typed.say(second.id(), "हाँ");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().startsWith("नमस्ते रमेश जी, फिर से स्वागत है।")));
+        second.remoteHangup();
+    }
+
     @Test
     void aBuyerFirstCallHearsTheNameQuestionAndSavesTheAnswer() {
         bus.subscribe(events::add);

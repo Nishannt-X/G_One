@@ -34,11 +34,13 @@ describe('farmers', () => {
     expect(cropsOf([fact('crop:wheat', ''), fact('crops', 'Wheat, rice')])).toEqual(['wheat', 'rice'])
   })
 
-  test("open follow-ups are the newest gist's list, once each", () => {
+  test('open follow-ups are those of the three newest gists, newest first, once each', () => {
     const gist = (startedMs: number, followUps: string[]) => ({ callId: String(startedMs), startedMs, endedMs: startedMs, summary: 's', followUps })
-    expect(openFollowUps([gist(1, ['sell tomato', 'check rain']), gist(3, ['find onion buyer', 'check rain', 'check rain']), gist(2, ['old item'])])).toEqual(['find onion buyer', 'check rain'])
-    // A later call that closed everything leaves nothing open; older gists' items stay done.
-    expect(openFollowUps([gist(1, ['sell tomato']), gist(2, [])])).toEqual([])
+    // The backend has already removed DONE items from the gist that held them, so what is left is open.
+    expect(openFollowUps([gist(2, ['sell tomato', 'Check rain']), gist(4, ['find onion buyer', 'check  rain']), gist(3, [])])).toEqual(['find onion buyer', 'check  rain', 'sell tomato'])
+    // A fourth-newest gist is outside the window the backend can still close.
+    expect(openFollowUps([gist(1, ['too old']), gist(2, []), gist(3, []), gist(4, ['new'])])).toEqual(['new'])
+    expect(openFollowUps([gist(1, ['sell tomato']), gist(2, [])])).toEqual(['sell tomato'])
     expect(openFollowUps([])).toEqual([])
   })
 })

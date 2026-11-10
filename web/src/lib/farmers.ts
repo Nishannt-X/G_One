@@ -128,14 +128,27 @@ export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>):
   return out
 }
 
+/** How many of the newest gists hold open follow-ups; matches the backend's CallSummarizer.FOLLOW_UP_GISTS. */
+export const FOLLOW_UP_GISTS = 3
+
 /**
- * The follow-ups still open: the newest gist's list, which is authoritative. The summarizer is shown the earlier open
- * items and drops each one it marks DONE, so merging older gists would bring completed items back.
+ * The follow-ups still open, as the backend tracks them (CallSummarizer.openFollowUps): those of the three newest
+ * gists, newest first, once each. Each gist keeps only its own open items, and when a later call marks one DONE the
+ * backend removes it from the gist that held it, so this set is already reconciled. Older gists are left out because
+ * the backend no longer offers their items for closing.
  */
 export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUps: string[] }>): string[] {
-  const latest = gists.reduce<(typeof gists)[number] | null>((a, g) => (!a || g.startedMs > a.startedMs ? g : a), null)
   const out: string[] = []
-  for (const item of latest?.followUps ?? []) if (item.trim() && !out.includes(item)) out.push(item)
+  const seen = new Set<string>()
+  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs).slice(0, FOLLOW_UP_GISTS)) {
+    for (const item of g.followUps) {
+      const key = item.trim().replace(/\s+/g, ' ').toLowerCase()
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        out.push(item)
+      }
+    }
+  }
   return out
 }
 

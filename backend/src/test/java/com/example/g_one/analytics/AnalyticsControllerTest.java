@@ -85,6 +85,16 @@ class AnalyticsControllerTest {
     }
 
     @Test
+    void forgettingAFarmerFromTheConsoleDeletesTheirRecords() {
+        String key = com.example.g_one.fakes.FakeLeg.FARMER_KEY.value();
+        store.save(new CallRecord("call-kept-key", 9000, 10_000, 1000, "hangup", Map.of("farmer", "hi-IN"), "no_terms",
+                Consent.YES, Consent.NONE, key, JSON.createObjectNode().putNull("deal"), 11_000));
+        assertThat(send(HttpMethod.DELETE, "/api/memory/" + key, CODE).getStatusCode().value()).isEqualTo(204);
+        assertThat(store.get("call-kept-key")).isEmpty();
+        assertThat(store.get("call-old")).isPresent();
+    }
+
+    @Test
     void summarisesStoredCallsOnly() throws Exception {
         JsonNode s = JSON.readTree(send(HttpMethod.GET, "/api/analytics/summary", CODE).getBody());
         assertThat(s.get("storedCalls").asInt()).isEqualTo(2);

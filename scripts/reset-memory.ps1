@@ -7,7 +7,29 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-$listening = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+# $true or $false for a listener on $Port, or $null when nothing could check. Any listener blocks the reset.
+function Test-Listening([int]$Port) {
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        try {
+            # All listeners, then filter: asking for one port errors when there is none, which hides real failures.
+            $all = @(Get-NetTCPConnection -State Listen -ErrorAction Stop)
+            return [bool]($all | Where-Object { $_.LocalPort -eq $Port })
+        } catch { }
+    }
+    if (Get-Command netstat -ErrorAction SilentlyContinue) {
+        $out = netstat -an 2>$null
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            return [bool]($out | Select-String -Pattern "[:.]$Port\s.*LISTEN" -Quiet)
+        }
+    }
+    return $null
+}
+
+$listening = Test-Listening $Port
+if ($null -eq $listening) {
+    Write-Error "Could not check whether port $Port is in use (Get-NetTCPConnection and netstat both failed). Nothing was deleted. Stop the backend yourself and delete the g-one.db files by hand."
+    exit 1
+}
 if ($listening) {
     Write-Error "Something is listening on port $Port. Stop the backend first (Ctrl+C in its terminal), then run this again."
     exit 1

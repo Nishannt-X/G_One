@@ -14,13 +14,30 @@ Status: in development (deadline 2026-11-10). Start with [ROADMAP.md](ROADMAP.md
 G-One remembers a short gist of each farmer's calls, keyed by a salted hash of the number (never the number itself). A
 synthetic farmer, Suresh, is seeded for the "it remembers me" moment.
 
-**Env (synthetic values only).** Put these in your shell or an untracked `.env.local`:
+**Env (synthetic values only).** Spring Boot reads only real environment variables here; it does not read
+`.env.local` by itself. Put these in an untracked `.env.local` at the repo root (see `.env.example`):
 
 ```sh
 G_ONE_MEMORY_HMAC_KEY=<your own base64 key>        # openssl rand -base64 32; never commit it
 G_ONE_MEMORY_SEED_FILE=classpath:memory/seed-suresh.json
 G_ONE_DEMO_FARMER_PHONE=+919876543210              # simulator Caller A (synthetic)
 ```
+
+Then load the file into the terminal that starts the backend, from the repo root:
+
+```powershell
+# PowerShell (Windows)
+Get-Content .env.local | ForEach-Object { if ($_ -match '^\s*([A-Za-z_]\w*)=(.*?)\s*(#.*)?$') { Set-Item "env:$($Matches[1])" $Matches[2] } }
+cd backend; .\mvnw.cmd spring-boot:run
+```
+
+```sh
+# bash / Git Bash / macOS
+set -a; . ./.env.local; set +a
+cd backend && ./mvnw spring-boot:run
+```
+
+The variables last only for that terminal; load them again in a new one.
 
 The browser simulator hashes caller numbers with `G_ONE_MEMORY_HMAC_KEY` too, so **Caller A is Suresh**. Without the
 key the seed is skipped (startup logs a warning) and the simulator falls back to its built-in dev salt.
@@ -29,15 +46,16 @@ key the seed is skipped (startup logs a warning) and the simulator falls back to
 
 1. Stop the backend (Ctrl+C).
 2. Delete `backend/data/g-one.db`, `g-one.db-wal` and `g-one.db-shm`, or run `pwsh scripts/reset-memory.ps1`
-   (Windows) / `sh scripts/reset-memory.sh`. The scripts refuse to run while something listens on port 8080 and delete
-   only those three files.
+   (Windows) / `sh scripts/reset-memory.sh`. The scripts refuse to run while anything listens on the backend port (`PORT`, default
+   8080), or when they cannot check the port, and delete only those three files.
 3. Start the backend again and check the log for `Farmer memory seeded from classpath:memory/seed-suresh.json`.
 
 **Take plan.**
 
 1. Caller A: G-One asks "Suresh ji?"; answer yes. The memory panel on `#/demo` shows his crops and open follow-up.
 2. Caller B: a first call. Say your name (for example "मेरा नाम रमेश है"). Hang up and wait for the
-   "Saved for next time" note before redialing. Call again as Caller B: G-One asks for that name.
+   "Saved for next time" note before redialing (it appears only once this call's own summary is stored; "Couldn't
+   confirm" means check the memory profile before redialing). Call again as Caller B: G-One asks for that name.
 3. Use **Caller B, never Caller A,** for "forget me" (मुझे भूल जाओ). A forget is permanent: it blocks the seed for
    Suresh until the database files are deleted with the server stopped (step 2 above).
 

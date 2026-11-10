@@ -128,12 +128,14 @@ export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>):
   return out
 }
 
-/** Follow-ups from every stored gist, newest gist first, without repeats. Gists list only items still open. */
+/**
+ * The follow-ups still open: the newest gist's list, which is authoritative. The summarizer is shown the earlier open
+ * items and drops each one it marks DONE, so merging older gists would bring completed items back.
+ */
 export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUps: string[] }>): string[] {
+  const latest = gists.reduce<(typeof gists)[number] | null>((a, g) => (!a || g.startedMs > a.startedMs ? g : a), null)
   const out: string[] = []
-  for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs)) {
-    for (const item of g.followUps) if (item.trim() && !out.includes(item)) out.push(item)
-  }
+  for (const item of latest?.followUps ?? []) if (item.trim() && !out.includes(item)) out.push(item)
   return out
 }
 

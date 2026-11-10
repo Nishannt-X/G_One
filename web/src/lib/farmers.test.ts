@@ -34,8 +34,11 @@ describe('farmers', () => {
     expect(cropsOf([fact('crop:wheat', ''), fact('crops', 'Wheat, rice')])).toEqual(['wheat', 'rice'])
   })
 
-  test('open follow-ups come from every gist, newest first, once each', () => {
+  test("open follow-ups are the newest gist's list, once each", () => {
     const gist = (startedMs: number, followUps: string[]) => ({ callId: String(startedMs), startedMs, endedMs: startedMs, summary: 's', followUps })
-    expect(openFollowUps([gist(1, ['sell tomato', 'check rain']), gist(2, ['find onion buyer', 'check rain']), gist(3, [])])).toEqual(['find onion buyer', 'check rain', 'sell tomato'])
+    expect(openFollowUps([gist(1, ['sell tomato', 'check rain']), gist(3, ['find onion buyer', 'check rain', 'check rain']), gist(2, ['old item'])])).toEqual(['find onion buyer', 'check rain'])
+    // A later call that closed everything leaves nothing open; older gists' items stay done.
+    expect(openFollowUps([gist(1, ['sell tomato']), gist(2, [])])).toEqual([])
+    expect(openFollowUps([])).toEqual([])
   })
 })

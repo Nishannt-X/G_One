@@ -289,8 +289,9 @@ class AgentToolsTest {
     @Test
     void fixedLinesHaveHindiAndEnglishWithoutDigits() {
         assertThat(lines.languages()).contains("hi-IN", "en-IN");
-        assertThat(lines.forLanguage("hi-en").code()).isEqualTo("hi-IN");
-        assertThat(lines.forLanguage("ta-IN").code()).isEqualTo("en-IN");
+        assertThat(lines.forLanguage("hi-en").code()).isEqualTo("hi-en");
+        assertThat(lines.forLanguage("ta-IN").code()).isEqualTo("ta-IN");
+        assertThat(lines.forLanguage("mr-IN").code()).isEqualTo("en-IN");
         for (String code : lines.languages()) {
             FixedLines.Lines l = lines.forLanguage(code);
             for (String s : List.of(l.welcome(), l.memoryNotice(), l.withheld(), l.nameCheck(), l.forgotten(), l.goodbye())) {

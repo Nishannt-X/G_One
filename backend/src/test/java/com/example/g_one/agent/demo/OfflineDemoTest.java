@@ -212,6 +212,27 @@ class OfflineDemoTest {
         second.remoteHangup();
     }
 
+    /** A new caller who picks Tamil hears the Tamil confirmation and then only the Tamil memory notice. */
+    @Test
+    void aNewCallerWhoPicksTamilHearsNoSecondWelcomeInEnglish() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550012", FakeLeg.SALT);
+        FakeLeg leg = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
+        keepHearing(leg);
+        registry.register(leg);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("Which language")));
+        sleep();
+        typed.say(leg.id(), "தமிழ்");
+        waitForSaid(3);
+        sleep();
+        List<String> said = eventsOf(ConsoleEvent.AssistantSaid.class).stream().map(ConsoleEvent.AssistantSaid::text).toList();
+        assertThat(said).hasSize(3);
+        assertThat(said.get(1)).isEqualTo("சரி, தமிழில் பேசலாம்.");
+        assertThat(said.get(2)).contains("என்னை மறந்துவிடு").containsPattern("\\p{InTamil}")
+                .doesNotContain("Welcome").doesNotContain("Speak Hindi or English").doesNotContain("forget me");
+        leg.remoteHangup();
+    }
+
     /** A question asked with the language choice waits for the name check, then gets its answer. */
     @Test
     void aReturningFarmersQuestionAskedWithTheLanguageIsAnsweredAfterTheNameCheck() {

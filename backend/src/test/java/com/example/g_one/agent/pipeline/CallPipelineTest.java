@@ -128,6 +128,7 @@ class CallPipelineTest {
         assertThat(session().role()).isEqualTo(LegRole.FARMER);
         assertThat(session().language()).isEqualTo(FakeLeg.HINDI);
 
+        assertThat(brain.greetsAfterLanguage).as("a fixed-language start keeps the full greeting").isEmpty();
         assertThat(brain.greets).singleElement().satisfies(ctx -> {
             assertThat(ctx.callId()).isEqualTo(callId);
             assertThat(ctx.farmerLeg()).isSameAs(leg);

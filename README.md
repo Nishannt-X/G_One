@@ -11,7 +11,7 @@ Status: in development (deadline 2026-11-10). Start with [ROADMAP.md](ROADMAP.md
 
 ## Phone as the buyer (local demo)
 
-The laptop is the farmer on `#/demo`. A phone on the same network scans a QR code and joins as the buyer. This stays on
+The laptop is the farmer on `#/call` (Try a call). A phone on the same network scans a QR code and joins as the buyer. This stays on
 your network: a self-signed certificate and no public tunnel.
 
 ```sh
@@ -20,7 +20,7 @@ cd web && bun run dev:https                    # second terminal; prints https:/
 ```
 
 1. Connect the laptop to the phone's hotspot (or put both on one Wi-Fi network), then start the commands above.
-2. Open `https://localhost:5173/#/demo` on the laptop and tap **Call as farmer**. The QR code and link appear in the
+2. Open `https://localhost:5173/#/call` on the laptop and tap **Call as farmer**. The QR code and link appear in the
    buyer panel.
 3. Scan the code, or type the link on the phone. Accept the certificate warning once.
 4. Tap **Join call** and allow the microphone. G-One asks the buyer to say yes before connecting them. Use headphones on
@@ -28,7 +28,7 @@ cd web && bun run dev:https                    # second terminal; prints https:/
 
 `bun run dev` stays HTTP on localhost only. The certificate is written to `web/.dev-certs/` and is gitignored. If the
 wrong address is shown, pick another under the QR code, set `G_ONE_LAN_HOST=<ip>` before `bun run dev:https`, or open
-`#/demo?lan=<ip>`.
+`#/call?lan=<ip>`.
 
 **Troubleshooting**
 

@@ -32,13 +32,13 @@ export default function ControlStrip({ engine, state, onTextSample }: { engine: 
     engine.seekToFraction(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)))
   }
   const soundLabel = state.muted ? 'Unmute' : 'Mute'
-  const statusText = failed ? 'Voices did not load. Text sample only.' : !ready ? `Loading voices ${loaded}/${total || '…'}` : 'Audio ready'
+  const statusText = failed ? 'Voices did not load. Try the synthetic call.' : !ready ? `Loading voices ${loaded}/${total || '…'}` : 'Audio ready'
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t sm:gap-x-3 border-line px-3 py-2 sm:px-5">
       <div className="flex items-center gap-1.5">
         {failed ? (
-          <button type="button" className="btn-quiet btn-sm" onClick={onTextSample}><PlayIcon /> Text sample</button>
+          <button type="button" className="btn-quiet btn-sm" onClick={onTextSample}><PlayIcon /> Synthetic call</button>
         ) : (
           <button type="button" className="btn-primary btn-sm w-10 px-0 sm:w-11" disabled={!ready} aria-label={playing ? 'Pause' : 'Play'} onClick={() => engine.toggle()}>
             {playing ? <PauseIcon /> : <PlayIcon />}
@@ -70,7 +70,7 @@ export default function ControlStrip({ engine, state, onTextSample }: { engine: 
         </div>
         <span role="status" className={`hidden text-sm font-medium whitespace-nowrap lg:inline ${failed ? 'text-bad' : 'text-muted'}`}>{statusText}</span>
         {!ready && <span role="status" className={`text-xs font-medium whitespace-nowrap lg:hidden ${failed ? 'text-bad' : 'text-muted'}`}>{failed ? 'No audio' : `${loaded}/${total || '…'}`}</span>}
-        {active && <button type="button" className="btn-quiet btn-sm w-10 px-0 sm:w-11" aria-label="Close sample" title="Close sample and make a call" onClick={() => engine.close()}><CrossIcon /></button>}
+        {active && <button type="button" className="btn-quiet btn-sm w-10 px-0 sm:w-11" aria-label="Close sample" title="Close sample" onClick={() => engine.close()}><CrossIcon /></button>}
       </div>
     </div>
   )

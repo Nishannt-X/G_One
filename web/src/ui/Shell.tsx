@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useI18n } from '../lib/i18n'
-import { ADVANCED_VIEWS, type Route } from '../lib/route'
+import { ADVANCED_VIEWS, MAIN_NAV, type Route } from '../lib/route'
 import { useTheme } from '../lib/theme'
 import { ChevronIcon, CrossIcon, Logo, MenuIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
 
@@ -9,6 +9,9 @@ const ADVANCED: { href: string; view: Route['view']; label: string; note: string
   { href: '#/buyers', view: 'buyers', label: 'Buyer directory', note: 'The synthetic buyers G-One can match' },
   { href: '#/memory', view: 'memory', label: 'Memory lookup', note: 'Find a farmer by caller key' },
 ]
+
+/** The full-width call pages, which already link to each other. */
+const STAGE_VIEWS: readonly Route['view'][] = ['demo', 'call']
 
 function Brand() {
   return (
@@ -87,20 +90,20 @@ function TopNav({ route }: { route: Route }) {
   const close = () => setMenu(false)
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-page/90 backdrop-blur-md">
-      <div className={`shell flex h-16 items-center justify-between gap-3 ${route.view === 'demo' ? 'max-w-[1560px] lg:px-4' : ''}`}>
+      <div className={`shell flex h-16 items-center justify-between gap-3 ${STAGE_VIEWS.includes(route.view) ? 'max-w-[1560px] lg:px-4' : ''}`}>
         <div className="flex items-center gap-6">
           <Brand />
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-            <a className="nav-link" href="#/how" aria-current={route.param === 'how' ? 'page' : undefined}>How it works</a>
-            <a className="nav-link" href="#/demo" aria-current={route.view === 'demo' ? 'page' : undefined}>Demo</a>
-            <a className="nav-link" href="#/farmers" aria-current={route.view === 'farmers' ? 'page' : undefined}>Farmers</a>
+            {MAIN_NAV.map((item) => (
+              <a key={item.href} className="nav-link" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
+            ))}
             <AdvancedMenu route={route} />
           </nav>
         </div>
         <div className="flex items-center gap-1">
           {advanced && <LanguageButton />}
           <ThemeButton />
-          {route.view !== 'demo' && (
+          {!STAGE_VIEWS.includes(route.view) && (
             <a href="#/demo" className="btn-accent ml-1 hidden sm:inline-flex">
               <PhoneIcon /> Try the demo
             </a>
@@ -113,9 +116,9 @@ function TopNav({ route }: { route: Route }) {
       {menu && (
         <nav id="mobile-menu" aria-label="Mobile" className="animate-rise border-t border-line bg-page md:hidden">
           <div className="shell space-y-1 py-3">
-            <a onClick={close} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href="#/how">How it works</a>
-            <a onClick={close} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href="#/demo">Demo</a>
-            <a onClick={close} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href="#/farmers">Farmers</a>
+            {MAIN_NAV.map((item) => (
+              <a key={item.href} onClick={close} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
+            ))}
             <p className="px-3 pt-3 text-sm font-bold tracking-wide text-faint">Advanced</p>
             {ADVANCED.map((item) => (
               <a key={item.href} onClick={close} className="block rounded-xl px-3 py-2 font-medium text-muted hover:bg-sunk" href={item.href}>{item.label}</a>

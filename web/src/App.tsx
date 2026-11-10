@@ -1,7 +1,9 @@
-import { parseRoute, useHash, type Route } from './lib/route'
+import { useEffect } from 'react'
+import { parseRoute, redirectFor, useHash, type Route } from './lib/route'
 import { useFarmerRegistry } from './lib/farmers'
 import { useConsoleFeed } from './lib/useConsoleFeed'
 import Shell from './ui/Shell'
+import CallPage from './demo/CallPage'
 import DemoPage from './demo/DemoPage'
 import SampleReceiptPage from './demo/voiced/SampleReceiptPage'
 import BuyersView from './views/BuyersView'
@@ -18,7 +20,13 @@ function Legacy({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const route = parseRoute(useHash())
+  const hash = useHash()
+  const route = parseRoute(hash)
+  // An old link to the live call on #/demo already renders the call page; this fixes the address to match.
+  useEffect(() => {
+    const target = redirectFor(hash)
+    if (target) history.replaceState(null, '', target)
+  }, [hash])
   // A buyer's phone never opens the console feed: it carries the farmer's whispers and memory.
   if (route.view === 'sample-receipt') return <SampleReceiptPage />
   return route.view === 'join' ? <JoinPage query={route.query} /> : <Console route={route} />
@@ -33,7 +41,9 @@ function Console({ route }: { route: Route }) {
       {route.view === 'home' ? (
         <LandingPage section={route.param} />
       ) : route.view === 'demo' ? (
-        <DemoPage feed={feed} status={status} dispatch={dispatch} autoplay={route.query.get('autoplay') === '1'} lan={route.query.get('lan')} />
+        <DemoPage autoplay={route.query.get('autoplay') === '1'} />
+      ) : route.view === 'call' ? (
+        <CallPage feed={feed} status={status} dispatch={dispatch} lan={route.query.get('lan')} synthetic={route.query.get('synthetic') === '1'} />
       ) : route.view === 'farmers' ? (
         <FarmersPage openKey={route.param} seed={route.query.get('seed') === '1'} />
       ) : route.view === 'live' ? (

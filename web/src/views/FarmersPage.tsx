@@ -281,7 +281,7 @@ export default function FarmersPage({ openKey, seed }: { openKey: string | null;
               <Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" />
             </div>
           ) : farmers.length === 0 ? (
-            <Empty icon={<WheatIcon />} title="No farmers here yet" action={<div className="flex flex-wrap justify-center gap-2"><a className="btn-primary" href="#/demo?autoplay=1"><PlayIcon /> Play the sample call</a><a className="btn-quiet" href="#/demo"><PhoneIcon /> Make a call</a></div>}>
+            <Empty icon={<WheatIcon />} title="No farmers here yet" action={<div className="flex flex-wrap justify-center gap-2"><a className="btn-primary" href="#/demo?autoplay=1"><PlayIcon /> Play the sample call</a><a className="btn-quiet" href="#/call"><PhoneIcon /> Make a call</a></div>}>
               A farmer appears here after this browser has watched them call. Memory has no public list, so nothing shows until then.
             </Empty>
           ) : shown.length === 0 ? (

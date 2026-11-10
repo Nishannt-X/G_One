@@ -10,7 +10,7 @@ describe('parseRoute', () => {
   })
 
   it('keeps the other routes working', () => {
-    for (const view of ['farmers', 'live', 'memory', 'buyers', 'simulator', 'join', 'sample-receipt'] as const) {
+    for (const view of ['farmers', 'analytics', 'memory', 'buyers', 'simulator', 'join', 'sample-receipt'] as const) {
       expect(parseRoute(`#/${view}`).view).toBe(view)
     }
     expect(parseRoute('#/join?call=abc').query.get('call')).toBe('abc')
@@ -38,6 +38,17 @@ describe('redirectFor', () => {
 
   it('leaves the sample demo and every other route alone', () => {
     for (const hash of ['#/demo', '#/demo?autoplay=1', '#/call?lan=10.0.0.4', '#/join?call=c-1', '#/', '']) expect(redirectFor(hash)).toBeNull()
+  })
+})
+
+describe('the Analytics route', () => {
+  it('opens Analytics at #/analytics and keeps old #/live links working', () => {
+    expect(parseRoute('#/analytics').view).toBe('analytics')
+    expect(parseRoute('#/live').view).toBe('analytics')
+    expect(redirectFor('#/live')).toBe('#/analytics')
+    expect(redirectFor('#/live/calls?id=c-1')).toBe('#/analytics/calls?id=c-1')
+    expect(parseRoute('#/analytics/calls')).toMatchObject({ view: 'analytics', param: 'calls' })
+    expect(redirectFor('#/analytics')).toBeNull()
   })
 })
 

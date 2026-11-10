@@ -58,3 +58,16 @@ export function maskedCallerLabel(label: string): string {
   const digits = number.replace(/\D/g, '')
   return `${name} · ••${digits.slice(-3)}`
 }
+
+/**
+ * A synthetic caller's label split for a card: the name, any detail the label carries between the name and the number
+ * (such as a crop or village), and the masked number from maskedCallerLabel. Nothing is added that the label lacks.
+ */
+export function callerCard(label: string): { name: string; detail: string | null; masked: string | null } {
+  const parts = label.split(',').map((s) => s.trim()).filter(Boolean)
+  const last = parts.length > 1 && /\d/.test(parts[parts.length - 1]) ? parts[parts.length - 1] : null
+  const name = parts[0] ?? label
+  const detail = parts.slice(1, last ? -1 : undefined).join(', ') || null
+  const masked = last ? maskedCallerLabel(`${name}, ${last}`).split(' · ').at(-1) ?? null : null
+  return { name, detail, masked }
+}

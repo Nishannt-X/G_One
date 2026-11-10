@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import type { DemoLine } from '../lib/useSimulatorSetup'
-import { maskedCallerLabel } from '../lib/useSimulatorSetup'
 import type { Role, SimulatorConfig } from '../simulator/protocol'
 import type { useCallSimulator } from '../simulator/useCallSimulator'
 import { languageLabel } from '../lib/format'
 import { MicIcon, MicOffIcon, PhoneIcon, SendIcon } from '../ui/icons'
+import CallerCards, { WITHHELD } from './CallerCards'
 
 type Sim = ReturnType<typeof useCallSimulator>
-
-const WITHHELD = ''
 
 interface Props {
   role: Role
@@ -52,13 +50,10 @@ export default function LegDock({ role, sim, config, lines, callId, canStart, lo
       <form className="flex h-full flex-col justify-between gap-2.5" onSubmit={(e) => { e.preventDefault(); void begin(false) }}>
         <div>
           {farmer ? (
-            <label className="min-w-0">
-              <span className="sr-only">Synthetic caller</span>
-              <select className="field py-1" value={chosenCaller} onChange={(e) => setCaller(e.target.value)}>
-                {(config?.callers ?? []).map((c) => <option key={c.number} value={c.number}>{maskedCallerLabel(c.label)}</option>)}
-                <option value={WITHHELD}>Withheld, no memory</option>
-              </select>
-            </label>
+            <>
+              <CallerCards callers={config?.callers ?? []} value={chosenCaller} onChange={setCaller} />
+              <p className="mt-1.5 text-sm text-faint">Synthetic callers only.</p>
+            </>
           ) : (
             <p className="flex min-h-11 items-center rounded-xl bg-sunk px-3 text-[0.9375rem] leading-tight font-semibold text-muted">Buyer joins on their phone</p>
           )}

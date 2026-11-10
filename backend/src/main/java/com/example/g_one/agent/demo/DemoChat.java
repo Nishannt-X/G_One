@@ -91,6 +91,15 @@ public class DemoChat implements ChatClient.Scripted {
         if (matches(t, "bhool jao", "भूल जाओ", "forget me") && offered(request, "forget_me")) {
             return tool("forget_me", json.createObjectNode());
         }
+        Optional<String> name = TurnIntent.statedName(turn);
+        if (name.isEmpty() && request.messages().stream().filter(m -> "assistant".equals(m.role()) && m.content() != null)
+                .reduce((a, b) -> b).map(m -> TurnIntent.asksName(m.content())).orElse(false)) {
+            name = TurnIntent.shortName(turn);
+        }
+        if (name.isPresent()) {
+            return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। प्याज़ का भाव बताऊँ या ख़रीदार ढूँढूँ?"
+                    : "Thank you, " + name.get() + " ji, I have noted your name. Shall I tell you the onion price or find a buyer?");
+        }
         Optional<Buyer> asked = buyerJustOffered(request.messages());
         if (asked.isPresent() && ReplyGuard.isConsent(turn) && offered(request, "connect_buyer")) {
             return tool("connect_buyer", json.createObjectNode().put("buyerId", asked.get().id()));
@@ -111,15 +120,6 @@ public class DemoChat implements ChatClient.Scripted {
         if (matches(t, "bye", "alvida", "अलविदा", "goodbye") && offered(request, "end_call")) {
             return tool("end_call", json.createObjectNode());
         }
-        Optional<String> name = TurnIntent.statedName(turn);
-        if (name.isEmpty() && request.messages().stream().filter(m -> "assistant".equals(m.role()) && m.content() != null)
-                .reduce((a, b) -> b).map(m -> TurnIntent.asksName(m.content())).orElse(false)) {
-            name = TurnIntent.shortName(turn);
-        }
-        if (name.isPresent()) {
-            return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। प्याज़ का भाव बताऊँ या ख़रीदार ढूँढूँ?"
-                    : "Thank you, " + name.get() + " ji, I have noted your name. Shall I tell you the onion price or find a buyer?");
-        }
         return text(withNameAsk(hindi ? "मैं प्याज़ का भाव बता सकती हूँ या ख़रीदार ढूँढ सकती हूँ। क्या करना है?"
                 : "I can tell you the onion price or find you a buyer. Which would you like?", askName, hindi));
     }
@@ -128,7 +128,7 @@ public class DemoChat implements ChatClient.Scripted {
         String tool = toolNameFor(messages, last.toolCallId());
         String result = last.content();
         return switch (tool) {
-            case "find_buyers" -> withNameAsk(buyersLine(result, hindi), askName, hindi);
+            case "find_buyers" -> askName ? withNameAsk(buyersLine(result, hindi, true), true, hindi) : buyersLine(result, hindi, false);
             case "connect_buyer" -> result.startsWith("Calling")
                     ? (hindi ? "फ़ोन लगा रही हूँ। लाइन पर बने रहिए।" : "Calling them now. Please stay on the line.")
                     : (hindi ? "माफ़ कीजिए, फ़ोन नहीं लगा पाई।" : "Sorry, I could not place that call.");
@@ -141,7 +141,7 @@ public class DemoChat implements ChatClient.Scripted {
         };
     }
 
-    private String buyersLine(String result, boolean hindi) {
+    private String buyersLine(String result, boolean hindi, boolean nameFirst) {
         try {
             JsonNode buyers = json.readTree(result).path("buyers");
             if (!buyers.isArray() || buyers.isEmpty()) return hindi ? "सूची में अभी कोई ख़रीदार नहीं है।" : "The directory has no buyer for that.";
@@ -149,6 +149,12 @@ public class DemoChat implements ChatClient.Scripted {
             String name = first.path("name").asText();
             String place = first.path("place").asText();
             String range = first.path("listedRange").asText();
+            if (nameFirst) {
+                return hindi ? place + " के " + name + " प्याज़ ख़रीदते हैं, हमारी सूची में उनका भाव "
+                        + hindiRange(first.path("buyerId").asText()) + " रुपये प्रति क्विंटल लिखा है। क्या मैं अभी "
+                        + name + " को फ़ोन लगाऊँ?"
+                        : name + " in " + place + " buy onions, listed at " + range + ". Shall I call " + name + " now?";
+            }
             return hindi
                     ? place + " के " + name + " प्याज़ ख़रीदते हैं। हमारी सूची में उनका भाव " + hindiRange(first.path("buyerId").asText())
                             + " रुपये प्रति क्विंटल लिखा है। क्या मैं अभी " + name

@@ -169,6 +169,25 @@ class OfflineDemoTest {
         second.remoteHangup();
     }
 
+    @Test
+    void aBuyerFirstCallHearsTheNameQuestionAndSavesTheAnswer() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550008", FakeLeg.SALT);
+        FakeLeg farmer = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
+        keepHearing(farmer);
+        registry.register(farmer);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        sleep();
+        typed.say(farmer.id(), "मुझे प्याज़ बेचना है");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("Mehta Agro Traders") && a.text().contains("आपका नाम क्या है?")));
+        sleep();
+        typed.say(farmer.id(), "रमेश");
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
+        farmer.remoteHangup();
+    }
+
     /** The clocks in these turns are wall-clock: a beat lets one turn end before the next starts. */
     @Test
     void typedTurnsChooseAndChangeTheLanguageWithNoKeys() {

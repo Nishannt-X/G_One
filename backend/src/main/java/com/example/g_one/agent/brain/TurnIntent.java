@@ -62,6 +62,11 @@ public final class TurnIntent {
     private static final Set<String> NOT_A_NAME = Set.of("है", "हैं", "hai", "hain", "जी", "ji", "বলে", "হল");
     private static final Set<String> QUESTION_WORDS = Set.of("क्या", "क्यों", "kya", "kyun", "what", "কী", "কি", "ki", "kaise", "कैसे");
     private static final Pattern NAME_QUESTION = Pattern.compile("(?iu)(नाम|\\bname\\b|নাম|\\bnaam\\b)[^.।!]*\\?");
+    private static final Pattern NAME_REQUEST = Pattern.compile(
+            "(?iu)\\b(?:tell|give|share)\\s+(?:me\\s+)?your\\s+name\\b"
+            + "|(?:अपना|आपका|आपके) नाम[^.।!?]*(?:बताइए|बताएं|बताएँ|बताओ)"
+            + "|(?:apna|aapka|aapke) naam[^.?!]*(?:bataye|batayen|batao)"
+            + "|(?:আপনার|তোমার) নাম[^.।!?]*(?:বলুন|বলো)");
     private static final Set<String> NAME_FILLER = Set.of("मैं", "मै", "main", "mai", "हूँ", "हूं", "hoon", "hun", "hu", "है", "hai", "जी", "ji", "ami");
     private static final Set<String> NOT_A_SHORT_NAME = Set.of("नहीं", "नही", "nahi", "nahin", "no", "not", "बाद", "baad", "later", "अभी", "abhi", "why", "क्यों", "हाँ", "हां", "yes", "ok", "okay");
     private static final Pattern NAME_WORD = Pattern.compile("[\\p{L}\\p{M}]+");
@@ -109,7 +114,7 @@ public final class TurnIntent {
 
     /** True when an assistant line asks the farmer's name, such as "और आपका नाम क्या है?" or "May I know your name?". */
     public static boolean asksName(String assistantLine) {
-        return assistantLine != null && NAME_QUESTION.matcher(assistantLine).find();
+        return assistantLine != null && (NAME_QUESTION.matcher(assistantLine).find() || NAME_REQUEST.matcher(assistantLine).find());
     }
 
     /**

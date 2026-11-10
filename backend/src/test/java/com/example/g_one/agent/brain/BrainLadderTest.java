@@ -183,6 +183,21 @@ class BrainLadderTest {
     }
 
     @Test
+    void anImperativeNameRequestAcceptsTheNextBareName() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("I can help with that. Please tell me your name.");
+        Reply prompt = f.brain.respond(ctx, List.of(), said(ctx, "How can I sell my crop?"));
+        assertThat(prompt.text()).contains("Please tell me your name.");
+        f.llm.replyText("Thank you, Ramesh.");
+        f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, prompt.text())), said(ctx, "Ramesh"));
+        assertThat(f.toolEvents).anySatisfy(e -> {
+            assertThat(e.tool()).isEqualTo("save_profile_fact");
+            assertThat(e.args().path("value").asText()).isEqualTo("Ramesh");
+        });
+        assertThat(TurnIntent.asksName("I have saved your name.")).isFalse();
+    }
+
+    @Test
     void noModelOnASaleSaysItHeardTheSale() {
         CallContext ctx = BrainFixture.newFarmer(ENGLISH);
         f.llm.failures.set(1);

@@ -1,8 +1,9 @@
 {
-  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words.",
+  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words.",
+  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
   "lines": {
     "hi-IN": {
-      "welcome": "नमस्ते, जी-वन में आपका स्वागत है। मैं एक AI सहायक हूँ। हिंदी या अंग्रेज़ी, जो आसान हो, उसमें बोलिए।",
+      "welcome": "नमस्ते, जी-वन में आपका स्वागत है। मैं एक AI सहायक हूँ।",
       "memoryNotice": "बेहतर मदद के लिए मैं इस बातचीत का छोटा सा नोट रखूँगी। न चाहें तो कभी भी \"मुझे भूल जाओ\" कहिए।",
       "withheld": "आपका नंबर नहीं दिख रहा, इसलिए यह बातचीत याद नहीं रख पाऊँगी।",
       "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
@@ -10,12 +11,52 @@
       "goodbye": "धन्यवाद। नमस्ते।"
     },
     "en-IN": {
-      "welcome": "Welcome to G-One. I'm an AI assistant. Speak Hindi or English, whichever is easier.",
+      "welcome": "Welcome to G-One. I'm an AI assistant.",
       "memoryNotice": "To help you better, I'll keep a short note of this call. Say \"forget me\" any time if you don't want that.",
       "withheld": "I can't see your number, so I won't remember this call.",
       "nameCheck": "Hello, this is G-One. Am I speaking with {name} ji?",
       "forgotten": "Done, I've deleted what I had about you.",
       "goodbye": "Thank you. Goodbye."
+    },
+    "hi-en": {
+      "welcome": "नमस्ते, जी-वन में आपका welcome है। मैं एक AI assistant हूँ।",
+      "memoryNotice": "Better help के लिए मैं इस call का एक छोटा सा note रखूँगी। न चाहें तो कभी भी forget me कहिए।",
+      "withheld": "आपका number नहीं दिख रहा, इसलिए यह call याद नहीं रख पाऊँगी।",
+      "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
+      "forgotten": "ठीक है, मैंने आपकी जानकारी delete कर दी है।",
+      "goodbye": "Thank you. नमस्ते।"
+    },
+    "bn-IN": {
+      "welcome": "নমস্কার, জি-ওয়ানে আপনাকে স্বাগত। আমি একজন এআই সহায়ক।",
+      "memoryNotice": "আরও ভালো সাহায্যের জন্য আমি এই কলের একটা ছোট নোট রাখব। না চাইলে যেকোনো সময় \"আমাকে ভুলে যাও\" বলুন।",
+      "withheld": "আপনার নম্বর দেখা যাচ্ছে না, তাই এই কথাবার্তা মনে রাখতে পারব না।",
+      "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
+      "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা রেখেছিলাম, মুছে দিয়েছি।",
+      "goodbye": "ধন্যবাদ। নমস্কার।"
+    },
+    "bn-en": {
+      "welcome": "নমস্কার, জি-ওয়ানে আপনাকে welcome। আমি একটা AI assistant।",
+      "memoryNotice": "আরও ভালো help-এর জন্য আমি এই call-এর একটা ছোট note রাখব। না চাইলে যেকোনো সময় forget me বলুন।",
+      "withheld": "আপনার number দেখা যাচ্ছে না, তাই এই call মনে রাখতে পারব না।",
+      "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
+      "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা ছিল, delete করে দিয়েছি।",
+      "goodbye": "Thank you। নমস্কার।"
+    },
+    "ta-IN": {
+      "welcome": "வணக்கம், ஜி-ஒன் உங்களை வரவேற்கிறது. நான் ஒரு AI உதவியாளர்.",
+      "memoryNotice": "உங்களுக்கு நன்றாக உதவ, இந்த அழைப்பைப் பற்றி ஒரு சிறு குறிப்பு வைத்துக்கொள்வேன். வேண்டாம் என்றால், எப்போது வேண்டுமானாலும் \"என்னை மறந்துவிடு\" என்று சொல்லுங்கள்.",
+      "withheld": "உங்கள் எண் தெரியவில்லை, அதனால் இந்த அழைப்பை நினைவில் வைத்துக்கொள்ள மாட்டேன்.",
+      "nameCheck": "வணக்கம், ஜி-ஒன் பேசுகிறேன். நீங்கள் {name} அவர்களா?",
+      "forgotten": "சரி, உங்களைப் பற்றி வைத்திருந்த தகவலை அழித்துவிட்டேன்.",
+      "goodbye": "நன்றி. வணக்கம்."
+    },
+    "kn-IN": {
+      "welcome": "ನಮಸ್ಕಾರ, ಇದು ಜಿ-ಒನ್. ನಿಮಗೆ ಸ್ವಾಗತ. ನಾನು ಒಬ್ಬ AI ಸಹಾಯಕಿ.",
+      "memoryNotice": "ನಿಮಗೆ ಚೆನ್ನಾಗಿ ಸಹಾಯ ಮಾಡಲು, ಈ ಕರೆಯ ಒಂದು ಚಿಕ್ಕ ಟಿಪ್ಪಣಿ ಇಟ್ಟುಕೊಳ್ಳುತ್ತೇನೆ. ಬೇಡವೆಂದರೆ, ಯಾವಾಗ ಬೇಕಾದರೂ \"ನನ್ನನ್ನು ಮರೆತುಬಿಡಿ\" ಎಂದು ಹೇಳಿ.",
+      "withheld": "ನಿಮ್ಮ ನಂಬರ್ ಕಾಣುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ಈ ಕರೆಯನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳುವುದಿಲ್ಲ.",
+      "nameCheck": "ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು {name} ಅವರೇ?",
+      "forgotten": "ಸರಿ, ನಿಮ್ಮ ಬಗ್ಗೆ ಇಟ್ಟಿದ್ದ ಮಾಹಿತಿಯನ್ನು ಅಳಿಸಿದ್ದೇನೆ.",
+      "goodbye": "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ."
     }
   },
   "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. openLong: an open item too long to read back whole (WelcomeBack.MAX_ITEM_CHARS), mentioned without its words, never cut. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",
@@ -31,6 +72,36 @@
       "openLong": "Welcome back, {name} ji. Earlier I noted something to follow up. Shall we look at that, or can I help with something else?",
       "crop": "Welcome back, {name} ji. Earlier we talked about your {crop}. How can I help today?",
       "plain": "Welcome back, {name} ji. How can I help today?"
+    },
+    "hi-en": {
+      "open": "नमस्ते {name} जी, फिर से welcome है। पहले मैंने follow up के लिए यह note किया था: {item}। क्या यह हो गया, या कुछ और help करूँ?",
+      "openLong": "नमस्ते {name} जी, फिर से welcome है। पहले मैंने follow up के लिए एक बात note की थी। क्या उसमें help करूँ, या कुछ और?",
+      "crop": "नमस्ते {name} जी, फिर से welcome है। पहले आपने {crop} की बात की थी। आज क्या help करूँ?",
+      "plain": "नमस्ते {name} जी, फिर से welcome है। आज क्या help करूँ?"
+    },
+    "bn-IN": {
+      "open": "নমস্কার {name}, আবার স্বাগত। আগে আমি পরে দেখার জন্য এই কথাটা নোট করেছিলাম: {item}। এটা কি হয়ে গেছে, নাকি অন্য কিছুতে সাহায্য করব?",
+      "openLong": "নমস্কার {name}, আবার স্বাগত। আগে আমি পরে দেখার জন্য একটা কথা নোট করেছিলাম। সেটা নিয়ে সাহায্য করব, নাকি অন্য কিছু?",
+      "crop": "নমস্কার {name}, আবার স্বাগত। আগে আপনি {crop} নিয়ে কথা বলেছিলেন। আজ কী সাহায্য করব?",
+      "plain": "নমস্কার {name}, আবার স্বাগত। আজ কী সাহায্য করব?"
+    },
+    "bn-en": {
+      "open": "নমস্কার {name}, আবার welcome। আগে আমি follow up-এর জন্য এটা note করেছিলাম: {item}। এটা কি হয়ে গেছে, নাকি অন্য কিছুতে help করব?",
+      "openLong": "নমস্কার {name}, আবার welcome। আগে আমি follow up-এর জন্য একটা কথা note করেছিলাম। সেটা নিয়ে help করব, নাকি অন্য কিছু?",
+      "crop": "নমস্কার {name}, আবার welcome। আগে আপনি {crop} নিয়ে কথা বলেছিলেন। আজ কী help করব?",
+      "plain": "নমস্কার {name}, আবার welcome। আজ কী help করব?"
+    },
+    "ta-IN": {
+      "open": "வணக்கம் {name}, மீண்டும் வருக. முன்பு பின்னர் பார்க்க இதைக் குறித்து வைத்தேன்: {item}. அது முடிந்ததா, அல்லது வேறு ஏதாவது உதவி வேண்டுமா?",
+      "openLong": "வணக்கம் {name}, மீண்டும் வருக. முன்பு பின்னர் பார்க்க ஒரு விஷயத்தைக் குறித்து வைத்தேன். அதில் உதவட்டுமா, அல்லது வேறு ஏதாவது?",
+      "crop": "வணக்கம் {name}, மீண்டும் வருக. முன்பு நீங்கள் {crop} பற்றி பேசினீர்கள். இன்று என்ன உதவி வேண்டும்?",
+      "plain": "வணக்கம் {name}, மீண்டும் வருக. இன்று என்ன உதவி வேண்டும்?"
+    },
+    "kn-IN": {
+      "open": "ನಮಸ್ಕಾರ {name}, ಮತ್ತೆ ಸ್ವಾಗತ. ಮೊದಲು ನಂತರ ನೋಡಲು ಇದನ್ನು ಬರೆದಿಟ್ಟಿದ್ದೆ: {item}. ಅದು ಆಯಿತೇ, ಅಥವಾ ಬೇರೆ ಏನಾದರೂ ಸಹಾಯ ಬೇಕೇ?",
+      "openLong": "ನಮಸ್ಕಾರ {name}, ಮತ್ತೆ ಸ್ವಾಗತ. ಮೊದಲು ನಂತರ ನೋಡಲು ಒಂದು ವಿಷಯ ಬರೆದಿಟ್ಟಿದ್ದೆ. ಅದರಲ್ಲಿ ಸಹಾಯ ಮಾಡಲೇ, ಅಥವಾ ಬೇರೆ ಏನಾದರೂ?",
+      "crop": "ನಮಸ್ಕಾರ {name}, ಮತ್ತೆ ಸ್ವಾಗತ. ಮೊದಲು ನೀವು {crop} ಬಗ್ಗೆ ಮಾತನಾಡಿದ್ದಿರಿ. ಇಂದು ಏನು ಸಹಾಯ ಬೇಕು?",
+      "plain": "ನಮಸ್ಕಾರ {name}, ಮತ್ತೆ ಸ್ವಾಗತ. ಇಂದು ಏನು ಸಹಾಯ ಬೇಕು?"
     }
   }
 }

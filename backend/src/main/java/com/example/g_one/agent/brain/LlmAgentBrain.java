@@ -55,7 +55,9 @@ import org.springframework.stereotype.Component;
  * <ul>
  *   <li>{@link #greet} speaks fixed lines (docs/call-flow.md, variant B): a new farmer hears the welcome and the memory
  *       notice, a withheld caller ID hears the welcome and that nothing will be remembered, and a returning farmer
- *       hears only the name check. No model call, so the greeting cannot fail on the model.</li>
+ *       hears only the name check. No model call, so the greeting cannot fail on the model.
+ *       {@link #greetAfterLanguageChoice} is the same without the welcome, which the English-first opener already
+ *       gave.</li>
  *   <li>{@link #respond} renders the system prompt (language, today, memory rules for the call's state), adds one data
  *       message (stored memory and the digest of older lines, as JSON: data, not instructions), replays the history,
  *       and runs the tool loop: at most {@value #MAX_MODEL_CALLS} model calls per turn, the last one without tools so
@@ -161,14 +163,26 @@ public class LlmAgentBrain implements AgentBrain {
 
     @Override
     public Reply greet(CallContext ctx) {
+        return greeting(ctx, true);
+    }
+
+    @Override
+    public Reply greetAfterLanguageChoice(CallContext ctx) {
+        return greeting(ctx, false);
+    }
+
+    /** {@code welcome} false: the English-first opener already introduced G-One, so the welcome line is not repeated. */
+    private Reply greeting(CallContext ctx, boolean welcome) {
         try {
             MemoryGate.State state = gate.state(ctx);
             FixedLines.Lines l = lines.forLanguage(ctx.language().code());
             Language lang = spokenIn(l.code(), ctx.language());
+            String hello = welcome ? l.welcome() + " " : "";
             String text = switch (state) {
-                case WITHHELD -> l.welcome() + " " + l.withheld();
+                case WITHHELD -> hello + l.withheld();
                 case NAME_CHECK -> l.nameCheck(MemoryBlock.rememberedName(ctx.memory()).orElseThrow());
-                case NEW, UNNAMED -> l.welcome() + " " + l.memoryNotice();
+                case NEW, UNNAMED -> hello + l.memoryNotice();
+                // Not reached at the start of a call (these states follow a name check or a forget), kept non-blank.
                 case CONFIRMED, OTHER_SPEAKER, FORGOTTEN -> l.welcome();
             };
             return new Reply(text, lang, false);

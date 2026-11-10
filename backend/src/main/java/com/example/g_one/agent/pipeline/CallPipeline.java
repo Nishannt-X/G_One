@@ -596,7 +596,8 @@ public final class CallPipeline {
             if (generation.get() != turnGeneration) {
                 return;
             }
-            Reply greeting = askBrain("greet", () -> brain.greet(ctx), ctx.language());
+            // The English-first opener already introduced G-One: no second welcome after the confirmation.
+            Reply greeting = askBrain("greet", () -> brain.greetAfterLanguageChoice(ctx), ctx.language());
             // A greeting that asks something, such as a returning farmer's name check, waits for its own answer: words
             // said before it was heard cannot answer it. The request is held and answered after that answer.
             boolean answerNow = answer && !asksSomething(greeting);

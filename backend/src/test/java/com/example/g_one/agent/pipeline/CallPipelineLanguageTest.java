@@ -86,6 +86,7 @@ class CallPipelineLanguageTest {
         assertThat(stt.last().retargets()).extracting(Language::code).containsExactly("hi-IN");
         assertThat(spoken()).containsExactly(spoken().get(0), "ठीक है, हिंदी में बात करते हैं।", ScriptedBrain.GREETING);
         assertThat(brain.greets).singleElement().satisfies(c -> assertThat(c.language().code()).isEqualTo("hi-IN"));
+        assertThat(brain.greetsAfterLanguage).as("the greeting without a second welcome").hasSize(1);
         assertThat(brain.responds).isEmpty();
         assertThat(eventsOf(ConsoleEvent.LanguageChanged.class)).singleElement().satisfies(e -> {
             assertThat(e.from()).isEqualTo("auto");

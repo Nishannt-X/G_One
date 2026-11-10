@@ -22,6 +22,8 @@ final class ScriptedBrain implements AgentBrain {
     record RespondCall(CallContext ctx, List<Line> history, Turn latest) {}
 
     final List<CallContext> greets = new CopyOnWriteArrayList<>();
+    /** The greetings asked for right after an English-first language choice (also recorded in {@link #greets}). */
+    final List<CallContext> greetsAfterLanguage = new CopyOnWriteArrayList<>();
     final List<RespondCall> responds = new CopyOnWriteArrayList<>();
     volatile boolean failGreet;
     volatile boolean failRespond;
@@ -54,6 +56,12 @@ final class ScriptedBrain implements AgentBrain {
         identityOpen = greetText != null;
         String text = greetText != null ? greetText : ctx.memory().isEmpty() ? GREETING : GREETING + " Welcome back.";
         return new Reply(text, ctx.language(), false);
+    }
+
+    @Override
+    public Reply greetAfterLanguageChoice(CallContext ctx) {
+        greetsAfterLanguage.add(ctx);
+        return greet(ctx);
     }
 
     @Override

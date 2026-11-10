@@ -56,7 +56,8 @@ public final class TurnIntent {
             "बेच|बिक|खरीदार|ग्राहक|व्यापारी|कितने में|bech|bik|kharidar|grahak|vyapari|kitne me|\\bsell|buyer"
             + "|বিক্রি|ক্রেতা|bikri|kreta");
     private static final Pattern FORGET = Pattern.compile(
-            "भूल जा|मिटा|forget me|delete my|bhool ja|bhul ja|mita do|ভুলে যা|মুছে|bhule ja|muche");
+            "भूल जा|मिटा|forget me|delete my|bhool ja|bhul ja|mita do|ভুলে যা|মুছে|bhule ja|muche"
+            + "|மறந்துவிடு|மறந்து விடு|ಮರೆತುಬಿಡ|ಮರೆತು ಬಿಡ");
     private static final Pattern STATED_NAME = Pattern.compile(
             "(?iu)(?:मेरा नाम|my name is|mera naam|mera nam|আমার নাম|amar naam|amar nam)\\s+([\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+){0,3})");
     private static final Set<String> NOT_A_NAME = Set.of("है", "हैं", "hai", "hain", "जी", "ji", "বলে", "হল");

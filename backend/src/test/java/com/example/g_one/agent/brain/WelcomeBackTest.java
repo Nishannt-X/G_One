@@ -51,8 +51,9 @@ class WelcomeBackTest {
         assertThat(WELCOME.line("en-IN", m).orElseThrow().text())
                 .isEqualTo("Welcome back, Suresh ji. Earlier I noted this to follow up: find a buyer for about twenty quintal "
                         + "red onion after harvest. Did that get done, or can I help with something else?");
-        // Hinglish uses the Hindi lines.
-        assertThat(WELCOME.line("hi-en", m).orElseThrow().code()).isEqualTo("hi-IN");
+        // Hinglish has its own lines; a code with none uses its language's lines ("hi-XX" uses Hindi).
+        assertThat(WELCOME.line("hi-en", m).orElseThrow().code()).isEqualTo("hi-en");
+        assertThat(WELCOME.line("hi-XX", m).orElseThrow().code()).isEqualTo("hi-IN");
     }
 
     @Test
@@ -134,7 +135,7 @@ class WelcomeBackTest {
 
     @Test
     void noLinesForALanguageOrNoUsableNameMeansNoWelcomeBack() {
-        assertThat(WELCOME.line("bn-IN", memory(List.of(NAME), List.of()))).isEmpty();
+        assertThat(WELCOME.line("mr-IN", memory(List.of(NAME), List.of()))).isEmpty();
         assertThat(WELCOME.line("hi-IN", memory(List.of(fact("district", "Nashik", 1)), List.of()))).isEmpty();
     }
 

@@ -8,6 +8,9 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class FixedLines {
+    private static final Logger log = LoggerFactory.getLogger(FixedLines.class);
     public static final String RESOURCE = "/prompts/fixed-lines.json";
     public static final String DEFAULT_LANGUAGE = "en-IN";
     public static final String NAME = "{name}";
@@ -32,6 +36,8 @@ public class FixedLines {
     }
 
     private final Map<String, Lines> byCode;
+    /** Codes already logged as using another language's lines, so each is logged once. */
+    private final Set<String> fallbackLogged = ConcurrentHashMap.newKeySet();
 
     public FixedLines(ObjectMapper json) {
         try (InputStream in = FixedLines.class.getResourceAsStream(RESOURCE)) {
@@ -62,9 +68,16 @@ public class FixedLines {
         return v;
     }
 
-    /** Lines for a Gnani locale code: the exact code, else the same language prefix ("hi-en" uses "hi-IN"), else en-IN. */
+    /**
+     * Lines for a Gnani locale code: the exact code, else the same language prefix ("hi-xx" uses "hi-IN"), else en-IN.
+     * Every entry has every key, so a fallback covers all keys; it is logged once per code, never silent.
+     */
     public Lines forLanguage(String code) {
-        return byCode.get(bestKey(byCode.keySet(), code, DEFAULT_LANGUAGE));
+        String key = bestKey(byCode.keySet(), code, DEFAULT_LANGUAGE);
+        if (code != null && !key.equals(code) && fallbackLogged.add(code)) {
+            log.info("no fixed line for {}/*, using {}", code, key);
+        }
+        return byCode.get(key);
     }
 
     public Set<String> languages() {

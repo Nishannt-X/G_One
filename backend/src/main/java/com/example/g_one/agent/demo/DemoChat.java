@@ -88,7 +88,7 @@ public class DemoChat implements ChatClient.Scripted {
                 return tool("confirm_name", json.createObjectNode().put("confirmed", r == ReplyGuard.Reading.YES));
             }
         }
-        if (matches(t, "bhool jao", "भूल जाओ", "forget me") && offered(request, "forget_me")) {
+        if (matches(t, "bhool jao", "भूल जाओ", "forget me", "ভুলে যাও", "மறந்துவிடு", "ಮರೆತುಬಿಡಿ") && offered(request, "forget_me")) {
             return tool("forget_me", json.createObjectNode());
         }
         Optional<String> name = TurnIntent.statedName(turn);

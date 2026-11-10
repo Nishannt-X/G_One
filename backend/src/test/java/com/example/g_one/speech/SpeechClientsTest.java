@@ -116,6 +116,21 @@ class SpeechClientsTest {
     }
 
     @Test
+    void llmStripsEscapedReasoningFromDecodedNestedJsonStrings() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "{\"gist\":\"\\u003cthink>secret\\u003c/think>Farmer asked about wheat.\","
+                + "\"nested\":[{\"text\":\"Visible \\u003cthink>secret\"},\"Safe \\u003cthi\",42,null],"
+                + "\"plain\":\"  keep spaces  \"}";
+        var answer = llm.askJson("test_failed", "system", "user");
+        assertThat(answer.path("gist").asText()).isEqualTo("Farmer asked about wheat.");
+        assertThat(answer.path("nested").get(0).path("text").asText()).isEqualTo("Visible");
+        assertThat(answer.path("nested").get(1).asText()).isEqualTo("Safe");
+        assertThat(answer.path("nested").get(2).asInt()).isEqualTo(42);
+        assertThat(answer.path("nested").get(3).isNull()).isTrue();
+        assertThat(answer.path("plain").asText()).isEqualTo("  keep spaces  ");
+    }
+
+    @Test
     void anUnknownLanguageIsRejected() {
         assertThatThrownBy(() -> new Language.Registry(props).require("xx-XX"))
                 .isInstanceOf(IllegalArgumentException.class);

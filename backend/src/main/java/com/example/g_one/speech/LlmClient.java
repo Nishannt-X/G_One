@@ -5,6 +5,9 @@ import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.llm.ModelRouter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -85,9 +88,23 @@ public class LlmClient {
             if (content.isEmpty()) throw new IOException("only reasoning");
             JsonNode answer = json.readTree(content);
             if (!answer.isObject()) throw new IOException("not an object");
-            return answer;
+            return stripDecodedReasoning(answer);
         } catch (IOException e) {
             throw new UpstreamException(stage, "Translation service returned an unreadable answer.");
         }
+    }
+
+    /** Sanitize text after JSON decoding, including strings nested in objects and arrays. */
+    private static JsonNode stripDecodedReasoning(JsonNode node) {
+        if (node.isTextual()) {
+            String text = node.textValue();
+            return ReasoningText.hasTag(text) ? TextNode.valueOf(ReasoningText.strip(text)) : node;
+        }
+        if (node instanceof ObjectNode object) {
+            object.fields().forEachRemaining(field -> object.set(field.getKey(), stripDecodedReasoning(field.getValue())));
+        } else if (node instanceof ArrayNode array) {
+            for (int i = 0; i < array.size(); i++) array.set(i, stripDecodedReasoning(array.get(i)));
+        }
+        return node;
     }
 }

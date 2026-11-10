@@ -9,7 +9,7 @@ import SampleReceiptPage from './demo/voiced/SampleReceiptPage'
 import BuyersView from './views/BuyersView'
 import FarmersPage from './views/FarmersPage'
 import LandingPage from './views/LandingPage'
-import LiveView from './views/LiveView'
+import AnalyticsPage from './views/AnalyticsPage'
 import MemoryView from './views/MemoryView'
 import JoinPage from './simulator/JoinPage'
 import SimulatorPage from './simulator/SimulatorPage'
@@ -22,7 +22,7 @@ function Legacy({ children }: { children: React.ReactNode }) {
 export default function App() {
   const hash = useHash()
   const route = parseRoute(hash)
-  // An old link to the live call on #/demo already renders the call page; this fixes the address to match.
+  // An old link (the live call on #/demo, or #/live) already renders the right page; this fixes the address to match.
   useEffect(() => {
     const target = redirectFor(hash)
     if (target) history.replaceState(null, '', target)
@@ -46,8 +46,8 @@ function Console({ route }: { route: Route }) {
         <CallPage feed={feed} status={status} lan={route.query.get('lan')} />
       ) : route.view === 'farmers' ? (
         <FarmersPage openKey={route.param} seed={route.query.get('seed') === '1'} />
-      ) : route.view === 'live' ? (
-        <Legacy><LiveView feed={feed} status={status} dispatch={dispatch} /></Legacy>
+      ) : route.view === 'analytics' ? (
+        <Legacy><AnalyticsPage feed={feed} status={status} dispatch={dispatch} /></Legacy>
       ) : route.view === 'buyers' ? (
         <Legacy><BuyersView /></Legacy>
       ) : route.view === 'memory' ? (

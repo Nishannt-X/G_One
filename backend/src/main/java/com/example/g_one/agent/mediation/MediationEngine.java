@@ -23,8 +23,12 @@ import org.springframework.stereotype.Component;
 public class MediationEngine {
     /** What a session may ask of the farmer's side of the call. */
     public interface FarmerSide {
-        /** The buyer said yes: stop the intake conversation. */
-        void takeOver();
+        /**
+         * Stops the intake conversation: no reply of its own may start from now on. {@code then} speaks on the farmer's
+         * leg, so it runs once nothing the intake already said is still playing; the farmer's reply is never cut short
+         * and the two never talk over each other.
+         */
+        void takeOver(Runnable then);
 
         /** Mediation is over but the farmer stays: the assistant talks to them again. */
         void release();

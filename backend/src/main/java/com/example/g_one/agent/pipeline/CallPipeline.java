@@ -209,6 +209,14 @@ public final class CallPipeline {
          * no longer waits for an identity answer; dropped if that turn did not settle it. Guarded by {@link #lock}.
          */
         private Turn heldRequest;
+        /**
+         * Set once mediation takes the farmer's leg over: no intake reply starts after it, so a reply that was still
+         * being prepared cannot land on top of a mediation line. Cleared by {@link #release()}. Guarded by
+         * {@link #lock}.
+         */
+        private boolean intakeClosed;
+        /** Runs once nothing the intake said is playing any more. Guarded by {@link #lock}. */
+        private Runnable whenFree;
         /** Null for a leg started with a fixed language. */
         private final LanguageFlow languageFlow;
 
@@ -327,20 +335,41 @@ public final class CallPipeline {
         }
 
         @Override
-        public void takeOver() {
-            Synthesis toCancel;
+        public void takeOver(Runnable then) {
+            Synthesis toCancel = null;
+            boolean runNow;
             synchronized (lock) {
-                generation.incrementAndGet();
-                quiet();
-                toCancel = synthesis;
-                synthesis = null;
+                intakeClosed = true;
+                if (speaking) {
+                    // The reply already playing is heard to its end; the line that follows waits for it.
+                    whenFree = then;
+                    runNow = false;
+                } else {
+                    generation.incrementAndGet(); // a reply that has not started yet must not start
+                    toCancel = synthesis;
+                    synthesis = null;
+                    runNow = true;
+                }
             }
-            stopSpeaking(toCancel);
+            if (!runNow) {
+                return;
+            }
+            cancelQuietly(toCancel);
+            submit("take over", then);
         }
 
         @Override
         public void release() {
-            mediationSession = null;
+            Runnable pending;
+            synchronized (lock) {
+                mediationSession = null;
+                intakeClosed = false;
+                pending = whenFree;
+                whenFree = null;
+            }
+            if (pending != null) {
+                submit("take over", pending);
+            }
         }
 
         @Override
@@ -662,7 +691,7 @@ public final class CallPipeline {
             // The last check before the console and speech: model thinking is never shown or spoken.
             String spoken = ReasoningText.speakable(reply.text(), reply.language().code());
             synchronized (lock) {
-                if (ended || generation.get() != replyGeneration) {
+                if (ended || intakeClosed || generation.get() != replyGeneration) {
                     log.debug("Dropping a superseded reply on leg {}", leg.id());
                     return;
                 }
@@ -728,6 +757,7 @@ public final class CallPipeline {
 
         private void afterPlayback(long replyGeneration, Reply reply, PlaybackOutcome outcome, Runnable next) {
             boolean hangUp = false;
+            Runnable free = null;
             synchronized (lock) {
                 if (ended || generation.get() != replyGeneration || outcome == PlaybackOutcome.ENDED) {
                     return;
@@ -737,6 +767,9 @@ public final class CallPipeline {
                 if (reply.endCall()) {
                     hungUpByUs = true;
                     hangUp = true;
+                } else if (whenFree != null) {
+                    free = whenFree; // mediation waited for this reply; its own line goes first
+                    whenFree = null;
                 }
             }
             if (hangUp) {
@@ -746,6 +779,8 @@ public final class CallPipeline {
                 } catch (RuntimeException e) {
                     log.warn("Hanging up leg {} failed", leg.id(), e);
                 }
+            } else if (free != null) {
+                submit("take over", free);
             } else if (next != null) {
                 submit("next line", next);
             }
@@ -806,6 +841,7 @@ public final class CallPipeline {
                 ended = true;
                 generation.incrementAndGet();
                 quiet();
+                whenFree = null;
                 toCancel = synthesis;
                 synthesis = null;
                 toClose = session;

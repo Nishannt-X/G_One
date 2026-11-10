@@ -329,10 +329,9 @@ public final class MediationSession {
             synchronized (lock) {
                 phase = Phase.LIVE;
             }
-            side.takeOver();
+            side.takeOver(() -> sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
+                    Map.of("buyer", buyerName())), false, null));
             sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
-                    Map.of("buyer", buyerName())), false, null);
             return;
         }
         boolean retry;
@@ -354,9 +353,8 @@ public final class MediationSession {
         }
         side.outcome("buyer_declined", null);
         sayAssistant(LegRole.BUYER, lines.get("buyerDeclined", buyer.language().code()), true, o -> hangUpBuyer());
-        sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", language(LegRole.FARMER).code(),
-                Map.of("buyer", buyerName())), false, null);
-        side.release();
+        side.takeOver(() -> sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", language(LegRole.FARMER).code(),
+                Map.of("buyer", buyerName())), false, o -> side.release()));
     }
 
     private String buyerName() {
@@ -708,8 +706,8 @@ public final class MediationSession {
         closeQuietly(toClose);
         bus.publish(new ConsoleEvent.LegEnded(callId, clock.millis(), buyer.id(), LegRole.BUYER, reason));
         if (before != Phase.OVER) {
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", language(LegRole.FARMER).code()), false, null);
-            side.release();
+            side.takeOver(() -> sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", language(LegRole.FARMER).code()),
+                    false, o -> side.release()));
         }
     }
 

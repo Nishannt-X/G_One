@@ -81,6 +81,11 @@ public final class CallPipeline {
 
     static final String HINDI_APOLOGY = "माफ़ कीजिए, कुछ गड़बड़ हो गई। कृपया फिर से बोलिए।";
     static final String ENGLISH_APOLOGY = "Sorry, something went wrong. Please say that again.";
+    /**
+     * How long after the assistant stops speaking a turn is still checked for being its own echo. Prisma sends a final
+     * transcript only after the speech ends, so an echo picked up during the last words arrives a second or two later.
+     */
+    static final long ECHO_TAIL_MS = 3_000;
 
     private final AgentBrain brain;
     private final SpeechToText speechToText;
@@ -183,6 +188,9 @@ public final class CallPipeline {
 
         private boolean ended;
         private boolean speaking;
+        /** The assistant's latest line and when it stopped being heard: its echo can still come back for a moment. */
+        private String lastSaid = "";
+        private long quietSinceMs;
         private boolean hungUpByUs;
         private CallContext context;
         private SttSession session;
@@ -316,7 +324,7 @@ public final class CallPipeline {
             Synthesis toCancel;
             synchronized (lock) {
                 generation.incrementAndGet();
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
@@ -370,11 +378,11 @@ public final class CallPipeline {
                     return;
                 }
                 generation.incrementAndGet();
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
-            log.debug("Barge-in on leg {}", leg.id());
+            log.info("Speech detected on leg {} while the assistant is speaking: barge-in accepted", leg.id());
             stopSpeaking(toCancel);
         }
 
@@ -384,6 +392,11 @@ public final class CallPipeline {
             Turn turn = withText(heard, ScamPatterns.masked(heard.text()));
             MediationSession live = mediationSession;
             boolean mediating = live != null && live.live();
+            if (!mediating && echoesTheAssistant(turn.text())) {
+                log.info("Turn ignored on leg {}: the words heard repeat the assistant's own line (speaker echo)",
+                        leg.id());
+                return;
+            }
             LanguageFlow.Outcome language = languageOutcome(turn);
             switch (language.kind()) {
                 case IGNORED -> {
@@ -426,18 +439,20 @@ public final class CallPipeline {
                     return;
                 }
                 if (speaking && Phrases.isBackchannel(answerTo.text())) {
+                    log.info("Barge-in ignored on leg {}: backchannel while the assistant is speaking", leg.id());
                     return; // "haan" while the assistant talks is listening, not a reply: let it finish
                 }
                 history = List.copyOf(lines);
                 lines.add(new Line(Speaker.FARMER, answerTo.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
                 ctx = context;
             }
             if (wasSpeaking) {
+                log.info("Turn heard on leg {} while the assistant is speaking: barge-in accepted", leg.id());
                 stopSpeaking(toCancel); // a turn with no speech start first still interrupts the assistant
             }
             publish(ConsoleEvent.TurnHeard.of(callId, answerTo, now()));
@@ -506,7 +521,7 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, heardIn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
@@ -554,7 +569,7 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, turn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
@@ -587,6 +602,7 @@ public final class CallPipeline {
                 }
                 lines.add(new Line(Speaker.ASSISTANT, reply.text()));
                 speaking = true;
+                lastSaid = reply.text();
                 // A leg that follows its own turns changes language only through its LanguageFlow, never on one reply.
                 if (languageFlow == null && !reply.language().equals(context.language())) {
                     context = new CallContext(callId, leg, reply.language(), context.memory());
@@ -650,7 +666,7 @@ public final class CallPipeline {
                 if (ended || generation.get() != replyGeneration || outcome == PlaybackOutcome.ENDED) {
                     return;
                 }
-                speaking = false;
+                quiet();
                 synthesis = null;
                 if (reply.endCall()) {
                     hungUpByUs = true;
@@ -672,12 +688,33 @@ public final class CallPipeline {
         /** Barge-in: no more frames from {@code toCancel}, then drop what the leg has queued. */
         private void stopSpeaking(Synthesis toCancel) {
             cancelQuietly(toCancel);
+            log.info("TTS cancelled on leg {} ({}); clearing queued playback", leg.id(),
+                    toCancel != null ? "synthesis was running" : "synthesis had finished");
             synchronized (playLock) {
                 try {
                     leg.clearPlayback();
                 } catch (RuntimeException e) {
                     log.warn("Clearing playback failed on leg {}", leg.id(), e);
                 }
+            }
+        }
+
+        /** Under {@link #lock}: the assistant is no longer speaking. */
+        private void quiet() {
+            if (speaking) {
+                speaking = false;
+                quietSinceMs = now();
+            }
+        }
+
+        /**
+         * Whether a turn is the assistant's own voice coming back through the microphone (laptop speakers): heard while
+         * it spoke, or within {@link #ECHO_TAIL_MS} after, and made of the words it was saying.
+         */
+        private boolean echoesTheAssistant(String text) {
+            synchronized (lock) {
+                boolean recent = speaking || now() - quietSinceMs < ECHO_TAIL_MS;
+                return recent && !ended && Phrases.repeats(text, lastSaid);
             }
         }
 
@@ -702,7 +739,7 @@ public final class CallPipeline {
                 }
                 ended = true;
                 generation.incrementAndGet();
-                speaking = false;
+                quiet();
                 toCancel = synthesis;
                 synthesis = null;
                 toClose = session;

@@ -12,6 +12,10 @@ import java.util.Set;
  */
 public final class Phrases {
     private static final int MAX_BACKCHANNEL_WORDS = 4;
+    /** An echo must have at least this many words: a short reply that reuses a few of the assistant's words is a reply. */
+    static final int MIN_ECHO_WORDS = 4;
+    /** Share of the heard words that must come from the assistant's line for it to count as an echo of that line. */
+    static final double ECHO_WORD_SHARE = 0.8;
 
     private static final Set<String> BACKCHANNEL = Set.of(
             "haan", "han", "haa", "ha", "hanji", "haanji", "ji", "jee", "hmm", "hm", "hmmm", "mm", "mmm", "uh-huh",
@@ -41,6 +45,22 @@ public final class Phrases {
         }
         List<String> words = words(stripped);
         return !words.isEmpty() && CONTINUATION.contains(words.get(words.size() - 1));
+    }
+
+    /**
+     * Whether {@code heard} is most likely the assistant's own {@code spoken} line picked up again by the microphone (laptop
+     * speakers, no headphones): at least {@link #MIN_ECHO_WORDS} words, and at least {@link #ECHO_WORD_SHARE} of them
+     * words of that line. Recognition errors and a missed word still leave an echo above the share; a person's answer
+     * brings words of their own.
+     */
+    public static boolean repeats(String heard, String spoken) {
+        List<String> heardWords = words(heard);
+        if (heardWords.size() < MIN_ECHO_WORDS) {
+            return false;
+        }
+        Set<String> spokenWords = Set.copyOf(words(spoken));
+        long shared = heardWords.stream().filter(spokenWords::contains).count();
+        return shared >= ECHO_WORD_SHARE * heardWords.size();
     }
 
     private static List<String> words(String text) {

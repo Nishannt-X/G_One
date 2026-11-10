@@ -66,6 +66,17 @@ class TurnDetectionTest {
     }
 
     @Test
+    void aTurnMadeOfTheAssistantsWordsIsAnEchoAndARealReplyIsNot() {
+        String said = "Gehun ka bhav aaj chaubees sau rupaye quintal hai, kya aap bechna chahenge?";
+        assertThat(Phrases.repeats("gehun ka bhav aaj chaubees sau", said)).isTrue();
+        assertThat(Phrases.repeats("Gehun ka bhav aaj chaubis sau rupaye quintal", said)).as("one misheard word").isTrue();
+        assertThat(Phrases.repeats("चार हज़ार में बेचना है भाई", "गेहूं का भाव चार हज़ार है")).isFalse();
+        assertThat(Phrases.repeats("haan bechna chahenge", said)).as("too short to call echo").isFalse();
+        assertThat(Phrases.repeats("nahi abhi bechna nahi hai mujhe", said)).isFalse();
+        assertThat(Phrases.repeats("gehun ka bhav aaj", "")).isFalse();
+    }
+
+    @Test
     void connectivesAtTheEndMeanMoreIsComing() {
         for (String s : List.of("gehun hai aur", "daam theek hai lekin", "phir toh", "मेरे पास गेहूं है और", "दाम ठीक है लेकिन।",
                 "আমার ধান আছে কিন্তু", "I have wheat and")) {

@@ -21,7 +21,7 @@ export default function AnalyticsPage({ feed, status, dispatch, param, query }: 
     }
   }, [])
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Analytics</h1>
         <nav aria-label="Analytics" className="grid grid-flow-col gap-1 rounded-xl bg-sunk p-1">

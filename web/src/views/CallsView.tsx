@@ -76,21 +76,21 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
     { label: 'Median reply time (measured)', value: summary.medianMs.reply !== undefined ? millis(summary.medianMs.reply) : '—' },
   ]
   return (
-    <section aria-label="Figures from stored calls" className="space-y-3">
+    <section aria-label="Figures from stored calls" className="min-w-0 space-y-3">
       <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {tiles.map((tile) => (
-          <div key={tile.label} className="card p-4">
-            <dt className="text-sm font-semibold text-muted">{tile.label}</dt>
+          <div key={tile.label} className="card min-w-0 p-4">
+            <dt className="text-sm font-semibold break-words text-muted">{tile.label}</dt>
             <dd className="mt-1 font-mono text-2xl font-bold tabular-nums">{tile.value}</dd>
           </div>
         ))}
       </dl>
       {(pairs.length > 0 || tools.length > 0 || summary.medianMs.transcript !== undefined) && (
-        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted">
+        <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-2 text-sm break-words text-muted">
           {summary.medianMs.transcript !== undefined && <p>Speech to text, median: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.transcript)}</span></p>}
           {summary.medianMs.translation !== undefined && <p>Translation, median: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.translation)}</span></p>}
           {pairs.length > 0 && <p>Languages: {pairs.map(([pair, n]) => <span key={pair} className="font-semibold text-ink">{pair.split(' ⇄ ').map((l) => (l === 'unknown' ? 'Not stored' : languageLabel(l))).join(' ⇄ ')} ({n}) </span>)}</p>}
-          {tools.length > 0 && <p>Tools: {tools.map(([tool, n]) => <span key={tool} className="font-mono font-semibold text-ink">{tool} ({n}) </span>)}</p>}
+          {tools.length > 0 && <p>Tools: {tools.map(([tool, n]) => <span key={tool} className="font-mono font-semibold break-all text-ink">{tool} ({n}) </span>)}</p>}
         </div>
       )}
       <p className="text-xs text-muted">Figures cover stored calls only. A call is stored only when a party says yes to remembering it.</p>
@@ -108,19 +108,19 @@ export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; 
   return (
     <section aria-label="Stored calls" className="card overflow-hidden">
       <div className="flex flex-wrap items-end gap-3 border-b border-line p-3">
-        <label className="min-w-36 flex-1 text-sm font-semibold">Language
+        <label className="min-w-0 flex-1 basis-40 text-sm font-semibold">Language
           <select className="field mt-1" value={filter.language} onChange={(e) => onFilter({ ...filter, language: e.target.value })}>
             <option value="all">All languages</option>
             {languages.map((l) => <option key={l} value={l}>{languageLabel(l)}</option>)}
           </select>
         </label>
-        <label className="min-w-36 flex-1 text-sm font-semibold">Outcome
+        <label className="min-w-0 flex-1 basis-40 text-sm font-semibold">Outcome
           <select className="field mt-1" value={filter.outcome} onChange={(e) => onFilter({ ...filter, outcome: e.target.value as Outcome | 'all' })}>
             <option value="all">All outcomes</option>
             {(Object.keys(OUTCOME_LABEL) as Outcome[]).map((o) => <option key={o} value={o}>{OUTCOME_LABEL[o]}</option>)}
           </select>
         </label>
-        <label className="min-w-36 flex-1 text-sm font-semibold">Sort
+        <label className="min-w-0 flex-1 basis-40 text-sm font-semibold">Sort
           <select className="field mt-1" value={filter.sort} onChange={(e) => onFilter({ ...filter, sort: e.target.value as CallFilter['sort'] })}>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
@@ -138,8 +138,8 @@ export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; 
                 <span className="font-mono font-bold" title={c.callId}>{callCode(c.callId)}</span>
                 <span className="text-sm text-muted">{dateTime(c.startedMs)}</span>
                 <span className="font-mono text-sm tabular-nums">{duration(c.durationMs)}</span>
-                <span className="truncate text-sm">{pairLabel(c.languages)}</span>
-                <span className="truncate text-sm" title={dealLine(c.deal)}><span className="font-semibold">{OUTCOME_LABEL[c.outcome]}</span> · {dealLine(c.deal)}</span>
+                <span className="min-w-0 truncate text-sm">{pairLabel(c.languages)}</span>
+                <span className="min-w-0 text-sm md:truncate" title={dealLine(c.deal)}><span className="font-semibold">{OUTCOME_LABEL[c.outcome]}</span> · {dealLine(c.deal)}</span>
                 <span className="flex flex-wrap gap-1.5">
                   <ConsentChip who="Farmer" consent={c.consentFarmer} />
                   <ConsentChip who="Buyer" consent={c.consentBuyer} />
@@ -180,7 +180,17 @@ export function CallDetail({ record, onDelete }: { record: CallRecordView; onDel
         <span className="chip bg-sunk text-muted">{OUTCOME_LABEL[record.outcome]}</span>
       </div>
       <p className="text-sm text-muted">The conversation itself is never stored: no subtitles, no recordings and no private advice text. Only the details below are kept.</p>
-      {call.legs.length > 0 && <Stage call={call} />}
+      {call.legs.length === 2 ? (
+        <Stage call={call} />
+      ) : (
+        <Card title="Stored leg">
+          <ul className="space-y-1">
+            {call.legs.map((l) => (
+              <li key={l.legId}><span className="font-semibold capitalize">{l.role}</span> · {languageLabel(l.language)} · <span className="capitalize">{l.source}</span> · ended ({l.ended?.reason})</li>
+            ))}
+          </ul>
+        </Card>
+      )}
       {!farmer && <p role="note" className="rounded-xl bg-sunk px-4 py-2 text-muted">{notStoredText('farmer', notStored.farmer)}</p>}
       {!buyer && <p role="note" className="rounded-xl bg-sunk px-4 py-2 text-muted">{notStoredText('buyer', notStored.buyer)}</p>}
       <div className="grid items-start gap-4 lg:grid-cols-2">

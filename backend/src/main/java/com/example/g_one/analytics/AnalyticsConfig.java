@@ -2,6 +2,7 @@ package com.example.g_one.analytics;
 
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.MemoryStore;
+import com.example.g_one.memory.ForgetListener;
 import com.example.g_one.memory.MemoryProperties;
 import com.example.g_one.memory.SqliteMemoryStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -26,6 +27,12 @@ public class AnalyticsConfig {
         }
         Path file = Path.of(props.dataDir()).toAbsolutePath().normalize().resolve(SqliteMemoryStore.FILE_NAME);
         return new CallRecordStore("jdbc:sqlite:" + file);
+    }
+
+    /** A farmer forgotten from the console loses their stored call records too. */
+    @Bean
+    ForgetListener callRecordsForget(CallRecordStore store) {
+        return key -> store.deleteByFarmerKey(key.value());
     }
 
     @Bean

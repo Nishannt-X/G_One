@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,10 +48,21 @@ public class MemoryController {
 
     private final MemoryStore store;
     private final MemoryProperties props;
+    private final List<ForgetListener> forgetListeners;
 
     public MemoryController(MemoryStore store, MemoryProperties props) {
+        this(store, props, List.of());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryController(MemoryStore store, MemoryProperties props, ObjectProvider<ForgetListener> listeners) {
+        this(store, props, listeners.orderedStream().toList());
+    }
+
+    MemoryController(MemoryStore store, MemoryProperties props, List<ForgetListener> forgetListeners) {
         this.store = store;
         this.props = props;
+        this.forgetListeners = List.copyOf(forgetListeners);
     }
 
     @GetMapping("/api/memory/{callerKey}")
@@ -83,6 +95,7 @@ public class MemoryController {
             return ResponseEntity.badRequest().body(Map.of("error", "bad_caller_key"));
         }
         store.forget(key, CallId.of("console-forget"), System.currentTimeMillis());
+        forgetListeners.forEach(l -> l.forgotten(key));
         return ResponseEntity.noContent().build();
     }
 

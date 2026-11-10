@@ -82,6 +82,8 @@ export type MessageKey =
   | 'memory_nothing_yet'
   | 'memory_last_call'
   | 'memory_open'
+  | 'memory_open_items'
+  | 'memory_open_none'
   | 'meter_title'
   | 'meter_above'
   | 'meter_below'
@@ -225,6 +227,8 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_nothing_yet: 'No prior facts recorded for this caller.',
     memory_last_call: 'Last call: {date}',
     memory_open: 'View memory profile →',
+    memory_open_items: 'Open follow-ups',
+    memory_open_none: 'Nothing open',
     meter_title: 'Price Comparison',
     meter_above: '{pct}% above indicative reference',
     meter_below: '{pct}% below indicative reference',
@@ -365,6 +369,8 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_nothing_yet: 'इस कॉलर के लिए पूर्व जानकारी दर्ज नहीं है।',
     memory_last_call: 'पिछली बातचीत: {date}',
     memory_open: 'प्रोफाइल विवरण देखें →',
+    memory_open_items: 'बाकी काम',
+    memory_open_none: 'कुछ बाकी नहीं',
     meter_title: 'भाव तुलना',
     meter_above: 'संदर्भ भाव से {pct}% अधिक',
     meter_below: 'संदर्भ भाव से {pct}% कम',

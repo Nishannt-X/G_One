@@ -1,6 +1,7 @@
 package com.example.g_one.simulator;
 
 import com.example.g_one.core.CallerKey;
+import com.example.g_one.memory.MemoryProperties;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
@@ -13,6 +14,9 @@ import org.springframework.stereotype.Component;
  * The synthetic phone numbers a simulator caller may pick, so that memory works across calls (same number, same
  * {@link CallerKey}) without ever taking a real number. Any other number is refused. Choosing no number is a withheld
  * caller ID: memory is off for that call.
+ *
+ * <p>Key order: {@code G_ONE_MEMORY_HMAC_KEY} when set (decoded exactly as the memory module decodes it, so simulator
+ * Caller A gets the same key as the seeded demo farmer), else {@code g-one.simulator.caller-salt}, else the dev salt.
  */
 @Component
 public class SimulatorCallers {
@@ -32,10 +36,21 @@ public class SimulatorCallers {
 
     private final byte[] salt;
 
-    /** @param salt the secret for hashing numbers (property {@code g-one.simulator.caller-salt}); blank uses a dev salt */
-    public SimulatorCallers(@Value("${g-one.simulator.caller-salt:}") String salt) {
-        if (salt.isBlank()) {
-            log.warn("No caller salt configured; simulator callers use the built-in dev salt");
+    /**
+     * @param hmacKey base64 memory HMAC key (property {@code g-one.memory.hmac-key}); wins when set
+     * @param salt the secret for hashing numbers (property {@code g-one.simulator.caller-salt}); used when no HMAC key
+     *     is set; blank as well uses a dev salt
+     */
+    public SimulatorCallers(
+            @Value("${g-one.memory.hmac-key:}") String hmacKey, @Value("${g-one.simulator.caller-salt:}") String salt) {
+        Optional<byte[]> memorySalt = new MemoryProperties(null, null, hmacKey, null, null).salt();
+        if (memorySalt.isPresent()) {
+            if (!salt.isBlank()) {
+                log.warn("Both G_ONE_MEMORY_HMAC_KEY and a simulator caller salt are set; using the memory key");
+            }
+            this.salt = memorySalt.get();
+        } else if (salt.isBlank()) {
+            log.warn("No memory HMAC key or caller salt configured; simulator callers use the built-in dev salt");
             this.salt = DEV_SALT.getBytes(StandardCharsets.UTF_8);
         } else {
             this.salt = salt.getBytes(StandardCharsets.UTF_8);

@@ -12,6 +12,7 @@ import SpeechCredit from './SpeechCredit'
 import Timeline from './Timeline'
 import { creditMode } from './creditMode'
 import { usePhoneJoin } from './phoneJoin'
+import { useSavedGist } from './savedGist'
 
 function Intro() {
   return (
@@ -46,6 +47,8 @@ export default function CallPage({ feed, status, lan }: Props) {
   // Follow this tab's call while it runs; otherwise the newest live call.
   const ownCallId = onCall ? farmer.state.callId : null
   const call = pickCall(live, ownCallId)
+  // After hang-up, whether this call's summary reached the farmer's memory.
+  const saved = useSavedGist(call)
 
   const buyerCallId = ownCallId ?? (call && !call.ended ? call.callId : '')
   const buyerReady = Boolean(buyerCallId)
@@ -83,12 +86,12 @@ export default function CallPage({ feed, status, lan }: Props) {
           <section aria-label="Conversation" className="card flex h-[34rem] min-w-0 flex-col overflow-hidden lg:h-[clamp(30rem,calc(100dvh-24rem),44rem)]">
             <CallBar call={call} />
             <SpeechCredit mode={creditMode(false, call?.origin ?? null)} />
-            <Timeline call={call} empty={<Intro />} />
+            <Timeline call={call} saved={saved} empty={<Intro />} />
           </section>
         </div>
 
         <div className="min-w-0 space-y-5">
-          <DealPanel call={call} compact />
+          <DealPanel call={call} compact saved={saved} />
           <section aria-labelledby="buyer-box" className="card p-4">
             {showPhoneCard ? (
               <details open className="group">

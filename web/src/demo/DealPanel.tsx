@@ -3,6 +3,8 @@ import { humanize, rupees, shortDate } from '../lib/format'
 import { dealValue, meterPosition, METER_RANGE_PCT, priceCheck } from '../lib/pricing'
 import type { DealState } from '../types/console'
 import { CheckIcon, CrossIcon } from '../ui/icons'
+import MemoryPanel from './MemoryPanel'
+import type { SavedGist } from './savedGist'
 
 const STEPS: { state: DealState; label: string }[] = [
   { state: 'draft', label: 'Draft' },
@@ -104,8 +106,11 @@ function PriceLine({ call }: { call: CallView | null }) {
   )
 }
 
-/** The deal as it stands. Every slot is there from the start, so nothing moves while the terms fill in. */
-export default function DealPanel({ call, compact = false }: { call: CallView | null; compact?: boolean }) {
+/**
+ * The deal as it stands. Every slot is there from the start, so nothing moves while the terms fill in. The compact
+ * form, for the working call page, shows the price check as one line and the live memory panel with its saved note.
+ */
+export default function DealPanel({ call, compact = false, saved = null }: { call: CallView | null; compact?: boolean; saved?: SavedGist | null }) {
   const deal = call?.deal ?? null
   const closed = deal?.state === 'closed'
   const reached = deal ? STEPS.findIndex((s) => s.state === deal.state) : -1
@@ -140,7 +145,7 @@ export default function DealPanel({ call, compact = false }: { call: CallView | 
         A record of what was said on the call, not a contract.
         {agreed && call?.origin === 'feed' && <> <a className="font-semibold text-brand underline" href={`/api/deals/${encodeURIComponent(call.callId)}/receipt.html`} target="_blank" rel="noreferrer">Open the receipt</a></>}
       </p>
-      {compact ? <PriceLine call={call} /> : <><Meter call={call} /><Remembered call={call} /></>}
+      {compact ? <><PriceLine call={call} /><MemoryPanel call={call} saved={saved} /></> : <><Meter call={call} /><Remembered call={call} /></>}
     </aside>
   )
 }

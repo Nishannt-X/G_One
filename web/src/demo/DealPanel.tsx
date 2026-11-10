@@ -1,6 +1,6 @@
 import type { CallView } from '../lib/callState'
 import { humanize, rupees, shortDate } from '../lib/format'
-import { comparePrice, dealValue, latestReference, meterPosition, METER_RANGE_PCT } from '../lib/pricing'
+import { dealValue, meterPosition, METER_RANGE_PCT, priceCheck } from '../lib/pricing'
 import type { DealState } from '../types/console'
 import { CheckIcon, CrossIcon } from '../ui/icons'
 
@@ -11,31 +11,26 @@ const STEPS: { state: DealState; label: string }[] = [
   { state: 'agreed', label: 'Agreed' },
 ]
 
-function Term({ label, value, wide }: { label: string; value: string | null; wide?: boolean }) {
+function Term({ label, value, wide, compact }: { label: string; value: string | null; wide?: boolean; compact?: boolean }) {
   return (
-    <div className={`min-w-0 rounded-xl bg-sunk px-3 py-2 ${wide ? 'col-span-2' : ''}`}>
-      <dt className="text-sm font-medium text-muted">{label}</dt>
-      <dd key={value ?? ''} title={value ?? undefined} className={`-mx-1 truncate rounded px-1 text-xl leading-snug font-semibold ${value ? 'animate-fill' : 'text-faint'}`}>{value ?? '—'}</dd>
+    <div className={`min-w-0 rounded-xl bg-sunk ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} ${wide ? 'col-span-2' : ''}`}>
+      <dt className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-muted`}>{label}</dt>
+      <dd key={value ?? ''} title={value ?? undefined} className={`-mx-1 truncate rounded px-1 ${compact ? 'text-base' : 'text-xl'} leading-snug font-semibold ${value ? 'animate-fill' : 'text-faint'}`}>{value ?? '—'}</dd>
     </div>
   )
 }
 
-function Yes({ who, yes, tone }: { who: string; yes: boolean; tone: string }) {
+function Yes({ who, yes, tone, compact }: { who: string; yes: boolean; tone: string; compact?: boolean }) {
   return (
-    <p className={`flex min-w-0 items-center gap-1.5 rounded-xl border px-2.5 py-2 text-base font-semibold transition-colors duration-300 ${yes ? `border-transparent ${tone}` : 'border-line text-muted'}`}>
+    <p className={`flex min-w-0 items-center gap-1.5 rounded-xl border px-2.5 font-semibold transition-colors duration-300 ${compact ? 'py-1.5 text-sm' : 'py-2 text-base'} ${yes ? `border-transparent ${tone}` : 'border-line text-muted'}`}>
       {yes ? <CheckIcon /> : <span aria-hidden="true" className="inline-block h-[1.25em] w-[1.25em] shrink-0 rounded-full border-2 border-dashed border-current" />}
-      <span className="truncate">{who}: {yes ? 'yes' : 'not yet'}</span>
+      <span className="truncate">{who}{compact ? (yes ? ' said yes' : <span className="sr-only">: not yet</span>) : `: ${yes ? 'yes' : 'not yet'}`}</span>
     </p>
   )
 }
 
 function Meter({ call }: { call: CallView | null }) {
-  const deal = call?.deal ?? null
-  const reference = call ? latestReference(call.tools, deal?.commodity ?? null) : null
-  const comparison = comparePrice(deal?.price ?? null, deal?.unit ?? null, reference)
-  const delta = comparison?.deltaPct ?? 0
-  const near = Math.abs(delta) < 0.5
-  const verdict = comparison ? (near ? 'In line with the dated reference' : `${Math.abs(delta).toFixed(1)}% ${delta > 0 ? 'above' : 'below'} the dated reference`) : null
+  const { reference, comparison, delta, verdict } = priceCheck(call)
   return (
     <section aria-label="Price check" className="border-t border-line pt-4">
       <h3 className="font-semibold">Price check</h3>
@@ -97,17 +92,29 @@ function Remembered({ call }: { call: CallView | null }) {
   )
 }
 
+/** The price check as one quiet line, for the working call page. */
+function PriceLine({ call }: { call: CallView | null }) {
+  const { reference, comparison, verdict } = priceCheck(call)
+  if (!comparison || !reference) return null
+  return (
+    <p className="border-t border-line pt-3 text-sm leading-snug">
+      <span className="font-semibold">Price check: {verdict}.</span>{' '}
+      <span className="text-muted">Offer {rupees(comparison.offerPerQuintal)} vs {rupees(comparison.referencePerQuintal)} a quintal{reference.date ? `, dated ${reference.date}` : ''}. Not today's price.</span>
+    </p>
+  )
+}
+
 /** The deal as it stands. Every slot is there from the start, so nothing moves while the terms fill in. */
-export default function DealPanel({ call }: { call: CallView | null }) {
+export default function DealPanel({ call, compact = false }: { call: CallView | null; compact?: boolean }) {
   const deal = call?.deal ?? null
   const closed = deal?.state === 'closed'
   const reached = deal ? STEPS.findIndex((s) => s.state === deal.state) : -1
   const total = deal ? dealValue(deal.quantity, deal.price, deal.unit) : null
   const agreed = deal?.state === 'agreed'
   return (
-    <aside aria-label="Deal" className="card flex flex-col gap-4 p-4 lg:h-full lg:overflow-y-auto">
+    <aside aria-label="Deal" className={`card flex flex-col p-4 ${compact ? 'gap-3' : 'gap-4 lg:h-full lg:overflow-y-auto'}`}>
       <header className="flex items-center justify-between gap-2">
-        <h2 className="text-2xl font-semibold">The deal</h2>
+        <h2 className={compact ? 'text-lg font-semibold' : 'text-2xl font-semibold'}>The deal</h2>
         {agreed ? <span className="chip bg-ok-soft text-ok"><CheckIcon /> Agreed</span> : closed ? <span className="chip bg-bad-soft text-bad"><CrossIcon /> Closed</span> : <span className="chip bg-sunk text-muted">{deal ? 'In progress' : 'No deal yet'}</span>}
       </header>
       <ol aria-label="Deal progress" className="grid grid-cols-4 gap-1">
@@ -119,22 +126,21 @@ export default function DealPanel({ call }: { call: CallView | null }) {
         ))}
       </ol>
       <dl className="grid grid-cols-2 gap-2">
-        <Term label="Crop" value={deal ? [deal.variety, deal.commodity].filter(Boolean).join(' ') || null : null} />
-        <Term label="Quantity" value={deal?.quantity ?? null} />
-        <Term label="Price" value={deal?.price != null ? `${rupees(deal.price)}${deal.unit ? ` / ${deal.unit}` : ''}` : null} />
-        <Term label="Total" value={total !== null ? rupees(total) : null} />
-        <Term label="Pickup" value={deal?.pickup ?? null} wide />
+        <Term compact={compact} label="Crop" value={deal ? [deal.variety, deal.commodity].filter(Boolean).join(' ') || null : null} />
+        <Term compact={compact} label="Quantity" value={deal?.quantity ?? null} />
+        <Term compact={compact} label="Price" value={deal?.price != null ? `${rupees(deal.price)}${deal.unit ? ` / ${deal.unit}` : ''}` : null} />
+        <Term compact={compact} label="Total" value={total !== null ? rupees(total) : null} />
+        <Term compact={compact} label="Pickup" value={deal?.pickup ?? null} wide />
       </dl>
       <div className="grid grid-cols-2 gap-2">
-        <Yes who="Farmer" yes={deal?.farmerYes ?? false} tone="bg-farmer-soft text-farmer" />
-        <Yes who="Buyer" yes={deal?.buyerYes ?? false} tone="bg-buyer-soft text-buyer" />
+        <Yes compact={compact} who="Farmer" yes={deal?.farmerYes ?? false} tone="bg-farmer-soft text-farmer" />
+        <Yes compact={compact} who="Buyer" yes={deal?.buyerYes ?? false} tone="bg-buyer-soft text-buyer" />
       </div>
       <p className="-mt-1 text-sm text-faint">
         A record of what was said on the call, not a contract.
         {agreed && call?.origin === 'feed' && <> <a className="font-semibold text-brand underline" href={`/api/deals/${encodeURIComponent(call.callId)}/receipt.html`} target="_blank" rel="noreferrer">Open the receipt</a></>}
       </p>
-      <Meter call={call} />
-      <Remembered call={call} />
+      {compact ? <PriceLine call={call} /> : <><Meter call={call} /><Remembered call={call} /></>}
     </aside>
   )
 }

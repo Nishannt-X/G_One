@@ -3,7 +3,7 @@ import { duration, languageLabel } from '../lib/format'
 import { useNow } from '../lib/useNow'
 import type { FeedStatus } from '../lib/useConsoleFeed'
 import type { LegRole } from '../types/console'
-import { Avatar, Waveform } from './parts'
+import { Avatar } from './parts'
 
 const PHASE_TEXT = (phase: CallPhase): string => {
   switch (phase.kind) {
@@ -37,12 +37,11 @@ function Side({ role, call, now }: { role: LegRole; call: CallView | null; now: 
   const right = role === 'buyer'
   return (
     <div className={`flex min-w-0 flex-1 items-center gap-2.5 ${right ? 'flex-row-reverse text-right' : ''}`}>
-      <span className="hidden sm:block"><Avatar who={role} speaking={speaking} /></span>
+      <span className="hidden sm:block"><Avatar who={role} speaking={speaking} size="sm" /></span>
       <div className="min-w-0">
-        <p className="truncate text-lg leading-tight font-semibold">{name}</p>
-        <p className="truncate text-sm leading-tight text-muted">{leg && <span className="hidden sm:inline">{languageLabel(leg.language)} · </span>}{state}</p>
+        <p className="truncate leading-tight font-semibold">{name}</p>
+        <p className="truncate text-sm leading-tight text-muted">{leg && <>{languageLabel(leg.language)} · </>}{state}</p>
       </div>
-      <Waveform active={speaking} className={`hidden xl:flex ${role === 'farmer' ? 'text-farmer' : 'text-buyer'}`} />
     </div>
   )
 }
@@ -54,10 +53,10 @@ export default function CallBar({ call }: { call: CallView | null }) {
   const phase = call ? callPhase(call, now) : null
   const busy = phase !== null && phase.kind !== 'listening' && phase.kind !== 'ended'
   return (
-    <div className="flex items-center gap-2 border-b border-line px-3 py-2.5 sm:gap-4 sm:px-5">
+    <div className="flex items-center gap-2 border-b border-line bg-page/50 px-3 py-2 sm:gap-4 sm:px-4">
       <Side role="farmer" call={call} now={now} />
-      <div className="flex w-28 shrink-0 flex-col items-center sm:w-52">
-        <span className="flex items-center gap-1.5"><Avatar who="assistant" size="sm" speaking={busy} /><span className="font-semibold">G-One</span></span>
+      <div className="flex w-28 shrink-0 flex-col items-center sm:w-48">
+        <span className="flex items-center gap-1.5 text-[0.9375rem]"><Avatar who="assistant" size="sm" speaking={busy} /><span className="font-semibold">G-One</span></span>
         <span aria-live="polite" className="w-full truncate text-center text-xs leading-tight text-muted sm:text-sm">{phase ? PHASE_TEXT(phase) : 'Ready'}</span>
       </div>
       <Side role="buyer" call={call} now={now} />

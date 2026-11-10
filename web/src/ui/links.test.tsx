@@ -44,6 +44,12 @@ describe('Landing page', () => {
     expect(html).toContain('See how it works')
   })
 
+  it('shows the problem in numbers with a source link per figure and the context footnote', () => {
+    expect(hrefs(html).filter((h) => h.startsWith('https://www.pib.gov.in/'))).toHaveLength(6)
+    expect(html).toContain('Context about the problem, not results achieved by G-One. Survey figures are estimates.')
+    expect(html).not.toMatch(/real[- ]time|instant|guarantee|all languages|farmers helped|scams prevented/i)
+  })
+
   it('never links the live call to the old combined page', () => {
     expect(hrefs(html).filter((h) => h.startsWith('#/demo') && h !== '#/demo' && h !== '#/demo?autoplay=1')).toEqual([])
   })

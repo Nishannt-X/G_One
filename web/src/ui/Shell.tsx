@@ -133,16 +133,25 @@ function TopNav({ route }: { route: Route }) {
 
 function Footer() {
   return (
-    <footer className="mt-auto border-t border-line">
-      <div className="shell flex flex-col gap-6 py-10 md:flex-row md:items-start md:justify-between">
-        <div className="max-w-md space-y-2">
+    <footer className="mt-auto border-t border-line bg-surface">
+      <div className="shell grid gap-8 py-10 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] md:gap-10 md:py-12">
+        <div className="max-w-sm space-y-3">
           <Brand />
           <p className="text-muted">A phone-call voice assistant that stands between a farmer and a buyer, and looks out for the farmer.</p>
         </div>
-        <div className="max-w-md space-y-2 text-sm text-muted">
-          <p>Speech by Gnani Prisma and Timbre. Built for the Gnani.ai Great Indian AI Internship Challenge.</p>
-          <p>Every name, number and price in this demo is synthetic. A deal here is a record of what was said on a call, not a contract.</p>
+        <div className="space-y-2 text-sm text-muted">
+          <h2 className="text-sm font-bold tracking-wide text-ink">Credits</h2>
+          <p>Speech: Gnani Prisma (speech to text) and Gnani Timbre (voice).</p>
+          <p>Translation: Sarvam.</p>
         </div>
+        <div className="space-y-2 text-sm text-muted">
+          <h2 className="text-sm font-bold tracking-wide text-ink">About this demo</h2>
+          <p>Synthetic data only. Every name, number and price is made up, and nothing is sent.</p>
+          <p>A deal here is a record of what was said on a call, not a contract.</p>
+        </div>
+      </div>
+      <div className="border-t border-line">
+        <p className="shell py-4 text-sm text-faint">Built for the Gnani.ai Great Indian AI Internship Challenge.</p>
       </div>
     </footer>
   )

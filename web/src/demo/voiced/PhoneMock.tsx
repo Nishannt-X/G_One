@@ -1,10 +1,7 @@
-import { useEffect, useRef } from 'react'
 import type { LegRole } from '../../types/console'
 import { Logo } from '../../ui/icons'
-import type { VoicedState } from './engine'
 import type { Manifest, PhoneMessage } from './manifest'
 import { SAMPLE_RECEIPT_HREF } from './sampleReceipt'
-import { phoneLit } from './sides'
 
 const PHONE_WALL = { farmer: 'phone-wall-farmer', buyer: 'phone-wall-buyer' }
 
@@ -77,8 +74,8 @@ function Chat({ message, disclaimer }: { message: PhoneMessage; disclaimer: stri
 function Caption({ lit }: { lit: boolean }) {
   return (
     <div className="flex h-12 flex-col items-center justify-start gap-0.5 pt-1.5 text-center">
-      <p className="text-[0.6875rem] leading-tight font-semibold text-faint">Simulated — nothing is sent</p>
-      {lit && <a href={SAMPLE_RECEIPT_HREF} target="_blank" rel="noreferrer" title="Opens this sample's own receipt" className="text-xs font-semibold text-brand underline">View Sauda Parchi</a>}
+      <p className="text-xs leading-tight font-semibold text-on-night-muted">Illustrative, nothing is sent</p>
+      {lit && <a href={SAMPLE_RECEIPT_HREF} target="_blank" rel="noreferrer" title="Opens this sample's own receipt" className="text-xs font-semibold text-accent underline">View Sauda Parchi</a>}
     </div>
   )
 }
@@ -100,36 +97,5 @@ export function Phone({ party, manifest, lit }: { party: LegRole; manifest: Mani
       </div>
       <figcaption><Caption lit={lit} /></figcaption>
     </figure>
-  )
-}
-
-/** Desktop: the phone waits in the dock beside the panels and rises into view when its message arrives. */
-export function PhoneRail({ party, manifest, state }: { party: LegRole; manifest: Manifest; state: VoicedState }) {
-  const lit = phoneLit(manifest, state.cursor, party, state.finished)
-  return (
-    <div className="relative hidden border-t border-line bg-page/60 min-[1400px]:block">
-      <div className={`phone-lift absolute inset-x-0 top-2 z-20 flex justify-center ${lit ? 'phone-lifted' : ''}`}>
-        <Phone party={party} manifest={manifest} lit={lit} />
-      </div>
-    </div>
-  )
-}
-
-/** Narrow screens: both phones in a row of their own under the conversation. */
-export function PhoneStrip({ manifest, state, className }: { manifest: Manifest; state: VoicedState; className: string }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const anyLit = phoneLit(manifest, state.cursor, 'farmer', state.finished)
-  useEffect(() => {
-    const node = ref.current
-    if (!anyLit || !node || node.offsetParent === null) return
-    node.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
-  }, [anyLit])
-  return (
-    <div ref={ref} className={className}>
-      <div className="flex justify-center gap-2 py-1 sm:gap-8">
-        <Phone party="farmer" manifest={manifest} lit={anyLit} />
-        <Phone party="buyer" manifest={manifest} lit={phoneLit(manifest, state.cursor, 'buyer', state.finished)} />
-      </div>
-    </div>
   )
 }

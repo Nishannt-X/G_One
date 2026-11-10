@@ -43,7 +43,7 @@ function Console({ route }: { route: Route }) {
       ) : route.view === 'demo' ? (
         <DemoPage autoplay={route.query.get('autoplay') === '1'} />
       ) : route.view === 'call' ? (
-        <CallPage feed={feed} status={status} dispatch={dispatch} lan={route.query.get('lan')} synthetic={route.query.get('synthetic') === '1'} />
+        <CallPage feed={feed} status={status} lan={route.query.get('lan')} />
       ) : route.view === 'farmers' ? (
         <FarmersPage openKey={route.param} seed={route.query.get('seed') === '1'} />
       ) : route.view === 'live' ? (

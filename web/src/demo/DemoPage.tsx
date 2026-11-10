@@ -1,82 +1,63 @@
 import { PlayIcon } from '../ui/icons'
-import CallBar from './CallBar'
+import DealPanel from './DealPanel'
 import SpeechCredit from './SpeechCredit'
-import Stage from './Stage'
-import Timeline from './Timeline'
 import { creditMode } from './creditMode'
-import { SYNTHETIC_CALL_HREF } from './useSyntheticCall'
+import CinemaStage, { StageIntro } from './voiced/CinemaStage'
 import ControlStrip from './voiced/ControlStrip'
-import HearPanels from './voiced/HearPanels'
-import { PhoneRail, PhoneStrip } from './voiced/PhoneMock'
 import { useVoicedSample } from './voiced/useVoicedSample'
-import VoicedCallBar from './voiced/VoicedCallBar'
 import VoicedTimeline from './voiced/VoicedTimeline'
 
 const SAMPLE_LABEL = 'Scripted sample, synthetic voices'
 
-function Intro({ onPlay, busy, label, failed }: { onPlay: () => void; busy: boolean; label: string; failed: boolean }) {
-  return (
-    <div className="flex h-full flex-col items-center justify-center px-4 py-8 text-center">
-      <h2 className="text-3xl leading-tight font-semibold md:text-4xl">Watch a deal cross two languages.</h2>
-      <p className="mt-2 max-w-lg text-lg text-muted">A farmer speaks Kannada with some English. A buyer speaks Bengali with some Hindi. Hear every line, what each side receives, and what G-One whispers to the farmer alone. Sound on. Scripted sample, synthetic voices.</p>
-      <button type="button" className="btn-accent btn-lg mt-5" disabled={busy} onClick={onPlay}><PlayIcon /> {label}</button>
-      <p className="mt-3 text-sm text-faint">
-        {failed ? 'The voices did not load. The synthetic call is a text version with no speech.' : <>Or <a className="font-semibold underline" href="#/call">try a call</a> from this browser.</>}
-      </p>
-    </div>
-  )
-}
-
-/** The recorded sample only: a scripted call voiced ahead of time, with its deal, phones and receipt. */
+/** The recorded sample, staged: a scripted call voiced ahead of time, with its deal, phones and receipt. */
 export default function DemoPage({ autoplay }: { autoplay: boolean }) {
   const { engine, state: voice, view } = useVoicedSample(autoplay)
   const manifest = voice.manifest
   const on = voice.active && manifest !== null
-  const failed = voice.status === 'failed'
-  const loading = voice.status === 'loading'
-  const openSyntheticCall = () => {
-    location.hash = SYNTHETIC_CALL_HREF
-  }
-  const introLabel = failed ? 'Play a synthetic call' : loading ? `Loading voices ${voice.loaded}/${voice.total || '…'}` : 'Play sample conversation'
+  const ready = voice.status === 'ready'
 
   return (
-    <Stage
-      title="Demo"
-      mode={{ text: manifest?.label ?? SAMPLE_LABEL, tone: 'badge-warn' }}
-      actions={
-        <button type="button" className="btn-quiet" disabled={failed || loading || voice.playing} onClick={() => engine.start()}>
-          <PlayIcon /> {voice.playing ? 'Playing…' : on ? 'Play sample again' : 'Play sample'}
-        </button>
-      }
-      dealCall={on ? view : null}
-      aside={on && <PhoneStrip manifest={manifest} state={voice} className="min-w-0 lg:hidden" />}
-      after={on && <PhoneStrip manifest={manifest} state={voice} className="mx-auto hidden max-w-[1560px] px-4 pb-4 lg:max-[1399px]:block" />}
-    >
-      {on ? <VoicedCallBar manifest={manifest} state={voice} /> : <CallBar call={null} />}
-      <SpeechCredit mode={creditMode(on, null)} />
-      {on ? (
+    <div className="mx-auto max-w-[1440px] px-3 py-5 sm:px-6 lg:py-6">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold sm:text-3xl">Demo</h1>
+          <span data-testid="page-mode" className="badge badge-warn">{manifest?.label ?? SAMPLE_LABEL}</span>
+        </div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden min-w-0 sm:block"><SpeechCredit mode={creditMode(on, null)} /></div>
+          {on && (
+            <button type="button" className="btn-quiet hidden sm:inline-flex" disabled={!ready || voice.playing} onClick={() => engine.start()}>
+              <PlayIcon /> {voice.playing ? 'Playing…' : 'Play again'}
+            </button>
+          )}
+        </div>
+      </header>
+
+      <CinemaStage manifest={manifest} state={voice} engine={engine} view={view} intro={<StageIntro state={voice} onPlay={() => engine.start()} onRetry={() => void engine.load()} />} />
+
+      {on && (
         <>
-          <VoicedTimeline manifest={manifest} state={voice} onReplayPhones={() => engine.replayPhones()} />
-          <div className="min-[1400px]:grid min-[1400px]:grid-cols-[11.75rem_minmax(0,1fr)_11.75rem]">
-            <PhoneRail party="farmer" manifest={manifest} state={voice} />
-            <div className="min-w-0">
-              <ControlStrip engine={engine} state={voice} onTextSample={openSyntheticCall} />
-              <HearPanels manifest={manifest} state={voice} />
+          <div className="card mt-3 overflow-hidden [&>div]:border-t-0">
+            <ControlStrip engine={engine} state={voice} />
+          </div>
+          <div className="sm:hidden"><SpeechCredit mode={creditMode(on, null)} /></div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_23.5rem]">
+            <section aria-label="Transcript" className="card flex h-[30rem] min-w-0 flex-col overflow-hidden lg:h-[38rem]">
+              <h2 className="border-b border-line px-4 py-3 text-sm font-bold tracking-wide text-muted sm:px-5">Full transcript</h2>
+              <VoicedTimeline manifest={manifest} state={voice} onReplayPhones={() => engine.replayPhones()} />
+            </section>
+            <div className="min-w-0 lg:h-[38rem]">
+              <DealPanel call={view} />
             </div>
-            <PhoneRail party="buyer" manifest={manifest} state={voice} />
           </div>
         </>
-      ) : (
-        <>
-          <Timeline call={null} empty={<Intro onPlay={failed ? openSyntheticCall : () => engine.start()} busy={loading} label={introLabel} failed={failed} />} />
-          <ControlStrip engine={engine} state={voice} onTextSample={openSyntheticCall} />
-        </>
       )}
+
       {voice.needsTap && (
-        <div className="absolute inset-0 z-30 grid place-items-center bg-page/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-night/70 backdrop-blur-sm">
           <button type="button" className="btn-accent btn-lg" onClick={() => engine.start()}><PlayIcon /> Tap to start with sound</button>
         </div>
       )}
-    </Stage>
+    </div>
   )
 }

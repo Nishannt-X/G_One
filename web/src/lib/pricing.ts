@@ -1,4 +1,4 @@
-import type { ToolView } from './callState'
+import type { CallView, ToolView } from './callState'
 
 /** A dated reference taken from the mandi tool's answer. Never call this today's price or a fair price. */
 export interface PriceReference {
@@ -168,4 +168,15 @@ export const METER_RANGE_PCT = 25
 /** 0..100 along the meter, with anything beyond the range held at the end. */
 export function meterPosition(deltaPct: number): number {
   return Math.min(100, Math.max(0, ((deltaPct + METER_RANGE_PCT) / (2 * METER_RANGE_PCT)) * 100))
+}
+
+/** The offer against the latest dated mandi reference, when both exist. */
+export function priceCheck(call: CallView | null) {
+  const deal = call?.deal ?? null
+  const reference = call ? latestReference(call.tools, deal?.commodity ?? null) : null
+  const comparison = comparePrice(deal?.price ?? null, deal?.unit ?? null, reference)
+  const delta = comparison?.deltaPct ?? 0
+  const near = Math.abs(delta) < 0.5
+  const verdict = comparison ? (near ? 'In line with the dated reference' : `${Math.abs(delta).toFixed(1)}% ${delta > 0 ? 'above' : 'below'} the dated reference`) : null
+  return { reference, comparison, delta, verdict }
 }

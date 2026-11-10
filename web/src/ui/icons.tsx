@@ -40,6 +40,12 @@ export const SkipIcon = (p: IconProps) => <Svg {...p}><path d="M5 5v14l11-7L5 5Z
 export const RestartIcon = (p: IconProps) => <Svg {...p}><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></Svg>
 export const WheatIcon = (p: IconProps) => <Svg {...p}><path d="M12 22V9M12 13c-3 0-5-2-5-5 3 0 5 2 5 5ZM12 13c3 0 5-2 5-5-3 0-5 2-5 5ZM12 19c-3 0-5-2-5-5 3 0 5 2 5 5ZM12 19c3 0 5-2 5-5-3 0-5 2-5 5ZM12 7c-1.5-1.2-1.5-3.3 0-5 1.5 1.7 1.5 3.8 0 5Z" /></Svg>
 
+export const BeakerIcon = (p: IconProps) => <Svg {...p}><path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3M7.5 14h9" /></Svg>
+export const GlobeIcon = (p: IconProps) => <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" /></Svg>
+export const UserCheckIcon = (p: IconProps) => <Svg {...p}><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 11l2 2 4-4" /></Svg>
+export const ExternalIcon = (p: IconProps) => <Svg {...p}><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></Svg>
+export const DoubleCheckIcon = (p: IconProps) => <Svg {...p}><path d="m2 12 5 5L18 6M12 16l1 1L22 8" /></Svg>
+
 /** The G-One mark: two people joined through the assistant in the middle. */
 export function Logo(p: IconProps) {
   return (

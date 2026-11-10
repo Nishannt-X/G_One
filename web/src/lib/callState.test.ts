@@ -138,3 +138,36 @@ describe('normalizeEvent', () => {
     expect(valid?.type).toBe('turn_heard')
   })
 })
+
+describe('pickCall', () => {
+  const start = (state: FeedState, callId: string, atMs: number) => feedReducer(state, { type: 'event', event: { type: 'call_started', callId, atMs, language: 'hi-IN' } })
+  const end = (state: FeedState, callId: string, atMs: number) => feedReducer(state, { type: 'event', event: { type: 'call_ended', callId, atMs, durationMs: 1, reason: 'hangup' } })
+
+  it('keeps following the newest running call after a reconnect resends an older one', () => {
+    let state = start(initialFeed, 'older', 1000)
+    state = start(state, 'newer', 2000)
+    expect(pickCall(state, null)?.callId).toBe('newer')
+    // The console feed reconnects: running calls are dropped, then the server resends them, the older one first or last.
+    state = feedReducer(state, { type: 'reset' })
+    state = start(state, 'newer', 2000)
+    state = start(state, 'older', 1000)
+    expect(state.order).toEqual(['newer', 'older'])
+    expect(pickCall(state, null)?.callId).toBe('newer')
+  })
+
+  it('prefers a running call to a newer finished one, and the newest call when all have ended', () => {
+    let state = start(initialFeed, 'running', 1000)
+    state = start(state, 'done', 2000)
+    state = end(state, 'done', 2500)
+    expect(pickCall(state, null)?.callId).toBe('running')
+    state = end(state, 'running', 3000)
+    expect(pickCall(state, null)?.callId).toBe('done')
+  })
+
+  it('follows a pinned call over everything else', () => {
+    let state = start(initialFeed, 'a', 1000)
+    state = start(state, 'b', 2000)
+    expect(pickCall(state, 'a')?.callId).toBe('a')
+    expect(pickCall(state, 'missing')?.callId).toBe('b')
+  })
+})

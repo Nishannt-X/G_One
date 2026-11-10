@@ -14,7 +14,7 @@ function SoundIcon({ muted }: { muted: boolean }) {
   )
 }
 
-export default function ControlStrip({ engine, state, onTextSample }: { engine: VoicedEngine; state: VoicedState; onTextSample: () => void }) {
+export default function ControlStrip({ engine, state }: { engine: VoicedEngine; state: VoicedState }) {
   const fill = useRef<HTMLDivElement>(null)
   const time = useRef<HTMLSpanElement>(null)
   const { status, plan, playing, active, finished, loaded, total, speed, cursor, needsTap } = state
@@ -32,13 +32,13 @@ export default function ControlStrip({ engine, state, onTextSample }: { engine: 
     engine.seekToFraction(Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)))
   }
   const soundLabel = state.muted ? 'Unmute' : 'Mute'
-  const statusText = failed ? 'Voices did not load. Try the synthetic call.' : !ready ? `Loading voices ${loaded}/${total || '…'}` : 'Audio ready'
+  const statusText = failed ? 'The voices did not load.' : !ready ? `Loading voices ${loaded}/${total || '…'}` : 'Audio ready'
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t sm:gap-x-3 border-line px-3 py-2 sm:px-5">
       <div className="flex items-center gap-1.5">
         {failed ? (
-          <button type="button" className="btn-quiet btn-sm" onClick={onTextSample}><PlayIcon /> Synthetic call</button>
+          <button type="button" className="btn-quiet btn-sm" onClick={() => void engine.load()}><RestartIcon /> Try again</button>
         ) : (
           <button type="button" className="btn-primary btn-sm w-10 px-0 sm:w-11" disabled={!ready} aria-label={playing ? 'Pause' : 'Play'} onClick={() => engine.toggle()}>
             {playing ? <PauseIcon /> : <PlayIcon />}

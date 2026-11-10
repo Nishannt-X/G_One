@@ -116,6 +116,8 @@ describe('a stored call', () => {
     expect(html).toContain('Only the kind and time are stored, never the words.')
     expect(html).toContain('Delete record')
     expect(html).not.toContain('Live Subtitles')
+    expect(html).toContain('Stored leg')
+    expect(html).not.toContain('Waiting to join')
   })
 
   it('explains a farmer side that was not stored', () => {

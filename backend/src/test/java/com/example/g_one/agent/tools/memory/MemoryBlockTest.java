@@ -47,6 +47,19 @@ class MemoryBlockTest {
     }
 
     @Test
+    void anotherSpeakersStoredGistStaysOutOfThePrompt() {
+        List<CallGist> gists = List.of(
+                new CallGist(CallId.of("c-other"), NOW - DAY, NOW - DAY + 60_000,
+                        MemoryBlock.OTHER_SPEAKER_PREFIX + "Someone asked for a cotton buyer.", List.of("Find a cotton buyer")),
+                new CallGist(CallId.of("c-own"), NOW - 2 * DAY, NOW - 2 * DAY + 60_000,
+                        "Suresh asked the red onion price.", List.of("Find a buyer for red onion")));
+        String block = MemoryBlock.render(FarmerMemory.of(FakeLeg.FARMER_KEY, facts(), gists));
+
+        assertThat(block).contains("Suresh asked the red onion price").contains("Find a buyer for red onion")
+                .doesNotContain("cotton").doesNotContain("Other speaker");
+    }
+
+    @Test
     void anOpenFollowUpFromTheOldestGistSurvivesWhenItsSummaryIsDropped() {
         List<CallGist> gists = new ArrayList<>();
         for (int i = 0; i < 4; i++) {

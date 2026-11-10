@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * it picks the tools worth offering and the questions that have a fixed truthful answer. It misses things; a miss only
  * means the model answers instead.
  */
-final class TurnIntent {
+public final class TurnIntent {
     enum Kind { NAME_SOURCE, IDENTITY, REPEAT, GREETING, THANKS, BYE, YES, NO, PRICE, WEATHER, SELL, FORGET }
 
     private static final int SHORT_TURN_WORDS = 7;
@@ -61,6 +61,15 @@ final class TurnIntent {
             "(?iu)(?:मेरा नाम|my name is|mera naam|mera nam|আমার নাম|amar naam|amar nam)\\s+([\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+){0,3})");
     private static final Set<String> NOT_A_NAME = Set.of("है", "हैं", "hai", "hain", "जी", "ji", "বলে", "হল");
     private static final Set<String> QUESTION_WORDS = Set.of("क्या", "क्यों", "kya", "kyun", "what", "কী", "কি", "ki", "kaise", "कैसे");
+    private static final Pattern NAME_QUESTION = Pattern.compile("(?iu)(नाम|\\bname\\b|নাম|\\bnaam\\b)[^.।!]*\\?");
+    private static final Pattern NAME_REQUEST = Pattern.compile(
+            "(?iu)\\b(?:tell|give|share)\\s+(?:me\\s+)?your\\s+name\\b|\\b(?:state|say)\\s+your\\s+name\\b"
+            + "|(?:अपना|आपका|आपके) नाम[^.।!?]*(?:बताइए|बताएं|बताएँ|बताओ)"
+            + "|(?:apna|aapka|aapke) naam[^.?!]*(?:bataye|batayen|batao)"
+            + "|(?:আপনার|তোমার) নাম[^.।!?]*(?:বলুন|বলো)");
+    private static final Set<String> NAME_FILLER = Set.of("मैं", "मै", "main", "mai", "हूँ", "हूं", "hoon", "hun", "hu", "है", "hai", "जी", "ji", "ami");
+    private static final Set<String> NOT_A_SHORT_NAME = Set.of("नहीं", "नही", "nahi", "nahin", "no", "not", "बाद", "baad", "later", "अभी", "abhi", "why", "क्यों", "हाँ", "हां", "yes", "ok", "okay");
+    private static final Pattern NAME_WORD = Pattern.compile("[\\p{L}\\p{M}]+");
     private static final Pattern SPACES = Pattern.compile("\\s+");
     private static final Pattern TRIM = Pattern.compile("^[\\p{P}\\s]+|[\\p{P}\\s]+$");
 
@@ -92,7 +101,7 @@ final class TurnIntent {
     }
 
     /** The name in "मेरा नाम X है", "my name is X" and the like; empty when the turn does not state one. */
-    static Optional<String> statedName(String text) {
+    public static Optional<String> statedName(String text) {
         Matcher m = STATED_NAME.matcher(SPACES.matcher(text == null ? "" : text.strip()).replaceAll(" "));
         if (!m.find()) return Optional.empty();
         List<String> words = new ArrayList<>(List.of(m.group(1).split(" ")));
@@ -100,6 +109,38 @@ final class TurnIntent {
         if (words.isEmpty() || words.size() > 3 || words.stream().anyMatch(w -> QUESTION_WORDS.contains(w.toLowerCase(Locale.ROOT)))) {
             return Optional.empty();
         }
+        return Optional.of(String.join(" ", words));
+    }
+
+    /** True when an assistant line asks the farmer's name, such as "और आपका नाम क्या है?" or "May I know your name?". */
+    public static boolean asksName(String assistantLine) {
+        return assistantLine != null && (NAME_QUESTION.matcher(assistantLine).find() || NAME_REQUEST.matcher(assistantLine).find());
+    }
+
+    /**
+     * A bare answer to a name question: "Ramesh", "रमेश", "Ramesh hai", "main Ramesh", "मैं रमेश हूँ". Use it only right
+     * after the name was asked; empty when the turn is something else (a yes or no, a price or sale request, a refusal,
+     * more than three name words).
+     */
+    public static Optional<String> shortName(String text) {
+        Optional<String> stated = statedName(text);
+        if (stated.isPresent()) return stated;
+        String plain = SPACES.matcher(text == null ? "" : text.strip()).replaceAll(" ");
+        if (plain.isEmpty() || plain.split(" ").length > 6 || unreadable(plain)) return Optional.empty();
+        Set<Kind> intents = of(plain);
+        intents.remove(Kind.GREETING);
+        if (!intents.isEmpty()) return Optional.empty();
+        List<String> words = new ArrayList<>();
+        for (String raw : plain.split(" ")) {
+            String w = TRIM.matcher(raw).replaceAll("");
+            String lower = w.toLowerCase(Locale.ROOT);
+            if (w.isEmpty() || NAME_FILLER.contains(lower)) continue;
+            if (!NAME_WORD.matcher(w).matches() || NOT_A_SHORT_NAME.contains(lower) || QUESTION_WORDS.contains(lower)) {
+                return Optional.empty();
+            }
+            words.add(w);
+        }
+        if (words.isEmpty() || words.size() > 3) return Optional.empty();
         return Optional.of(String.join(" ", words));
     }
 

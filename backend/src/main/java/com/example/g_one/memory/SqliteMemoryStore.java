@@ -1,5 +1,6 @@
 package com.example.g_one.memory;
 
+import com.example.g_one.agent.tools.memory.MemoryBlock;
 import com.example.g_one.core.CallGist;
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.CallerKey;
@@ -371,8 +372,10 @@ public final class SqliteMemoryStore implements MemoryStore, AutoCloseable {
             try (ResultSet rs = ps.executeQuery()) {
                 List<CallGist> out = new ArrayList<>();
                 while (rs.next()) {
-                    out.add(new CallGist(CallId.of(rs.getString("call_id")), rs.getLong("started_ms"),
-                            rs.getLong("ended_ms"), rs.getString("summary"), fromJson(rs.getString("follow_ups"))));
+                    CallGist g = new CallGist(CallId.of(rs.getString("call_id")), rs.getLong("started_ms"),
+                            rs.getLong("ended_ms"), rs.getString("summary"), fromJson(rs.getString("follow_ups")));
+                    // An older build stored other speakers' calls, flagged; they are not the farmer's history.
+                    if (!MemoryBlock.isOtherSpeaker(g)) out.add(g);
                 }
                 // Sorted here, not in SQL, so ties order exactly like the in-memory store (Java string order).
                 out.sort(NEWEST_CALL_FIRST);

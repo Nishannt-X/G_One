@@ -183,6 +183,44 @@ class BrainLadderTest {
     }
 
     @Test
+    void anImperativeNameRequestAcceptsTheNextBareName() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("I can help with that. Please tell me your name.");
+        Reply prompt = f.brain.respond(ctx, List.of(), said(ctx, "How can I sell my crop?"));
+        assertThat(prompt.text()).contains("Please tell me your name.");
+        f.llm.replyText("Thank you, Ramesh.");
+        f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, prompt.text())), said(ctx, "Ramesh"));
+        assertThat(f.toolEvents).anySatisfy(e -> {
+            assertThat(e.tool()).isEqualTo("save_profile_fact");
+            assertThat(e.args().path("value").asText()).isEqualTo("Ramesh");
+        });
+        assertThat(TurnIntent.asksName("I have saved your name.")).isFalse();
+    }
+
+    @Test
+    void aStateYourNameRequestSavesTheNextBareName() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("I can help with your crop. Please state your name.");
+        Reply prompt = f.brain.respond(ctx, List.of(), said(ctx, "How can I sell my crop?"));
+        assertThat(prompt.text()).contains("Please state your name.");
+        f.llm.replyText("Thank you, Ramesh.");
+        f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, prompt.text())), said(ctx, "Ramesh"));
+        assertThat(f.toolEvents).anySatisfy(e -> {
+            assertThat(e.tool()).isEqualTo("save_profile_fact");
+            assertThat(e.args().path("value").asText()).isEqualTo("Ramesh");
+        });
+    }
+
+    @Test
+    void theNameQuestionRemainsAudibleAfterAThreeSentenceBusinessAnswer() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("The buyer purchases onions. Their listed price is available. I can help you call them. May I know your name?");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "I want to sell onions to a buyer"));
+        assertThat(r.text()).contains("The buyer purchases onions.").contains("May I know your name?")
+                .doesNotContain("I can help you call them.");
+    }
+
+    @Test
     void noModelOnASaleSaysItHeardTheSale() {
         CallContext ctx = BrainFixture.newFarmer(ENGLISH);
         f.llm.failures.set(1);
@@ -202,15 +240,19 @@ class BrainLadderTest {
     }
 
     @Test
-    void theModelIsToldItMayAskTheNameOnlyAfterHelpingAndNotDuringBusiness() {
+    void theNameIsAskedAfterTheFirstAnsweredTurnEvenDuringBusiness() {
         CallContext ctx = BrainFixture.newFarmer(HINDI);
         f.llm.replyText("जी।").replyText("जी।").replyText("जी।");
-        f.brain.respond(ctx, List.of(), said(ctx, "खेत की मिट्टी कैसी हो"));
-        assertThat(f.llm.requests().get(0).toString()).doesNotContain("you may ask it once");
         f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
-        assertThat(f.llm.requests().get(1).toString()).doesNotContain("you may ask it once");
-        f.brain.respond(ctx, List.of(), said(ctx, "खेत की मिट्टी कैसी हो"));
-        assertThat(f.llm.requests().get(2).toString()).contains("you may ask it once");
+        assertThat(f.llm.requests().get(0).toString()).as("the first business turn is helped before the name question")
+                .contains(LlmAgentBrain.NAME_ASK);
+        f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
+        assertThat(f.llm.requests().get(1).toString()).contains(LlmAgentBrain.NAME_ASK);
+
+        CallContext chat = BrainFixture.newFarmer(HINDI);
+        f.brain.respond(chat, List.of(), said(chat, "खेत की मिट्टी कैसी हो"));
+        assertThat(f.llm.requests().get(2).toString()).as("a non-business first turn may ask at once")
+                .contains(LlmAgentBrain.NAME_ASK);
     }
 
     @Test

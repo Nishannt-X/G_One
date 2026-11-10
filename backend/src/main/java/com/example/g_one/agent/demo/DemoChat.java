@@ -1,5 +1,7 @@
 package com.example.g_one.agent.demo;
 
+import com.example.g_one.agent.brain.LlmAgentBrain;
+import com.example.g_one.agent.brain.TurnIntent;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.llm.ChatMessage;
@@ -29,6 +31,10 @@ import org.springframework.stereotype.Component;
  * A scripted stand-in for the language model, so the whole demo runs offline. It answers the same prompts through the
  * same code path as a real model: it picks tools by keyword, and it knows the lines in {@link DemoScript}. A line it
  * does not know is passed through untranslated, so the demo never pretends to translate what it cannot.
+ *
+ * <p>Like a real model it asks a first-time caller's name once the system prompt says the name is unknown
+ * ({@link LlmAgentBrain#NAME_ASK}), on a reply that is not itself a question. A name the farmer states is saved by the
+ * brain's own code, so the next call from the same number gets the name check.
  */
 @Component
 @ConditionalOnProperty(name = "g-one.demo.enabled", havingValue = "true")
@@ -56,15 +62,25 @@ public class DemoChat implements ChatClient.Scripted {
         if (system != null && system.startsWith(MEDIATION_PROMPT_START)) return mediation(messages.get(messages.size() - 1));
         ChatMessage last = messages.get(messages.size() - 1);
         boolean hindi = !system.contains("on this call is English");
-        if ("tool".equals(last.role())) return text(afterTool(messages, last, hindi));
+        boolean askName = system.contains(LlmAgentBrain.NAME_ASK);
+        if ("tool".equals(last.role())) return text(afterTool(messages, last, hindi, askName));
         String turn = last.content() == null ? "" : last.content();
         if (DEVANAGARI.matcher(turn).find()) hindi = true;
-        return intake(request, turn, hindi);
+        return intake(request, turn, hindi, askName);
+    }
+
+    /**
+     * The name question after a plain answer, once the brain says the name is unknown. Only after a price or a
+     * declined call: never on top of a yes/no question, a call being placed or a goodbye.
+     */
+    private static String withNameAsk(String text, boolean askName, boolean hindi) {
+        if (!askName || text.isBlank()) return text;
+        return text.strip() + (hindi ? " और आपका नाम क्या है?" : " And may I know your name?");
     }
 
     // ---- the assistant's own conversation ----
 
-    private ChatReply intake(ChatRequest request, String turn, boolean hindi) {
+    private ChatReply intake(ChatRequest request, String turn, boolean hindi, boolean askName) {
         String t = turn.toLowerCase(Locale.ROOT);
         if (offered(request, "confirm_name")) {
             ReplyGuard.Reading r = ReplyGuard.read(turn);
@@ -75,12 +91,29 @@ public class DemoChat implements ChatClient.Scripted {
         if (matches(t, "bhool jao", "भूल जाओ", "forget me") && offered(request, "forget_me")) {
             return tool("forget_me", json.createObjectNode());
         }
+        Optional<String> name = TurnIntent.statedName(turn);
+        if (name.isEmpty() && request.messages().stream().filter(m -> "assistant".equals(m.role()) && m.content() != null)
+                .reduce((a, b) -> b).map(m -> TurnIntent.asksName(m.content())).orElse(false)) {
+            name = TurnIntent.shortName(turn);
+        }
+        if (name.isPresent()) {
+            Optional<Buyer> pendingBuyer = buyerNamedBeforeNameQuestion(request.messages());
+            if (pendingBuyer.isPresent()) {
+                String buyerName = pendingBuyer.get().name();
+                return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। क्या मैं अभी " + buyerName
+                                + " को फ़ोन लगाऊँ?"
+                        : "Thank you, " + name.get() + " ji, I have noted your name. Shall I call " + buyerName + " now?");
+            }
+            return text(hindi ? "धन्यवाद " + name.get() + " जी, आपका नाम नोट कर लिया। प्याज़ का भाव बताऊँ या ख़रीदार ढूँढूँ?"
+                    : "Thank you, " + name.get() + " ji, I have noted your name. Shall I tell you the onion price or find a buyer?");
+        }
         Optional<Buyer> asked = buyerJustOffered(request.messages());
         if (asked.isPresent() && ReplyGuard.isConsent(turn) && offered(request, "connect_buyer")) {
             return tool("connect_buyer", json.createObjectNode().put("buyerId", asked.get().id()));
         }
         if (asked.isPresent()) {
-            return text(hindi ? "ठीक है, अभी फ़ोन नहीं लगाती। और कुछ बताइए।" : "All right, I won't call them now. Anything else?");
+            return text(withNameAsk(hindi ? "ठीक है, अभी फ़ोन नहीं लगाती।" : "All right, I won't call them now.", askName, hindi)
+                    + (askName ? "" : hindi ? " और कुछ बताइए।" : " Anything else?"));
         }
         if (matches(t, "bech", "बेच", "sell", "khareedar", "ख़रीदार", "खरीदार", "buyer") && offered(request, "find_buyers")) {
             ObjectNode args = json.createObjectNode().put("commodity", "onion").put("district", "Nashik");
@@ -94,27 +127,28 @@ public class DemoChat implements ChatClient.Scripted {
         if (matches(t, "bye", "alvida", "अलविदा", "goodbye") && offered(request, "end_call")) {
             return tool("end_call", json.createObjectNode());
         }
-        return text(hindi ? "मैं प्याज़ का भाव बता सकती हूँ या ख़रीदार ढूँढ सकती हूँ। क्या करना है?"
-                : "I can tell you the onion price or find you a buyer. Which would you like?");
+        return text(withNameAsk(hindi ? "मैं प्याज़ का भाव बता सकती हूँ या ख़रीदार ढूँढ सकती हूँ। क्या करना है?"
+                : "I can tell you the onion price or find you a buyer. Which would you like?", askName, hindi));
     }
 
-    private String afterTool(List<ChatMessage> messages, ChatMessage last, boolean hindi) {
+    private String afterTool(List<ChatMessage> messages, ChatMessage last, boolean hindi, boolean askName) {
         String tool = toolNameFor(messages, last.toolCallId());
         String result = last.content();
         return switch (tool) {
-            case "find_buyers" -> buyersLine(result, hindi);
+            case "find_buyers" -> askName ? withNameAsk(buyersLine(result, hindi, true), true, hindi) : buyersLine(result, hindi, false);
             case "connect_buyer" -> result.startsWith("Calling")
                     ? (hindi ? "फ़ोन लगा रही हूँ। लाइन पर बने रहिए।" : "Calling them now. Please stay on the line.")
                     : (hindi ? "माफ़ कीजिए, फ़ोन नहीं लगा पाई।" : "Sorry, I could not place that call.");
             case "confirm_name" -> hindi ? "धन्यवाद। बताइए, आज क्या बेचना है?" : "Thank you. What would you like to sell today?";
             case "forget_me" -> result.contains("exactly:") ? result.substring(result.indexOf("exactly:") + 8).strip() : result;
             case "end_call" -> hindi ? "धन्यवाद। नमस्ते।" : "Thank you. Goodbye.";
-            case "save_profile_fact" -> hindi ? "ठीक है, मैंने नोट कर लिया।" : "All right, I have noted that.";
-            default -> result;
+            case "save_profile_fact" -> withNameAsk(hindi ? "ठीक है, मैंने नोट कर लिया।" : "All right, I have noted that.", askName, hindi);
+            case "get_mandi_price" -> withNameAsk(result, askName, hindi);
+            default -> withNameAsk(result, askName, hindi);
         };
     }
 
-    private String buyersLine(String result, boolean hindi) {
+    private String buyersLine(String result, boolean hindi, boolean nameFirst) {
         try {
             JsonNode buyers = json.readTree(result).path("buyers");
             if (!buyers.isArray() || buyers.isEmpty()) return hindi ? "सूची में अभी कोई ख़रीदार नहीं है।" : "The directory has no buyer for that.";
@@ -122,6 +156,11 @@ public class DemoChat implements ChatClient.Scripted {
             String name = first.path("name").asText();
             String place = first.path("place").asText();
             String range = first.path("listedRange").asText();
+            if (nameFirst) {
+                return hindi ? place + " के " + name + " प्याज़ ख़रीदते हैं, हमारी सूची में उनका भाव "
+                        + hindiRange(first.path("buyerId").asText()) + " रुपये प्रति क्विंटल लिखा है।"
+                        : name + " in " + place + " buy onions, listed at " + range + ".";
+            }
             return hindi
                     ? place + " के " + name + " प्याज़ ख़रीदते हैं। हमारी सूची में उनका भाव " + hindiRange(first.path("buyerId").asText())
                             + " रुपये प्रति क्विंटल लिखा है। क्या मैं अभी " + name
@@ -147,6 +186,17 @@ public class DemoChat implements ChatClient.Scripted {
             String said = m.content();
             if (!said.contains("फ़ोन लगाऊँ") && !said.contains("Shall I call")) return Optional.empty();
             return directory.all().stream().filter(b -> said.contains(b.name())).findFirst();
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Buyer> buyerNamedBeforeNameQuestion(List<ChatMessage> messages) {
+        for (int i = messages.size() - 2; i >= 0; i--) {
+            ChatMessage m = messages.get(i);
+            if (!"assistant".equals(m.role()) || m.content() == null) continue;
+            return TurnIntent.asksName(m.content())
+                    ? directory.all().stream().filter(b -> m.content().contains(b.name())).findFirst()
+                    : Optional.empty();
         }
         return Optional.empty();
     }

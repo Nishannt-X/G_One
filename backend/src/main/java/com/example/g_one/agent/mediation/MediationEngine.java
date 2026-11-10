@@ -1,5 +1,6 @@
 package com.example.g_one.agent.mediation;
 
+import com.example.g_one.agent.closing.CallClosing;
 import com.example.g_one.agent.AgentBrain.Speaker;
 import com.example.g_one.agent.tools.buyers.BuyerConsent;
 import com.example.g_one.agent.tools.mandi.MandiCatalog;
@@ -37,6 +38,9 @@ public class MediationEngine {
 
         /** Records how the sale ended, for the gist. */
         void outcome(String outcome, String dealSummary);
+
+        /** The call's end-of-call check, shared with the farmer leg: who is asked, and what each party answered. */
+        CallClosing closing();
     }
 
     private final TurnReader reader;

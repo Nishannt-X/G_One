@@ -241,7 +241,7 @@ class CallPipelineTest {
     void bargeInDuringTheGoodbyeDropsItAndCancelsTheHangUp() {
         FakeLeg leg = join(FakeLeg.farmer(callId));
         leg.finishPlayback();
-        session().say("bye");
+        session().say("end now");
         executor.runAll();
         assertThat(leg.unheardFrames()).isPositive();
 
@@ -255,7 +255,7 @@ class CallPipelineTest {
         executor.runAll();
         leg.finishPlayback();
 
-        assertThat(spoken()).containsExactly(GREETING, replyTo("bye"), replyTo("ek aur baat"));
+        assertThat(spoken()).containsExactly(GREETING, replyTo("end now"), replyTo("ek aur baat"));
         assertThat(leg.isEnded()).isFalse();
     }
 
@@ -379,14 +379,106 @@ class CallPipelineTest {
 
     // ---- ending ----
 
+    // ---- the end-of-call check (decided by code, not the brain) ----
+
+    private List<String> consents() {
+        return eventsOf(ConsoleEvent.ConsentRecorded.class).stream().map(e -> e.role() + "=" + e.consent()).toList();
+    }
+
+    @Test
+    void byeAsksToEndThenToRememberThenSaysGoodbyeAndHangsUp() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+
+        session().say("bye");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(com.example.g_one.agent.closing.ClosingLines.ask(
+                com.example.g_one.agent.closing.CallClosing.Question.END, code));
+        leg.finishPlayback();
+        session().say("yes");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(com.example.g_one.agent.closing.ClosingLines.ask(
+                com.example.g_one.agent.closing.CallClosing.Question.SAVE, code));
+        leg.finishPlayback();
+        session().say("no");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(com.example.g_one.agent.closing.ClosingLines.goodbye(code));
+        assertThat(spoken()).noneMatch(t -> t.startsWith("reply to"));
+        leg.finishPlayback();
+
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(leg.hungUpByUs()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=NO", "BUYER=NONE");
+        assertThat(events.indexOf(eventsOf(ConsoleEvent.ConsentRecorded.class).get(1)))
+                .isLessThan(events.indexOf(eventsOf(ConsoleEvent.CallEnded.class).get(0)));
+    }
+
+    @Test
+    void aYesToRememberingIsRecordedAsYes() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        for (String said : List.of("that's all", "haan", "haan")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=YES", "BUYER=NONE");
+    }
+
+    @Test
+    void aNoToEndingCarriesOnAndTheNextByeWithinThreeTurnsGoesToTheBrain() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        session().say("bye");
+        executor.runAll();
+        leg.finishPlayback();
+        session().say("no");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(com.example.g_one.agent.closing.ClosingLines.carryOn(code));
+        leg.finishPlayback();
+        session().say("bye");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(replyTo("bye"));
+        assertThat(leg.isEnded()).isFalse();
+    }
+
+    @Test
+    void aHangUpWithoutAnAnswerStoresNoConsent() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        session().say("bye");
+        executor.runAll();
+        leg.finishPlayback();
+        session().say("yes");
+        executor.runAll();
+        leg.remoteHangup();
+        executor.runAll();
+        assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
+    }
+
+    @Test
+    void anOrdinaryCallEndsWithNoConsentForEitherParty() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        session().say("pyaaz ka bhav");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(replyTo("pyaaz ka bhav"));
+        leg.remoteHangup();
+        executor.runAll();
+        assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
+    }
+
     @Test
     void endCallHangsUpOnlyAfterTheGoodbyeWasHeard() {
         FakeLeg leg = join(FakeLeg.farmer(callId));
         leg.finishPlayback();
 
-        session().say("bye");
+        session().say("end now");
         executor.runAll();
-        assertThat(spoken()).last().isEqualTo(replyTo("bye"));
+        assertThat(spoken()).last().isEqualTo(replyTo("end now"));
         assertThat(leg.isEnded()).as("still playing the goodbye").isFalse();
 
         leg.finishPlayback();
@@ -600,7 +692,7 @@ class CallPipelineTest {
     @Test
     void speechSynthesisFailureStillEndsTheCallWhenAsked() {
         TextToSpeech failsOnGoodbye = (text, language, rate, sink) -> {
-            if (text.equals(replyTo("bye"))) {
+            if (text.equals(replyTo("end now"))) {
                 throw new IllegalStateException("TTS down (test)");
             }
             return tts.speak(text, language, rate, sink);
@@ -609,7 +701,7 @@ class CallPipelineTest {
         FakeLeg leg = join(r, FakeLeg.farmer(callId));
         leg.finishPlayback();
 
-        session().say("bye");
+        session().say("end now");
         executor.runAll();
 
         assertThat(leg.isEnded()).isTrue();

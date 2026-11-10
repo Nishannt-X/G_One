@@ -121,8 +121,9 @@ public sealed interface ConsoleEvent {
             implements ConsoleEvent {}
 
     /**
-     * What one party answered when asked whether G-One may remember this call. {@code consent} is "YES", "NO" or "NONE"
-     * (not asked, silence or hang-up). Sent once per role, before {@link CallEnded}.
+     * What one party said when asked, before the call ended, whether G-One may remember the main points of the call.
+     * Sent once per leg role ({@code FARMER}, {@code BUYER}) right before {@link CallEnded}. {@code consent} is "YES",
+     * "NO" or "NONE" (not asked, no clear answer, silence, or hung up first; never stored).
      */
     record ConsentRecorded(CallId callId, LegRole role, String consent, long atMs) implements ConsoleEvent {}
 

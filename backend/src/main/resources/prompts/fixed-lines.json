@@ -1,6 +1,6 @@
 {
-  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). No line tells the caller about memory or forget me; whether to remember a call is asked at its end. howCanIHelp follows the language confirmation for a new or withheld caller so the line is never silent. Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words.",
-  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack and howCanIHelp lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
+  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). No line tells the caller about memory or forget me; whether to remember a call is asked at its end. howCanIHelp follows the language confirmation for a new or withheld caller so the line is never silent. Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words. askEnd, askSave and carryOn are the end-of-call check (agent/closing): asked of every party still on the call, each answered with yes or no; askSave says main points, never a recording.",
+  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack and howCanIHelp, askEnd, askSave and carryOn lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
   "lines": {
     "hi-IN": {
       "welcome": "नमस्ते, जी-वन में आपका स्वागत है। मैं एक AI सहायक हूँ।",
@@ -8,7 +8,10 @@
       "withheld": "आपका नंबर नहीं दिख रहा, इसलिए यह बातचीत याद नहीं रख पाऊँगी।",
       "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
       "forgotten": "ठीक है, मैंने आपकी जानकारी मिटा दी है।",
-      "goodbye": "धन्यवाद। नमस्ते।"
+      "goodbye": "धन्यवाद। नमस्ते।",
+      "askEnd": "क्या आप कॉल ख़त्म करना चाहेंगे? कृपया हाँ या ना कहिए।",
+      "askSave": "क्या हम आगे के लिए इस बातचीत की मुख्य बातें याद रख सकते हैं? कृपया हाँ या ना कहिए।",
+      "carryOn": "ठीक है, बात जारी रखते हैं। और क्या मदद करूँ?"
     },
     "en-IN": {
       "welcome": "Welcome to G-One. I'm an AI assistant.",
@@ -16,7 +19,10 @@
       "withheld": "I can't see your number, so I won't remember this call.",
       "nameCheck": "Hello, this is G-One. Am I speaking with {name} ji?",
       "forgotten": "Done, I've deleted what I had about you.",
-      "goodbye": "Thank you. Goodbye."
+      "goodbye": "Thank you. Goodbye.",
+      "askEnd": "Would you like to end the call? Please say yes or no.",
+      "askSave": "Is it okay for us to remember the main points of this conversation for future reference? Please say yes or no.",
+      "carryOn": "Okay, let's continue. How else can I help?"
     },
     "hi-en": {
       "welcome": "नमस्ते, जी-वन में आपका welcome है। मैं एक AI assistant हूँ।",
@@ -24,7 +30,10 @@
       "withheld": "आपका number नहीं दिख रहा, इसलिए यह call याद नहीं रख पाऊँगी।",
       "nameCheck": "नमस्ते, जी-वन बोल रही हूँ। क्या मैं {name} जी से बात कर रही हूँ?",
       "forgotten": "ठीक है, मैंने आपकी जानकारी delete कर दी है।",
-      "goodbye": "Thank you. नमस्ते।"
+      "goodbye": "Thank you. नमस्ते।",
+      "askEnd": "क्या आप call end करना चाहेंगे? Please हाँ या ना कहिए।",
+      "askSave": "क्या हम future reference के लिए इस बातचीत की main बातें याद रख सकते हैं? Please हाँ या ना कहिए।",
+      "carryOn": "ठीक है, continue करते हैं। और क्या help करूँ?"
     },
     "bn-IN": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে স্বাগত। আমি একজন এআই সহায়ক।",
@@ -32,7 +41,10 @@
       "withheld": "আপনার নম্বর দেখা যাচ্ছে না, তাই এই কথাবার্তা মনে রাখতে পারব না।",
       "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
       "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা রেখেছিলাম, মুছে দিয়েছি।",
-      "goodbye": "ধন্যবাদ। নমস্কার।"
+      "goodbye": "ধন্যবাদ। নমস্কার।",
+      "askEnd": "আপনি কি কলটা শেষ করতে চান? দয়া করে হ্যাঁ বা না বলুন।",
+      "askSave": "ভবিষ্যতের জন্য আমরা কি এই কথাবার্তার মূল কথাগুলো মনে রাখতে পারি? দয়া করে হ্যাঁ বা না বলুন।",
+      "carryOn": "ঠিক আছে, কথা চালিয়ে যাই। আর কী সাহায্য করব?"
     },
     "bn-en": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে welcome। আমি একটা AI assistant।",
@@ -40,7 +52,10 @@
       "withheld": "আপনার number দেখা যাচ্ছে না, তাই এই call মনে রাখতে পারব না।",
       "nameCheck": "নমস্কার, জি-ওয়ান বলছি। আপনি কি {name} বলছেন?",
       "forgotten": "ঠিক আছে, আপনার সম্পর্কে যা ছিল, delete করে দিয়েছি।",
-      "goodbye": "Thank you। নমস্কার।"
+      "goodbye": "Thank you। নমস্কার।",
+      "askEnd": "আপনি কি call-টা end করতে চান? Please হ্যাঁ বা না বলুন।",
+      "askSave": "Future reference-এর জন্য আমরা কি এই কথাবার্তার main কথাগুলো মনে রাখতে পারি? Please হ্যাঁ বা না বলুন।",
+      "carryOn": "ঠিক আছে, continue করি। আর কী help করব?"
     },
     "ta-IN": {
       "welcome": "வணக்கம், ஜி-ஒன் உங்களை வரவேற்கிறது. நான் ஒரு AI உதவியாளர்.",
@@ -48,7 +63,10 @@
       "withheld": "உங்கள் எண் தெரியவில்லை, அதனால் இந்த அழைப்பை நினைவில் வைத்துக்கொள்ள மாட்டேன்.",
       "nameCheck": "வணக்கம், ஜி-ஒன் பேசுகிறேன். நீங்கள் {name} அவர்களா?",
       "forgotten": "சரி, உங்களைப் பற்றி வைத்திருந்த தகவலை அழித்துவிட்டேன்.",
-      "goodbye": "நன்றி. வணக்கம்."
+      "goodbye": "நன்றி. வணக்கம்.",
+      "askEnd": "அழைப்பை முடிக்க விரும்புகிறீர்களா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்.",
+      "askSave": "எதிர்காலத்துக்காக இந்த உரையாடலின் முக்கிய விஷயங்களை நாங்கள் நினைவில் வைத்துக்கொள்ளலாமா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்.",
+      "carryOn": "சரி, தொடரலாம். வேறு என்ன உதவி வேண்டும்?"
     },
     "kn-IN": {
       "welcome": "ನಮಸ್ಕಾರ, ಇದು ಜಿ-ಒನ್. ನಿಮಗೆ ಸ್ವಾಗತ. ನಾನು ಒಬ್ಬ AI ಸಹಾಯಕಿ.",
@@ -56,7 +74,10 @@
       "withheld": "ನಿಮ್ಮ ನಂಬರ್ ಕಾಣುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ಈ ಕರೆಯನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳುವುದಿಲ್ಲ.",
       "nameCheck": "ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು {name} ಅವರೇ?",
       "forgotten": "ಸರಿ, ನಿಮ್ಮ ಬಗ್ಗೆ ಇಟ್ಟಿದ್ದ ಮಾಹಿತಿಯನ್ನು ಅಳಿಸಿದ್ದೇನೆ.",
-      "goodbye": "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ."
+      "goodbye": "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.",
+      "askEnd": "ಕರೆಯನ್ನು ಮುಗಿಸಲು ಬಯಸುತ್ತೀರಾ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
+      "askSave": "ಮುಂದಿನ ಉಪಯೋಗಕ್ಕಾಗಿ ಈ ಮಾತುಕತೆಯ ಮುಖ್ಯ ಅಂಶಗಳನ್ನು ನಾವು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
+      "carryOn": "ಸರಿ, ಮುಂದುವರಿಯೋಣ. ಬೇರೆ ಏನು ಸಹಾಯ ಬೇಕು?"
     }
   },
   "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. openLong: an open item too long to read back whole (WelcomeBack.MAX_ITEM_CHARS), mentioned without its words, never cut. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",

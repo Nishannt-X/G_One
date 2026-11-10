@@ -29,6 +29,8 @@ final class ScriptedBrain implements AgentBrain {
     volatile Language replyIn;
     /** Runs inside {@link #respond} before it returns, with the turn text. */
     volatile Consumer<String> whileThinking = text -> {};
+    /** When set, every reply says exactly this instead of "reply to x". */
+    volatile String replyText;
 
     static String replyTo(String turn) {
         return "reply to " + turn;
@@ -52,6 +54,6 @@ final class ScriptedBrain implements AgentBrain {
             throw new IllegalStateException("brain down (test)");
         }
         Language language = replyIn != null ? replyIn : latest.text().equals(SWITCH_TO_ENGLISH) ? FakeLeg.ENGLISH : ctx.language();
-        return new Reply(replyTo(latest.text()), language, latest.text().equals("bye"));
+        return new Reply(replyText != null ? replyText : replyTo(latest.text()), language, latest.text().equals("bye"));
     }
 }

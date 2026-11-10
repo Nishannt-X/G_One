@@ -311,4 +311,106 @@ class ChatClientTest {
         assertThatThrownBy(() -> client(5).complete(SMALL)).isInstanceOf(ChatException.class);
         assertThat(requests).hasSize(1);
     }
+
+    // ---- model thinking (issue #5) ----
+
+    private static final String GROQ = "https://api.groq.com/openai/v1";
+
+    /** The wire body for {@code model} at {@code base}; building it makes no network call. */
+    private static JsonNode bodyFor(String base, String model, String effort) {
+        return new ChatClient(new GOneProperties(List.of("a:A:v", "b:B:v"), "", null, null,
+                new GOneProperties.Llm(base, KEY, model, 5, effort)), JSON).body(SMALL);
+    }
+
+    @Test
+    void qwenOnGroqIsAlwaysAskedForNoThinkingEvenWithAnEmptyConfig() {
+        for (String effort : new String[] {"", "high", null}) {
+            JsonNode body = bodyFor(GROQ, "qwen/qwen3.8-27b", effort);
+            assertThat(body.path("reasoning_effort").asText()).as(effort).isEqualTo("none");
+            assertThat(body.path("reasoning_format").asText()).as(effort).isEqualTo("hidden");
+            assertThat(body.has("include_reasoning")).isFalse();
+        }
+    }
+
+    @Test
+    void gptOssOnGroqExcludesReasoningWithoutReasoningFormat() {
+        JsonNode body = bodyFor(GROQ, "openai/gpt-oss-20b", "");
+        assertThat(body.path("include_reasoning").isBoolean()).isTrue();
+        assertThat(body.path("include_reasoning").asBoolean()).isFalse();
+        assertThat(body.has("reasoning_format")).isFalse();
+        assertThat(body.has("reasoning_effort")).isFalse();
+
+        JsonNode low = bodyFor(GROQ, "openai/gpt-oss-120b", "low");
+        assertThat(low.path("reasoning_effort").asText()).isEqualTo("low");
+        assertThat(low.path("include_reasoning").asBoolean(true)).isFalse();
+        assertThat(low.has("reasoning_format")).isFalse();
+    }
+
+    @Test
+    void aNonGroqEndpointGetsNoGroqOnlyFields() {
+        for (String base : List.of("https://api.example.com/v1", "https://api.groq.com.example.net/v1", "http://127.0.0.1:1")) {
+            for (String model : List.of("qwen/qwen3.8-27b", "openai/gpt-oss-20b")) {
+                JsonNode body = bodyFor(base, model, "");
+                assertThat(body.has("reasoning_format")).as(base + " " + model).isFalse();
+                assertThat(body.has("include_reasoning")).as(base + " " + model).isFalse();
+                assertThat(body.has("reasoning_effort")).as(base + " " + model).isFalse();
+            }
+        }
+    }
+
+    @Test
+    void anExtraEndpointModelGetsNoReasoningFieldsUnlessThatEndpointIsGroq() {
+        GOneProperties.Llm other = new GOneProperties.Llm(GROQ, KEY, "qwen/qwen3.8-27b", 5, "", List.of(), List.of(), 0,
+                "https://extra.example.com/v1", "extra-key-not-a-secret", List.of("qwen-extra"));
+        assertThat(other.reasoningFields("qwen-extra")).isEmpty();
+        assertThat(other.reasoningFields("qwen/qwen3.8-27b")).containsEntry("reasoning_effort", "none");
+
+        GOneProperties.Llm groqExtra = new GOneProperties.Llm("https://api.example.com/v1", KEY, "m", 5, "", List.of(),
+                List.of(), 0, GROQ, "extra-key-not-a-secret", List.of("qwen/qwen3.8-27b"));
+        assertThat(groqExtra.reasoningFields("qwen/qwen3.8-27b"))
+                .containsEntry("reasoning_effort", "none").containsEntry("reasoning_format", "hidden");
+    }
+
+    private ChatReply answerWith(String content) {
+        script.clear();
+        answer("{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":"
+                + JSON.valueToTree(content) + "}}]}");
+        return client(5).complete(SMALL);
+    }
+
+    @Test
+    void recordedStyleThinkingNeverReachesTheReply() {
+        assertThat(answerWith("<think>\nFarmer asks wheat price.\n</think>\n\nGehun ka bhav 2400 hai.").content())
+                .isEqualTo("Gehun ka bhav 2400 hai.");
+        assertThat(answerWith("Okay, the farmer wants rain news.\n</think>\nKal baarish ho sakti hai.").content())
+                .isEqualTo("Kal baarish ho sakti hai.");
+        assertThat(answerWith("<thinking>check memory</thinking>Ramesh ji, namaste.").content())
+                .isEqualTo("Ramesh ji, namaste.");
+        assertThat(answerWith("Haan ji. <think>Now I should also mention").content()).isEqualTo("Haan ji.");
+    }
+
+    @Test
+    void reasoningInItsOwnFieldIsIgnored() {
+        answer("""
+                {"choices":[{"finish_reason":"stop","message":{"role":"assistant",
+                  "reasoning":"The farmer wants weather, I will answer briefly.","content":"Kal dhoop rahegi."}}]}""");
+        ChatReply reply = client(5).complete(SMALL);
+        assertThat(reply.content()).isEqualTo("Kal dhoop rahegi.");
+    }
+
+    @Test
+    void anAnswerThatIsOnlyThinkingIsRetriedOnceThenABadResponse() {
+        String cutOff = "{\"choices\":[{\"finish_reason\":\"length\",\"message\":{\"content\":\"<think>The farmer asked about\"}}]}";
+        answer(cutOff);
+        answer(OK);
+        assertThat(client(5).complete(SMALL).content()).isEqualTo("{}");
+        assertThat(requests).hasSize(2);
+
+        requests.clear();
+        answer(cutOff);
+        answer("{\"choices\":[{\"message\":{\"content\":\"plan only</think>\"}}]}");
+        assertThatThrownBy(() -> client(5).complete(SMALL)).isInstanceOfSatisfying(ChatException.class,
+                e -> assertThat(e.kind()).isEqualTo(ChatException.Kind.BAD_RESPONSE));
+        assertThat(requests).hasSize(2);
+    }
 }

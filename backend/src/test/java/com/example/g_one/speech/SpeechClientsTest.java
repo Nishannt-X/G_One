@@ -101,6 +101,20 @@ class SpeechClientsTest {
     }
 
     @Test
+    void llmStripsModelThinkingBeforeReadingTheJson() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "<think>\nThe farmer said bhav.\n</think>\n{\"text\":\"bhav\"}";
+        assertThat(llm.askJson("test_failed", "system", "user").path("text").asText()).isEqualTo("bhav");
+
+        fake.llmContent = "plan first</think>{\"text\":\"bhav\"}";
+        assertThat(llm.askJson("test_failed", "system", "user").path("text").asText()).isEqualTo("bhav");
+
+        fake.llmContent = "<think>The farmer said";
+        assertThatThrownBy(() -> llm.askJson("test_failed", "system", "user"))
+                .isInstanceOfSatisfying(UpstreamException.class, e -> assertThat(e.stage()).isEqualTo("test_failed"));
+    }
+
+    @Test
     void anUnknownLanguageIsRejected() {
         assertThatThrownBy(() -> new Language.Registry(props).require("xx-XX"))
                 .isInstanceOf(IllegalArgumentException.class);

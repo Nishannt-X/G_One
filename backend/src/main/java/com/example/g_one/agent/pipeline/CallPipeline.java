@@ -553,7 +553,9 @@ public final class CallPipeline {
                     return;
                 }
                 List<Line> history = new ArrayList<>(before);
-                history.add(new Line(Speaker.ASSISTANT, greeting.text()));
+                // The history holds what the farmer heard, never model thinking.
+                history.add(new Line(Speaker.ASSISTANT,
+                        ReasoningText.speakable(greeting.text(), greeting.language().code())));
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, turn), ctx.language());
                 deliver(turnGeneration, reply);
             });
@@ -605,7 +607,7 @@ public final class CallPipeline {
                 }
                 lines.add(new Line(Speaker.ASSISTANT, spoken));
                 speaking = true;
-                lastSaid = reply.text();
+                lastSaid = spoken;
                 // A leg that follows its own turns changes language only through its LanguageFlow, never on one reply.
                 if (languageFlow == null && !reply.language().equals(context.language())) {
                     context = new CallContext(callId, leg, reply.language(), context.memory());

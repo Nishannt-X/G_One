@@ -55,7 +55,7 @@ public record GOneProperties(
     /**
      * @param reasoningEffort sent as {@code reasoning_effort} when not blank. Reasoning models need it, because hidden
      *     reasoning spends the same token budget as the answer; other providers reject the unknown field, so blank
-     *     means it is left out
+     *     means it is left out. Qwen on Groq always gets {@code none}, set or not (see {@link #reasoningFields})
      * @param fallbackModels tried in order after {@code model} when it is rate limited or down
      * @param numericUnsafeModels substrings naming models that must never handle figures
      * @param tokensPerMinute each model's limit, so a call that would be refused is not sent; 0 turns the budget off
@@ -113,7 +113,52 @@ public record GOneProperties(
         /** The effort to send for this model; Qwen on Groq rejects the OpenAI values, so it gets its own. */
         public String reasoningEffortFor(String routedModel) {
             if (reasoningEffort.isEmpty() || isExtra(routedModel)) return "";
-            return routedModel != null && routedModel.toLowerCase(java.util.Locale.ROOT).contains("qwen") ? "none" : reasoningEffort;
+            return isQwen(routedModel) ? "none" : reasoningEffort;
+        }
+
+        /**
+         * The reasoning fields to add to a request for this model. Thinking must never reach a caller, so on Groq the
+         * request asks for none: Qwen always gets {@code reasoning_effort: none} and {@code reasoning_format: hidden};
+         * gpt-oss, which supports neither {@code none} nor {@code reasoning_format}, gets {@code include_reasoning:
+         * false}. Other providers reject unknown fields, so off Groq only a configured {@link #reasoningEffortFor} is
+         * sent. See https://console.groq.com/docs/reasoning.
+         */
+        public java.util.Map<String, Object> reasoningFields(String routedModel) {
+            java.util.Map<String, Object> fields = new java.util.LinkedHashMap<>();
+            boolean extra = isExtra(routedModel);
+            if (!isGroq(extra ? extraBaseUrl : baseUrl)) {
+                String effort = reasoningEffortFor(routedModel);
+                if (!effort.isEmpty()) fields.put("reasoning_effort", effort);
+                return fields;
+            }
+            String name = routedModel == null ? "" : routedModel.toLowerCase(java.util.Locale.ROOT);
+            if (isQwen(routedModel)) {
+                fields.put("reasoning_effort", "none");
+                fields.put("reasoning_format", "hidden");
+            } else if (name.contains("gpt-oss")) {
+                if (!reasoningEffort.isEmpty()) fields.put("reasoning_effort", reasoningEffort);
+                fields.put("include_reasoning", false);
+            } else if (!reasoningEffort.isEmpty()) {
+                fields.put("reasoning_effort", reasoningEffort);
+            }
+            return fields;
+        }
+
+        /** True for Groq's endpoint, the only provider the Groq-only reasoning fields go to. */
+        static boolean isGroq(String url) {
+            if (url == null || url.isBlank()) return false;
+            try {
+                String host = java.net.URI.create(url.strip()).getHost();
+                if (host == null) return false;
+                host = host.toLowerCase(java.util.Locale.ROOT);
+                return host.equals("groq.com") || host.endsWith(".groq.com");
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
+
+        private static boolean isQwen(String routedModel) {
+            return routedModel != null && routedModel.toLowerCase(java.util.Locale.ROOT).contains("qwen");
         }
     }
 }

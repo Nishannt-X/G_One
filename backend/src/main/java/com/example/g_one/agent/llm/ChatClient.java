@@ -37,8 +37,6 @@ public class ChatClient {
     private static final String STAGE = "agent_llm";
     /** A chat answer is a few kilobytes at most; anything far larger is not a reply we want to buffer. */
     private static final int MAX_BODY_BYTES = 512 * 1024;
-    /** Some reasoning models put their thinking inline. It must never be spoken. */
-    private static final Pattern THINK = Pattern.compile("(?s)<think>.*?</think>");
     private static final int RETRY_TOKEN_FACTOR = 3;
     /** Only the limit's name and numbers are read from a 429 message; the rest is never logged. */
     private static final Pattern BUCKET = Pattern.compile("on ((?:tokens|requests) per (?:minute|day))[^:]*: Limit (\\d+), Used (\\d+)");
@@ -192,8 +190,7 @@ public class ChatClient {
         body.put("model", model);
         body.put("temperature", request.temperature());
         body.put("max_tokens", request.maxTokens());
-        String effort = cfg.reasoningEffortFor(model);
-        if (!effort.isEmpty()) body.put("reasoning_effort", effort);
+        cfg.reasoningFields(model).forEach((k, v) -> body.set(k, json.valueToTree(v)));
         ArrayNode messages = body.putArray("messages");
         for (ChatMessage m : request.messages()) {
             ObjectNode node = messages.addObject();
@@ -255,7 +252,8 @@ public class ChatClient {
             throw bad("The language model's answer had no message.");
         }
         JsonNode message = choice.path("message");
-        String content = message.path("content").isTextual() ? clean(message.path("content").asText()) : "";
+        // Thinking inline in the content is stripped; a separate message.reasoning field is never read.
+        String content = message.path("content").isTextual() ? ReasoningText.strip(message.path("content").asText()) : "";
         List<ToolCall> calls = new ArrayList<>();
         for (JsonNode c : message.path("tool_calls")) {
             JsonNode fn = c.path("function");
@@ -295,10 +293,6 @@ public class ChatClient {
     /** Bytes, not a String: a String body would go through a converter whose default charset is not UTF-8. */
     private static byte[] utf8(ObjectNode body) {
         return body.toString().getBytes(StandardCharsets.UTF_8);
-    }
-
-    private static String clean(String content) {
-        return THINK.matcher(content).replaceAll("").trim();
     }
 
     private static ChatException bad(String message) {

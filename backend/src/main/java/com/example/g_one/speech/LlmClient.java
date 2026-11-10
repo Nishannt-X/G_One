@@ -1,6 +1,7 @@
 package com.example.g_one.speech;
 
 import com.example.g_one.GOneProperties;
+import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.llm.ModelRouter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,8 +62,7 @@ public class LlmClient {
                 "messages", List.of(
                         Map.of("role", "system", "content", system),
                         Map.of("role", "user", "content", user))));
-        String effort = cfg.reasoningEffortFor(slot.model());
-        if (!effort.isEmpty()) body.put("reasoning_effort", effort);
+        body.putAll(cfg.reasoningFields(slot.model()));
         boolean extra = cfg.isExtra(slot.model()) && extraClient != null;
         Http.Result r = Http.call(stage, (extra ? extraClient : client).post().uri("/chat/completions")
                 .header("Authorization", "Bearer " + (extra ? cfg.extraApiKey() : cfg.apiKey()))
@@ -80,7 +80,9 @@ public class LlmClient {
         try {
             JsonNode root = json.readTree(r.body());
             slot.spent(root.path("usage").path("total_tokens").asInt(0));
-            String content = root.path("choices").path(0).path("message").path("content").asText("");
+            // Thinking left in the content would break the JSON; nothing left is an unreadable answer.
+            String content = ReasoningText.strip(root.path("choices").path(0).path("message").path("content").asText(""));
+            if (content.isEmpty()) throw new IOException("only reasoning");
             JsonNode answer = json.readTree(content);
             if (!answer.isObject()) throw new IOException("not an object");
             return answer;

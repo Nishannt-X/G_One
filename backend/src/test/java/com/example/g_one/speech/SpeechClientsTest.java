@@ -131,6 +131,26 @@ class SpeechClientsTest {
     }
 
     @Test
+    void llmPreservesJsonFieldsWhenReasoningTagsMixEscapedAndLiteralForms() {
+        LlmClient llm = new LlmClient(props, JSON);
+        fake.llmContent = "{\"gist\":\"\\u003cthink>secret</think>Answer\",\"keep\":42}";
+        var mixed = llm.askJson("test_failed", "system", "user");
+        assertThat(mixed.path("gist").asText()).isEqualTo("Answer");
+        assertThat(mixed.path("keep").asInt()).isEqualTo(42);
+
+        fake.llmContent = "{\"gist\":\"hidden</think>Answer\",\"keep\":42}";
+        var loneClose = llm.askJson("test_failed", "system", "user");
+        assertThat(loneClose.path("gist").asText()).isEqualTo("Answer");
+        assertThat(loneClose.path("keep").asInt()).isEqualTo(42);
+
+        fake.llmContent = "{\"gist\":\"Visible <think>secret\",\"other\":\"secret</think>safe\",\"keep\":42}";
+        var acrossFields = llm.askJson("test_failed", "system", "user");
+        assertThat(acrossFields.path("gist").asText()).isEqualTo("Visible");
+        assertThat(acrossFields.path("other").asText()).isEqualTo("safe");
+        assertThat(acrossFields.path("keep").asInt()).isEqualTo(42);
+    }
+
+    @Test
     void anUnknownLanguageIsRejected() {
         assertThatThrownBy(() -> new Language.Registry(props).require("xx-XX"))
                 .isInstanceOf(IllegalArgumentException.class);

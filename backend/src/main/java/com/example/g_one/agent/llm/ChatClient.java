@@ -253,7 +253,8 @@ public class ChatClient {
         }
         JsonNode message = choice.path("message");
         // Thinking inline in the content is stripped; a separate message.reasoning field is never read.
-        String content = message.path("content").isTextual() ? ReasoningText.strip(message.path("content").asText()) : "";
+        String content = message.path("content").isTextual()
+                ? ReasoningText.stripContent(message.path("content").asText(), json) : "";
         List<ToolCall> calls = new ArrayList<>();
         for (JsonNode c : message.path("tool_calls")) {
             JsonNode fn = c.path("function");

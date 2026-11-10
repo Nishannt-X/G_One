@@ -5,9 +5,6 @@ import com.example.g_one.agent.llm.ReasoningText;
 import com.example.g_one.llm.ModelRouter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -83,28 +80,23 @@ public class LlmClient {
         try {
             JsonNode root = json.readTree(r.body());
             slot.spent(root.path("usage").path("total_tokens").asInt(0));
-            // Thinking left in the content would break the JSON; nothing left is an unreadable answer.
-            String content = ReasoningText.strip(root.path("choices").path(0).path("message").path("content").asText(""));
-            if (content.isEmpty()) throw new IOException("only reasoning");
-            JsonNode answer = json.readTree(content);
-            if (!answer.isObject()) throw new IOException("not an object");
-            return stripDecodedReasoning(answer);
+            String content = root.path("choices").path(0).path("message").path("content").asText("");
+            JsonNode answer;
+            try {
+                // Parse valid JSON untouched: stripping its serialized form can join separate fields.
+                answer = json.readTree(content);
+            } catch (IOException invalidJson) {
+                // A reasoning preface outside the JSON is the only case that needs raw text stripping.
+                String prefix = content.substring(0, Math.max(0, content.indexOf('{')));
+                if (!ReasoningText.hasTag(prefix)) throw invalidJson;
+                String clean = ReasoningText.strip(content);
+                if (clean.isEmpty()) throw new IOException("only reasoning");
+                answer = json.readTree(clean);
+            }
+            if (answer == null || !answer.isObject()) throw new IOException("not an object");
+            return ReasoningText.stripJsonValues(answer);
         } catch (IOException e) {
             throw new UpstreamException(stage, "Translation service returned an unreadable answer.");
         }
-    }
-
-    /** Sanitize text after JSON decoding, including strings nested in objects and arrays. */
-    private static JsonNode stripDecodedReasoning(JsonNode node) {
-        if (node.isTextual()) {
-            String text = node.textValue();
-            return ReasoningText.hasTag(text) ? TextNode.valueOf(ReasoningText.strip(text)) : node;
-        }
-        if (node instanceof ObjectNode object) {
-            object.fields().forEachRemaining(field -> object.set(field.getKey(), stripDecodedReasoning(field.getValue())));
-        } else if (node instanceof ArrayNode array) {
-            for (int i = 0; i < array.size(); i++) array.set(i, stripDecodedReasoning(array.get(i)));
-        }
-        return node;
     }
 }

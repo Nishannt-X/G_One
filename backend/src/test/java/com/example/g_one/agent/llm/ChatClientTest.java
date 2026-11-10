@@ -403,6 +403,15 @@ class ChatClientTest {
     }
 
     @Test
+    void jsonContentKeepsSiblingFieldsWhenThinkingTagsCrossStrings() throws Exception {
+        String content = "{\"gist\":\"Visible <think>secret\",\"other\":\"secret</think>safe\",\"keep\":42}";
+        JsonNode reply = JSON.readTree(answerWith(content).content());
+        assertThat(reply.path("gist").asText()).isEqualTo("Visible");
+        assertThat(reply.path("other").asText()).isEqualTo("safe");
+        assertThat(reply.path("keep").asInt()).isEqualTo(42);
+    }
+
+    @Test
     void reasoningInItsOwnFieldIsIgnored() {
         answer("""
                 {"choices":[{"finish_reason":"stop","message":{"role":"assistant",

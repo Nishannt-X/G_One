@@ -1,6 +1,10 @@
 package com.example.g_one.agent.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
@@ -90,6 +94,33 @@ public final class ReasoningText {
         if (TAG_START.matcher(text).find()) return true;
         Matcher m = TRAILING.matcher(text.strip());
         return m.find() && isNamePrefix(m.group(1));
+    }
+
+    /** Strip each decoded JSON string separately, so tags cannot consume syntax or another field. */
+    public static JsonNode stripJsonValues(JsonNode node) {
+        if (node.isTextual()) {
+            String value = node.textValue();
+            return hasTag(value) ? TextNode.valueOf(strip(value)) : node;
+        }
+        if (node instanceof ObjectNode object) {
+            object.fields().forEachRemaining(field -> object.set(field.getKey(), stripJsonValues(field.getValue())));
+        } else if (node instanceof ArrayNode array) {
+            for (int i = 0; i < array.size(); i++) array.set(i, stripJsonValues(array.get(i)));
+        }
+        return node;
+    }
+
+    /** Content may itself be serialized JSON; preserve its structure before removing inline thinking. */
+    public static String stripContent(String content, ObjectMapper json) {
+        if (content != null && (content.stripLeading().startsWith("{") || content.stripLeading().startsWith("["))) {
+            try {
+                JsonNode parsed = json.readTree(content);
+                if (parsed != null && parsed.isContainerNode()) return stripJsonValues(parsed).toString();
+            } catch (IOException ignored) {
+                // A plain answer can start with punctuation; handle it as text below.
+            }
+        }
+        return strip(content);
     }
 
     /**

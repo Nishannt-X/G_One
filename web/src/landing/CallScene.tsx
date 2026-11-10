@@ -123,11 +123,11 @@ export default function CallScene() {
       </div>
 
       <div className="mt-4 flex items-start gap-2 sm:gap-3">
-        <Party icon={<WheatIcon />} name="Farmer" lang="ಕನ್ನಡ" active={beat.who === 'farmer' || beat.who === 'whisper'} tone="text-[#6fdda2]" />
+        <Party icon={<WheatIcon />} name="Farmer" lang="ಕನ್ನಡ" active={beat.who === 'farmer' || beat.who === 'whisper'} tone="text-on-night-farmer" />
         <Wire state={leftWire} />
         <Party icon={<Logo className="text-[1.05em] text-on-night-muted" />} name="G-One" lang="in the middle" active={beat.who === 'whisper' || beat.who === 'deal'} tone="text-accent" />
         <Wire state={rightWire} />
-        <Party icon={<StoreIcon />} name="Buyer" lang="বাংলা" active={beat.who === 'buyer'} muted={beat.who === 'whisper'} tone="text-[#9fbbff]" />
+        <Party icon={<StoreIcon />} name="Buyer" lang="বাংলা" active={beat.who === 'buyer'} muted={beat.who === 'whisper'} tone="text-on-night-buyer" />
       </div>
 
       <div className="mt-4 flex h-5 items-center justify-center gap-6">

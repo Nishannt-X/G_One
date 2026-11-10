@@ -54,6 +54,8 @@
   --night-line: #2a5643;
   --on-night: #f6f1e3;
   --on-night-muted: #bcd0c2;
+  --on-night-farmer: #6fdda2;
+  --on-night-buyer: #9fbbff;
   /* Illustration only: sky, sun, hills and the mandi crate. Never behind text. */
   --art-sky: #ffe9bf;
   --art-sky-2: #fff7e6;
@@ -64,7 +66,7 @@
   --art-soil: #d9a066;
   --art-crate: #b8743a;
   --art-crate-dark: #8a5226;
-  --art-onion: #c2412f;
+  --art-onion: #b5465a;
   --art-grain: #e9b949;
   --art-phone: #13221a;
   --shadow: 0 1px 2px rgb(60 45 15 / 0.06), 0 12px 30px -18px rgb(60 45 15 / 0.28);
@@ -114,6 +116,8 @@
   --night-line: #2e5e48;
   --on-night: #f3efe2;
   --on-night-muted: #b9cbbe;
+  --on-night-farmer: #6fdda2;
+  --on-night-buyer: #9fbbff;
   --art-sky: #1b2a3a;
   --art-sky-2: #0f1a17;
   --art-sun: #f7b23b;
@@ -123,7 +127,7 @@
   --art-soil: #6b4a2c;
   --art-crate: #9a6332;
   --art-crate-dark: #6e431f;
-  --art-onion: #d9583f;
+  --art-onion: #d4607a;
   --art-grain: #e3b04a;
   --art-phone: #050806;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 28px -18px rgb(0 0 0 / 0.8);
@@ -173,6 +177,8 @@
   --color-night-line: var(--night-line);
   --color-on-night: var(--on-night);
   --color-on-night-muted: var(--on-night-muted);
+  --color-on-night-farmer: var(--on-night-farmer);
+  --color-on-night-buyer: var(--on-night-buyer);
   --font-sans: 'Anek Latin Variable', 'Anek Devanagari Variable', 'Anek Bangla Variable', 'Noto Sans Kannada Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --shadow-card: var(--shadow);
@@ -422,6 +428,13 @@
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* The hero phone's voice bars. */
+.hero-wave {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: eq 900ms ease-in-out infinite alternate;
 }
 
 /* The two phones in the sample's final scene. */

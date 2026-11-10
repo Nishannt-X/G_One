@@ -40,7 +40,7 @@ export const TEXT_PAIRS: [string, string][] = [
   ['assistant', 'assistant-soft'], ['assistant', 'surface'],
   ['whisper', 'whisper-soft'], ['whisper', 'surface'],
   ['ok', 'ok-soft'], ['warn', 'warn-soft'], ['bad', 'bad-soft'], ['bad', 'surface'], ['on-bad', 'bad'],
-  ['on-night', 'night'], ['on-night', 'night-raised'], ['on-night-muted', 'night'], ['on-night-muted', 'night-raised'], ['accent', 'night'], ['accent', 'night-raised'],
+  ['on-night', 'night'], ['on-night', 'night-raised'], ['on-night-muted', 'night'], ['on-night-muted', 'night-raised'], ['accent', 'night'], ['accent', 'night-raised'], ['on-night-farmer', 'night'], ['on-night-buyer', 'night'],
 ]
 
 /** Borders, focus rings and other non-text marks need 3:1 against what they sit on. */

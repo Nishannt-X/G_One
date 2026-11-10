@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import CallScene from '../landing/CallScene'
+import HeroArt from '../landing/HeroArt'
 import { BUILT_FACTS, LANGUAGES, type BuiltIcon } from '../landing/builtFacts'
 import { IMPACT_FOOTNOTE, IMPACT_STATS } from '../landing/impactStats'
 import {
@@ -37,10 +38,13 @@ const STEPS: { title: string; body: string; art: ReactNode }[] = [
     title: 'The farmer calls',
     body: 'Designed for an ordinary phone call, so there is nothing to install. In this demo the call runs in the browser.',
     art: (
-      <span className="relative grid h-12 w-12 place-items-center rounded-full bg-farmer-soft text-2xl text-farmer">
-        <span aria-hidden="true" className="animate-beat absolute inset-0 rounded-full border-2 border-farmer" />
-        <PhoneIcon />
-      </span>
+      <div className="flex items-center gap-3">
+        <span className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-farmer-soft text-xl text-farmer">
+          <span aria-hidden="true" className="animate-beat absolute inset-0 rounded-full border-2 border-farmer" />
+          <PhoneIcon />
+        </span>
+        <span className="text-sm"><span className="block font-bold">Calling G-One</span><span className="text-muted">No app, no sign-up</span></span>
+      </div>
     ),
   },
   {
@@ -225,7 +229,10 @@ export default function LandingPage({ section }: { section: string | null }) {
               </div>
             </dl>
           </div>
-          <CallScene />
+          <div className="relative mx-auto w-full max-w-[34rem] lg:max-w-none">
+            <div aria-hidden="true" className="absolute inset-4 -z-0 translate-y-4 rounded-[2.5rem] bg-accent/25 blur-2xl" />
+            <HeroArt className="relative drop-shadow-[0_24px_40px_rgb(60_45_15/0.18)]" />
+          </div>
         </div>
       </section>
 
@@ -277,10 +284,12 @@ export default function LandingPage({ section }: { section: string | null }) {
           <Reveal className="mt-12">
             <FlowRibbon />
           </Reveal>
-          <ol className="mt-12 grid gap-x-8 gap-y-10 md:grid-cols-2">
+          <div className="mt-12 grid grid-cols-1 items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <ol className="relative grid gap-10">
+            <span aria-hidden="true" className="absolute top-11 bottom-6 left-[1.3rem] w-px bg-line-strong/50" />
             {STEPS.map((s, i) => (
-              <li key={s.title}>
-                <Reveal delay={(i % 2) * 120} className="flex h-full gap-5">
+              <li key={s.title} className="relative">
+                <Reveal delay={i * 100} className="flex h-full gap-5">
                   <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand text-lg font-bold text-on-brand shadow-brand">{i + 1}</span>
                   <div className="min-w-0">
                     <h3 className="text-2xl leading-tight font-semibold">{s.title}</h3>
@@ -291,6 +300,10 @@ export default function LandingPage({ section }: { section: string | null }) {
               </li>
             ))}
           </ol>
+          <Reveal className="min-w-0 lg:sticky lg:top-24">
+            <CallScene />
+          </Reveal>
+          </div>
         </div>
       </section>
 

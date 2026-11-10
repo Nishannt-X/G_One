@@ -935,7 +935,8 @@ public final class CallPipeline {
                 return;
             }
             CallEndHandler.EndedCall endedCall =
-                    new CallEndHandler.EndedCall(ctx, transcript, startedMs, endedMs, reason, finalOutcome, finalSummary);
+                    new CallEndHandler.EndedCall(ctx, transcript, startedMs, endedMs, reason, finalOutcome, finalSummary,
+                            closing.consent().get(LegRole.FARMER).name());
             submit("end handlers", () -> {
                 for (CallEndHandler h : endHandlers) {
                     try {

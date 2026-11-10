@@ -6,6 +6,7 @@ import com.example.g_one.agent.language.LanguageDetector;
 import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.pipeline.CallEndHandler;
 import com.example.g_one.agent.tools.memory.MemoryGate;
+import com.example.g_one.agent.tools.memory.PendingFacts;
 import com.example.g_one.core.CallId;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,10 @@ import org.springframework.stereotype.Component;
 /**
  * Writes the call gist at hang-up and releases the brain's per-call state. The confirmed deal summary goes in as a line
  * of the transcript, so the summarizer sees it and the template gist can quote it when the summarizer is off.
+ *
+ * <p>Nothing at all is stored unless the farmer said yes, before the call ended, to "may we remember the main points of
+ * this call?" ({@link EndedCall#farmerAgreed}): no gist, no summarizer call, and the facts the farmer stated during the
+ * call ({@link PendingFacts}) are dropped. Silence, a no or a hang-up stores nothing.
  *
  * <p>No gist is written for a call that would only add noise to the farmer's memory (see {@link #action}): one the
  * brain never saw (fail closed: its state may have been forgotten), one whose name check failed or was never answered,
@@ -43,24 +48,42 @@ public class GistOnHangup implements CallEndHandler {
     private final GistWriter writer;
     private final Function<CallId, Optional<MemoryGate.State>> memoryState;
     private final Consumer<CallId> dropState;
+    /** Null in tests that only check the gist. */
+    private final PendingFacts pending;
 
     @Autowired
-    public GistOnHangup(GistWriter writer, LlmAgentBrain brain) {
-        this(writer, brain::memoryState, brain::callEnded);
+    public GistOnHangup(GistWriter writer, LlmAgentBrain brain, PendingFacts pending) {
+        this(writer, brain::memoryState, brain::callEnded, pending);
     }
 
     /** For tests: the brain's per-call memory state and its release, without a whole brain. */
     GistOnHangup(GistWriter writer, Function<CallId, Optional<MemoryGate.State>> memoryState,
             Consumer<CallId> dropState) {
+        this(writer, memoryState, dropState, null);
+    }
+
+    GistOnHangup(GistWriter writer, Function<CallId, Optional<MemoryGate.State>> memoryState,
+            Consumer<CallId> dropState, PendingFacts pending) {
         this.writer = writer;
         this.memoryState = memoryState;
         this.dropState = dropState;
+        this.pending = pending;
     }
 
     @Override
     public void callEnded(EndedCall call) {
         Optional<MemoryGate.State> state = memoryState.apply(call.callId());
         try {
+            if (!call.farmerAgreed()) {
+                if (pending != null) pending.drop(call.callId());
+                log.info("Nothing stored for call {}: the farmer did not say yes to being remembered ({})",
+                        call.callId(), call.farmerConsent());
+                return;
+            }
+            if (pending != null && state.isPresent() && state.get().maySave() && !call.callerKey().isEmpty()) {
+                int saved = pending.commit(call.callId());
+                if (saved > 0) log.info("{} profile facts stored for call {} with the farmer's yes", saved, call.callId());
+            }
             Action action = action(call, state);
             if (action == Action.SKIP) {
                 log.info("No gist written for call {} (memory state {}, {} farmer turns, {} ms)", call.callId(),
@@ -75,6 +98,7 @@ public class GistOnHangup implements CallEndHandler {
         } catch (RuntimeException e) {
             log.warn("Writing the gist failed for call {} ({})", call.callId(), e.getClass().getSimpleName());
         } finally {
+            if (pending != null) pending.drop(call.callId());
             dropState.accept(call.callId());
         }
     }

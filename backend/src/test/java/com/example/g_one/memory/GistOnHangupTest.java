@@ -63,7 +63,7 @@ class GistOnHangupTest {
             lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "ठीक है।"));
         }
         return new EndedCall(ctx, lines, START, START + durationMs, "hangup",
-                dealSummary == null ? null : "deal_confirmed", dealSummary);
+                dealSummary == null ? null : "deal_confirmed", dealSummary, "YES");
     }
 
     private boolean gistWritten() {
@@ -147,7 +147,7 @@ class GistOnHangupTest {
                 new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.confirmation("hi-IN")),
                 new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "नमस्ते, जी-वन में आपका स्वागत है।"),
                 new AgentBrain.Line(AgentBrain.Speaker.FARMER, "प्याज़ का भाव"));
-        EndedCall setup = new EndedCall(ctx, setupOnly, START, START + 60_000, "hangup", null, null);
+        EndedCall setup = new EndedCall(ctx, setupOnly, START, START + 60_000, "hangup", null, null, "YES");
         assertThat(GistOnHangup.farmerTurns(setup)).isEqualTo(1);
         hangUp(setup, MemoryGate.State.NEW);
         assertThat(gistWritten()).as("two setup answers and one real turn are a near-empty call").isFalse();
@@ -157,10 +157,52 @@ class GistOnHangupTest {
                 new AgentBrain.Line(AgentBrain.Speaker.FARMER, "हिंदी में, मुझे प्याज़ का भाव बताइए"),
                 new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, LanguageLines.confirmation("hi-IN")),
                 new AgentBrain.Line(AgentBrain.Speaker.FARMER, "बीस क्विंटल है"));
-        EndedCall real = new EndedCall(ctx, withContent, START, START + 60_000, "hangup", null, null);
+        EndedCall real = new EndedCall(ctx, withContent, START, START + 60_000, "hangup", null, null, "YES");
         assertThat(GistOnHangup.farmerTurns(real)).as("a language answer that also asks something counts").isEqualTo(2);
         hangUp(real, MemoryGate.State.NEW);
         assertThat(gistWritten()).isTrue();
+    }
+
+    // ---- consent: nothing is stored without the farmer's yes ----
+
+    private EndedCall withConsent(EndedCall c, String consent) {
+        return new EndedCall(c.context(), c.transcript(), c.startedMs(), c.endedMs(), c.reason(), c.outcome(),
+                c.dealSummary(), consent);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"NO", "NONE"})
+    void withoutAYesNothingIsStoredAndHeldFactsAreDropped(String consent) {
+        EndedCall c = withConsent(call(60_000, "Deal summary confirmed: 20 quintal", "प्याज़ का भाव", "बीस क्विंटल"), consent);
+        com.example.g_one.agent.tools.memory.PendingFacts pending = new com.example.g_one.agent.tools.memory.PendingFacts(() -> store);
+        pending.add(c.callId(), FakeLeg.FARMER_KEY, new com.example.g_one.core.ProfileFact("name", "रमेश",
+                com.example.g_one.core.Provenance.said(c.callId(), START)));
+        new GistOnHangup(writer, id -> Optional.of(MemoryGate.State.NEW), released::add, pending).callEnded(c);
+        assertThat(store.load(FakeLeg.FARMER_KEY)).isEmpty();
+        assertThat(pending.held(c.callId())).isEmpty();
+        assertThat(released).containsExactly(c.callId());
+    }
+
+    @Test
+    void aYesStoresTheHeldFactsAndTheGist() {
+        EndedCall c = call(60_000, null, "प्याज़ का भाव", "बीस क्विंटल");
+        com.example.g_one.agent.tools.memory.PendingFacts pending = new com.example.g_one.agent.tools.memory.PendingFacts(() -> store);
+        pending.add(c.callId(), FakeLeg.FARMER_KEY, new com.example.g_one.core.ProfileFact("name", "रमेश",
+                com.example.g_one.core.Provenance.said(c.callId(), START)));
+        new GistOnHangup(writer, id -> Optional.of(MemoryGate.State.NEW), released::add, pending).callEnded(c);
+        assertThat(store.load(FakeLeg.FARMER_KEY).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश");
+        assertThat(gistWritten()).isTrue();
+    }
+
+    @Test
+    void aWithheldCallerStoresNothingEvenWithAYes() {
+        CallId id = CallId.random();
+        FakeLeg leg = new FakeLeg(id, LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, null);
+        CallContext ctx = new CallContext(id, leg, FakeLeg.HINDI, FarmerMemory.withheld());
+        EndedCall c = new EndedCall(ctx, List.of(), START, START + 60_000, "hangup", null, null, "YES");
+        new GistOnHangup(writer, x -> Optional.of(MemoryGate.State.WITHHELD), released::add,
+                new com.example.g_one.agent.tools.memory.PendingFacts(() -> store)).callEnded(c);
+        assertThat(store.load(FakeLeg.FARMER_KEY)).isEmpty();
     }
 
     private static EndedCall afterTheLanguageQuestion(String... farmerTurns) {
@@ -175,7 +217,7 @@ class GistOnHangupTest {
             lines.add(new AgentBrain.Line(AgentBrain.Speaker.ASSISTANT, "ठीक है।"));
             lines.add(new AgentBrain.Line(AgentBrain.Speaker.FARMER, farmerTurns[i]));
         }
-        return new EndedCall(ctx, lines, START, START + 60_000, "hangup", null, null);
+        return new EndedCall(ctx, lines, START, START + 60_000, "hangup", null, null, "YES");
     }
 
     @Test

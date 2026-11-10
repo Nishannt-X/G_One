@@ -1,6 +1,7 @@
 package com.example.g_one.agent.brain;
 
 import com.example.g_one.agent.llm.FixedLines;
+import com.example.g_one.agent.llm.SpokenNumbers;
 import com.example.g_one.agent.tools.memory.MemoryBlock;
 import com.example.g_one.core.CallGist;
 import com.example.g_one.core.FarmerMemory;
@@ -20,26 +21,32 @@ import java.util.regex.Pattern;
 
 /**
  * What a returning farmer hears right after saying yes to the name check, with no model: the name plus the newest open
- * follow-up or the last crop, in fixed wording from the {@code welcomeBack} section of {@value FixedLines#RESOURCE}.
- * For example "नमस्ते Suresh जी, फिर से स्वागत है। पिछली बार आपने लाल प्याज़ के ख़रीदार की बात की थी। ...".
+ * follow-up or a remembered crop, in fixed wording from the {@code welcomeBack} section of {@value FixedLines#RESOURCE}.
+ * For example "Welcome back, Suresh ji. Earlier I noted this to follow up: find a buyer for ... Did that get done, ...".
  *
- * <p>The crop comes from the newest open follow-up that names one, else the newest gist that names one, else the
- * newest crop fact. Stored text is English (the summarizer writes English), so Hindi lines use the Hindi word for
- * common crops and the stored word otherwise. Nothing else stored is spoken: follow-up text is only classified.
+ * <p>The wording claims nothing the memory does not hold. An open follow-up is read back as written, not interpreted:
+ * the memory keeps no confirmed-deal record, so a line never says a deal was agreed, and since the item may come from
+ * any earlier call, the lines say "earlier", never "last time". Without an open item the crop comes from the newest
+ * gist that names one, else the newest crop fact; stored text is English (the summarizer writes English), so Hindi
+ * lines use the Hindi word for common crops and the stored word otherwise.
  */
 final class WelcomeBack {
     static final String CROP = "{crop}";
+    static final String ITEM = "{item}";
+    /** A follow-up read back is at most this long, cut at a word, so the greeting stays short. */
+    static final int MAX_ITEM_CHARS = 120;
     /** English crop words and their Hindi names; the longer name wins when both match ("red onion" over "onion"). */
     private static final Map<String, String> HINDI_CROPS = hindiCrops();
-    private static final Pattern PICKUP = Pattern.compile("(?i)\\b(pick ?up|payment|paid|pay)\\b");
-    private static final Pattern BUYER = Pattern.compile("(?i)\\b(buyers?|sell|sale)\\b");
+    private static final Pattern CONTROL = Pattern.compile("[\\p{Cc}\\p{Zl}\\p{Zp}]+");
+    private static final Pattern SPACES = Pattern.compile("\\s+");
 
-    enum Kind { BUYER, PICKUP, CROP, PLAIN }
+    /** OPEN: an open follow-up to read back; CROP: a remembered crop and nothing open; PLAIN: nothing to mention. */
+    enum Kind { OPEN, CROP, PLAIN }
 
     /** A line to speak and the resource key ({@code hi-IN}, {@code en-IN}) it was written for. */
     record Spoken(String code, String text) {}
 
-    private record Lines(Map<Kind, String> byKind, String cropUnknown) {}
+    private record Lines(Map<Kind, String> byKind) {}
 
     private final Map<String, Lines> byCode;
 
@@ -64,9 +71,9 @@ final class WelcomeBack {
             }
             byKind.put(k, v);
         }
-        String unknown = n.path("cropUnknown").asText("");
-        if (unknown.isBlank()) throw new IllegalStateException("welcomeBack.cropUnknown is missing for " + code);
-        return new Lines(Map.copyOf(byKind), unknown);
+        if (!byKind.get(Kind.OPEN).contains(ITEM)) throw new IllegalStateException("welcomeBack.open for " + code + " must contain " + ITEM);
+        if (!byKind.get(Kind.CROP).contains(CROP)) throw new IllegalStateException("welcomeBack.crop for " + code + " must contain " + CROP);
+        return new Lines(Map.copyOf(byKind));
     }
 
     /**
@@ -79,29 +86,46 @@ final class WelcomeBack {
         if (name.isEmpty() || key == null) return Optional.empty();
         Lines l = byCode.get(key);
         boolean hindi = FixedLines.prefix(key).equals("hi");
-        Optional<OpenItem> open = newestOpen(memory);
-        Kind kind = open.map(o -> kindOf(o.text())).orElse(Kind.PLAIN);
-        Optional<String> crop = open.isPresent()
-                ? cropIn(open.get().text(), memory).or(() -> cropIn(open.get().gist().summary(), memory))
-                : lastCrop(memory);
-        if (kind == Kind.PLAIN || kind == Kind.CROP) kind = crop.isPresent() ? Kind.CROP : Kind.PLAIN;
-        String cropWord = crop.map(c -> hindi ? HINDI_CROPS.getOrDefault(c, c) : c).orElse(l.cropUnknown());
-        return Optional.of(new Spoken(key, l.byKind().get(kind).replace(FixedLines.NAME, name.get()).replace(CROP, cropWord)));
+        String line = l.byKind().get(Kind.PLAIN);
+        Optional<String> open = newestOpen(memory);
+        if (open.isPresent()) {
+            line = l.byKind().get(Kind.OPEN).replace(ITEM, open.get());
+        } else {
+            Optional<String> crop = lastCrop(memory);
+            if (crop.isPresent()) {
+                line = l.byKind().get(Kind.CROP).replace(CROP, hindi ? HINDI_CROPS.getOrDefault(crop.get(), crop.get()) : crop.get());
+            }
+        }
+        return Optional.of(new Spoken(key, line.replace(FixedLines.NAME, name.get())));
     }
 
-    /** The newest open follow-up of the farmer's own gists (gists are newest first). */
-    private record OpenItem(String text, CallGist gist) {}
-
-    private static Optional<OpenItem> newestOpen(FarmerMemory memory) {
+    /** The newest open follow-up of the farmer's own gists (gists are newest first), ready to read back. */
+    private static Optional<String> newestOpen(FarmerMemory memory) {
         return MemoryBlock.ownGists(memory).stream()
-                .flatMap(g -> g.followUps().stream().filter(f -> !f.isBlank()).map(f -> new OpenItem(f, g)))
+                .flatMap(g -> g.followUps().stream())
+                .map(WelcomeBack::spokenItem)
+                .filter(f -> !f.isEmpty())
                 .findFirst();
     }
 
-    static Kind kindOf(String followUp) {
-        if (PICKUP.matcher(followUp).find()) return Kind.PICKUP;
-        if (BUYER.matcher(followUp).find()) return Kind.BUYER;
-        return Kind.CROP;
+    /**
+     * A stored follow-up as it is read back: one line, "~" said as "about", digits as English words (the text is
+     * English), no closing full stop or comma, a lower-case start unless it opens with an acronym, at most
+     * {@value #MAX_ITEM_CHARS} characters cut at a word.
+     */
+    static String spokenItem(String followUp) {
+        String t = SPACES.matcher(CONTROL.matcher(followUp == null ? "" : followUp).replaceAll(" ")).replaceAll(" ").strip();
+        t = SpokenNumbers.digitsToWords(t.replace("~", "about "), "en-IN");
+        t = SPACES.matcher(t).replaceAll(" ").strip();
+        if (t.length() > MAX_ITEM_CHARS) {
+            int cut = t.lastIndexOf(' ', MAX_ITEM_CHARS);
+            t = t.substring(0, cut > 0 ? cut : MAX_ITEM_CHARS);
+        }
+        t = t.replaceAll("[.,;:!?।\\s]+$", "");
+        if (t.length() > 1 && Character.isUpperCase(t.charAt(0)) && !Character.isUpperCase(t.charAt(1))) {
+            t = Character.toLowerCase(t.charAt(0)) + t.substring(1);
+        }
+        return t;
     }
 
     /** The crop of the newest gist that names one, else the newest crop fact. */

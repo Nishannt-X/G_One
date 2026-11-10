@@ -18,21 +18,17 @@
       "goodbye": "Thank you. Goodbye."
     }
   },
-  "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name, {crop} the crop of the newest open follow-up or of the last call (Hindi lines use the Hindi crop word when one is known). buyer: the newest open item is about finding a buyer; pickup: about a deal's pickup or payment; crop: a crop is known but no such item; plain: nothing to mention. cropUnknown fills {crop} in buyer and pickup lines when no crop is known.",
+  "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",
   "welcomeBack": {
     "hi-IN": {
-      "buyer": "नमस्ते {name} जी, फिर से स्वागत है। पिछली बार आपने {crop} के ख़रीदार की बात की थी। क्या अब ख़रीदार ढूँढूँ, या कुछ और मदद करूँ?",
-      "pickup": "नमस्ते {name} जी, फिर से स्वागत है। पिछली बार {crop} का सौदा तय हुआ था। क्या पिकअप और भुगतान ठीक से हो गया?",
-      "crop": "नमस्ते {name} जी, फिर से स्वागत है। पिछली बार आपने {crop} की बात की थी। आज क्या मदद करूँ?",
-      "plain": "नमस्ते {name} जी, फिर से स्वागत है। आज क्या मदद करूँ?",
-      "cropUnknown": "फसल"
+      "open": "नमस्ते {name} जी, फिर से स्वागत है। पहले मैंने आगे देखने के लिए यह बात नोट की थी: {item}। क्या यह हो गया, या कुछ और मदद करूँ?",
+      "crop": "नमस्ते {name} जी, फिर से स्वागत है। पहले आपने {crop} की बात की थी। आज क्या मदद करूँ?",
+      "plain": "नमस्ते {name} जी, फिर से स्वागत है। आज क्या मदद करूँ?"
     },
     "en-IN": {
-      "buyer": "Welcome back, {name} ji. Last time we talked about a buyer for your {crop}. Shall I look for one now, or can I help with something else?",
-      "pickup": "Welcome back, {name} ji. Last time you agreed a {crop} deal. Did the pickup and payment go well?",
-      "crop": "Welcome back, {name} ji. Last time we talked about your {crop}. How can I help today?",
-      "plain": "Welcome back, {name} ji. How can I help today?",
-      "cropUnknown": "crop"
+      "open": "Welcome back, {name} ji. Earlier I noted this to follow up: {item}. Did that get done, or can I help with something else?",
+      "crop": "Welcome back, {name} ji. Earlier we talked about your {crop}. How can I help today?",
+      "plain": "Welcome back, {name} ji. How can I help today?"
     }
   }
 }

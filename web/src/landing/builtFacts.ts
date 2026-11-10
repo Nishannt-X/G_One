@@ -1,7 +1,7 @@
 /** What exists in the repository today, stated plainly. No latency figures: none has been measured. */
 
 /** Automated test counts from the last full runs, with the date they were counted. Update all three together. */
-export const TEST_COUNTS = { backend: 862, web: 82, asOf: '10 Nov 2026' } as const
+export const TEST_COUNTS = { backend: 862, web: 111, asOf: '10 Nov 2026' } as const
 
 export const LANGUAGES = {
   liveTested: ['Hindi', 'English', 'Hinglish'],

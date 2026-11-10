@@ -215,6 +215,7 @@ function applyToCall(call: CallView, event: ConsoleEvent): CallView {
     case 'call_ended':
       return { ...call, ended: { atMs: event.atMs, durationMs: event.durationMs, reason: event.reason } }
     case 'turn_measured':
+    case 'consent_recorded':
       return call
     case 'language_changed':
       return {
@@ -406,6 +407,9 @@ export function normalizeEvent(value: unknown): ConsoleEvent | null {
     case 'language_changed':
       if (typeof raw.legId !== 'string' || typeof raw.to !== 'string' || !ROLES.includes(String(raw.role))) return null
       return { ...base, from: String(raw.from ?? ''), reason: String(raw.reason ?? '') } as ConsoleEvent
+    case 'consent_recorded':
+      if (!ROLES.includes(String(raw.role))) return null
+      return { ...base, consent: String(raw.consent ?? 'NONE') } as ConsoleEvent
     case 'turn_measured':
       return {
         ...base,

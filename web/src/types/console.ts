@@ -189,6 +189,15 @@ export interface LanguageChanged {
   reason: string
 }
 
+/** What one party answered when asked whether G-One may remember this call. Sent once per role, before call_ended. */
+export interface ConsentRecorded {
+  type: 'consent_recorded'
+  callId: string
+  role: LegRole
+  consent: string
+  atMs: number
+}
+
 export type ConsoleEvent =
   | CallStarted
   | LegJoined
@@ -203,6 +212,7 @@ export type ConsoleEvent =
   | CallEnded
   | TurnMeasured
   | LanguageChanged
+  | ConsentRecorded
 
 export type ConsoleEventType = ConsoleEvent['type']
 
@@ -221,6 +231,7 @@ const KNOWN_TYPES: Record<ConsoleEventType, true> = {
   call_ended: true,
   turn_measured: true,
   language_changed: true,
+  consent_recorded: true,
 }
 
 export const CONSOLE_EVENT_TYPES = Object.keys(KNOWN_TYPES) as ConsoleEventType[]

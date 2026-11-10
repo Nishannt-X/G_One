@@ -29,6 +29,7 @@ import java.util.Locale;
         @JsonSubTypes.Type(value = ConsoleEvent.CallEnded.class, name = "call_ended"),
         @JsonSubTypes.Type(value = ConsoleEvent.TurnMeasured.class, name = "turn_measured"),
         @JsonSubTypes.Type(value = ConsoleEvent.LanguageChanged.class, name = "language_changed"),
+        @JsonSubTypes.Type(value = ConsoleEvent.ConsentRecorded.class, name = "consent_recorded"),
 })
 public sealed interface ConsoleEvent {
     CallId callId();
@@ -118,6 +119,12 @@ public sealed interface ConsoleEvent {
      */
     record LanguageChanged(CallId callId, long atMs, LegId legId, LegRole role, String from, String to, String reason)
             implements ConsoleEvent {}
+
+    /**
+     * What one party answered when asked whether G-One may remember this call. {@code consent} is "YES", "NO" or "NONE"
+     * (not asked, silence or hang-up). Sent once per role, before {@link CallEnded}.
+     */
+    record ConsentRecorded(CallId callId, LegRole role, String consent, long atMs) implements ConsoleEvent {}
 
     /** The call is over (the farmer leg ended). */
     record CallEnded(CallId callId, long atMs, long durationMs, String reason) implements ConsoleEvent {}

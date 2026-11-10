@@ -237,8 +237,9 @@ class LlmAgentBrainTest {
         f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
         f.llm.replyText("आपने कहा था कि कटाई के बाद प्याज़ के लिए ख़रीदार ढूँढूँ।");
 
+        // Not a bare yes (it asks something), so the model goes on after confirm_name.
         f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "क्या मैं Suresh जी से बात कर रही हूँ?")),
-                said(ctx, "हाँ, मैं सुरेश हूँ"));
+                said(ctx, "हाँ, मैं सुरेश हूँ। प्याज़ के ख़रीदार का क्या हुआ?"));
 
         assertThat(systemPrompt(0)).doesNotContain("Lasalgaon APMC").doesNotContain("Nashik").doesNotContain("Suresh")
                 .contains("call confirm_name");
@@ -336,6 +337,22 @@ class LlmAgentBrainTest {
         assertThat(f.store.calls).hasValue(0);
         assertThat(f.store.load(FakeLeg.FARMER_KEY).orElseThrow().fact("name").orElseThrow().value()).isEqualTo("Suresh");
         assertThat(String.join("\n", f.toolEvents.stream().map(e -> e.result()).toList())).doesNotContain("Lasalgaon");
+    }
+
+    @Test
+    void aFirstTimeCallerIsAskedTheirNameAfterTheFirstAnsweredBusinessTurn() {
+        CallContext ctx = BrainFixture.newFarmer(HINDI);
+        f.llm.replyText("बताइए, कितना प्याज़ है?");
+        f.brain.respond(ctx, List.of(), said(ctx, "मुझे प्याज़ बेचना है"));
+        assertThat(systemPrompt(0)).doesNotContain(LlmAgentBrain.NAME_ASK);
+
+        f.llm.replyText("ठीक है। आपका नाम क्या है?");
+        f.brain.respond(ctx, List.of(), said(ctx, "बीस क्विंटल प्याज़ बेचना है"));
+        assertThat(systemPrompt(1)).contains(LlmAgentBrain.NAME_ASK);
+
+        f.llm.replyText("ठीक है।");
+        f.brain.respond(ctx, List.of(), said(ctx, "अभी नहीं बताना"));
+        assertThat(systemPrompt(2)).doesNotContain(LlmAgentBrain.NAME_ASK).contains("do not ask again");
     }
 
     @Test

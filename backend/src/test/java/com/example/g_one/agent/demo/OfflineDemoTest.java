@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import com.example.g_one.agent.AgentBrain;
 import com.example.g_one.core.CallId;
+import com.example.g_one.core.CallerKey;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.ConsoleEvent.DealState;
@@ -135,6 +136,34 @@ class OfflineDemoTest {
         assertThat(agreed.price()).isEqualByComparingTo("4300");
         assertThat(agreed.quantity()).isEqualTo("20 quintal");
         assertThat(agreed.pickup()).contains("Monday morning at the farm").contains("on delivery");
+    }
+
+    @Test
+    void aFirstCallSavesTheStatedNameAndTheSecondCallIsRecognised() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550007", FakeLeg.SALT);
+
+        FakeLeg first = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
+        keepHearing(first);
+        registry.register(first);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        sleep();
+        typed.say(first.id(), "मेरा नाम रमेश है");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
+        first.remoteHangup();
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
+
+        FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
+        keepHearing(second);
+        registry.register(second);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("क्या मैं रमेश जी से बात कर रही हूँ?")));
+        sleep();
+        typed.say(second.id(), "हाँ");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().startsWith("नमस्ते रमेश जी, फिर से स्वागत है।")));
+        second.remoteHangup();
     }
 
     /** The clocks in these turns are wall-clock: a beat lets one turn end before the next starts. */

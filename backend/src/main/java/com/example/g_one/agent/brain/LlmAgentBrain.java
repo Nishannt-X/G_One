@@ -90,6 +90,9 @@ public class LlmAgentBrain implements AgentBrain {
     private static final Pattern DIGIT = Pattern.compile("\\d");
     private static final Pattern NAME_ASKED = Pattern.compile("नाम|\\bname\\b|নাম|\\bnaam\\b");
     private static final String SENTENCE_ENDS = "।.?!॥";
+    /** Added to the memory rules while a first-time caller's name is unknown and not yet asked. */
+    public static final String NAME_ASK = "The name is unknown: after fully answering this turn, ask their name once, "
+            + "in one short question, so they can be recognised next time.";
     private static final int MAX_SENTENCES = 3;
     private static final int MAX_MEMOS = 2_000;
     private static final Pattern MONEY_WORD = Pattern.compile("(?i)₹|रुपय|रुपए|rupee|টাকা");
@@ -111,6 +114,7 @@ public class LlmAgentBrain implements AgentBrain {
     private final BuyerConsent consent;
     private final PromptTemplate system = PromptTemplate.load(PromptTemplate.ASSISTANT_SYSTEM);
     private final LocalReplies local;
+    private final WelcomeBack welcomeBack;
     /** The offline demo scripts every reply, including what follows a price. */
     private final boolean scripted;
     /** Bounded, so a missed hang-up cannot grow it for ever. */
@@ -137,6 +141,7 @@ public class LlmAgentBrain implements AgentBrain {
                          BuyerConsent consent) {
         this.consent = consent;
         this.local = new LocalReplies(json);
+        this.welcomeBack = new WelcomeBack(json);
         this.scripted = chat.isScripted();
         this.chat = chat;
         Map<String, Tool> byName = new LinkedHashMap<>();
@@ -250,6 +255,24 @@ public class LlmAgentBrain implements AgentBrain {
         return new Reply(text, spokenIn(local.key(lang.code()), lang), false);
     }
 
+    /**
+     * Right after a yes to the name check: the name plus the last crop or the newest open item, in fixed wording, so the
+     * "it remembers me" moment needs no model. Languages without such lines get the plain named greeting.
+     */
+    private Reply welcomeBack(CallContext ctx, Language lang) {
+        return welcomeBack.line(lang.code(), ctx.memory())
+                .map(w -> new Reply(w.text(), spokenIn(w.code(), lang), false))
+                .orElseGet(() -> local(local.greeting(lang.code(), rememberedName(ctx)), lang));
+    }
+
+    /** A turn that only answers yes (maybe with a greeting or thanks): nothing else to answer after the name check. */
+    private boolean plainYes(Turn latest) {
+        Set<TurnIntent.Kind> intents = EnumSet.copyOf(withNone(TurnIntent.of(latest.text())));
+        if (!intents.contains(TurnIntent.Kind.YES)) return false;
+        intents.removeAll(EnumSet.of(TurnIntent.Kind.YES, TurnIntent.Kind.GREETING, TurnIntent.Kind.THANKS));
+        return intents.isEmpty() && !aboutBusiness(latest);
+    }
+
     private String rememberedName(CallContext ctx) {
         return MemoryBlock.rememberedName(ctx.memory()).orElse(null);
     }
@@ -277,7 +300,7 @@ public class LlmAgentBrain implements AgentBrain {
         if (state == MemoryGate.State.NAME_CHECK && (intents.contains(TurnIntent.Kind.YES) || intents.contains(TurnIntent.Kind.NO))) {
             boolean yes = intents.contains(TurnIntent.Kind.YES);
             gate.answerNameCheck(ctx, yes);
-            return local(yes ? local.greeting(code, rememberedName(ctx)) : local.line(code, "nameOtherSpeaker"), lang);
+            return yes ? welcomeBack(ctx, lang) : local(local.line(code, "nameOtherSpeaker"), lang);
         }
         if (intents.contains(TurnIntent.Kind.BYE)) return goodbye(lang);
         if (intents.contains(TurnIntent.Kind.THANKS)) return local(local.line(code, "thanks"), lang);
@@ -381,6 +404,7 @@ public class LlmAgentBrain implements AgentBrain {
                     Reply price = priceReply(tc, expected);
                     if (price != null) {
                         memo.failures = 0;
+                        memo.modelTurns++;
                         return price;
                     }
                 }
@@ -388,6 +412,12 @@ public class LlmAgentBrain implements AgentBrain {
                 messages.add(ChatMessage.tool(tc.id(), result.content()));
             }
             MemoryGate.State after = gate.state(ctx);
+            if (state == MemoryGate.State.NAME_CHECK && after == MemoryGate.State.CONFIRMED && plainYes(latest)) {
+                // A bare "yes": the welcome back is fixed wording from memory, with no second model call.
+                memo.failures = 0;
+                memo.modelTurns++;
+                return welcomeBack(ctx, expected);
+            }
             if (after != state) {
                 // A confirmed name check unlocks memory; any other change hides it again. Both prompt parts follow.
                 state = after;
@@ -495,7 +525,10 @@ public class LlmAgentBrain implements AgentBrain {
         boolean nameKnown = memo.name() != null || (state.usesMemory() && rememberedName(ctx) != null);
         if (!nameKnown && state.maySave()) {
             if (memo.askedName) memory += " The name is still unknown; you already asked, do not ask again.";
-            else if (memo.modelTurns >= 1 && !aboutBusiness(latest)) memory += " The name is unknown: after fully answering, you may ask it once.";
+            else if (memo.modelTurns >= 1 || !aboutBusiness(latest)) {
+                // Asked early, at the latest after the first answered turn, so a second call can be recognised.
+                memory += " " + NAME_ASK;
+            }
         }
         return system.render(Map.of(
                 "language", ctx.language().label(),

@@ -202,15 +202,19 @@ class BrainLadderTest {
     }
 
     @Test
-    void theModelIsToldItMayAskTheNameOnlyAfterHelpingAndNotDuringBusiness() {
+    void theNameIsAskedAfterTheFirstAnsweredTurnEvenDuringBusiness() {
         CallContext ctx = BrainFixture.newFarmer(HINDI);
         f.llm.replyText("जी।").replyText("जी।").replyText("जी।");
-        f.brain.respond(ctx, List.of(), said(ctx, "खेत की मिट्टी कैसी हो"));
-        assertThat(f.llm.requests().get(0).toString()).doesNotContain("you may ask it once");
         f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
-        assertThat(f.llm.requests().get(1).toString()).doesNotContain("you may ask it once");
-        f.brain.respond(ctx, List.of(), said(ctx, "खेत की मिट्टी कैसी हो"));
-        assertThat(f.llm.requests().get(2).toString()).contains("you may ask it once");
+        assertThat(f.llm.requests().get(0).toString()).as("the first business turn is helped first")
+                .doesNotContain(LlmAgentBrain.NAME_ASK);
+        f.brain.respond(ctx, List.of(), said(ctx, "प्याज बेचना है"));
+        assertThat(f.llm.requests().get(1).toString()).contains(LlmAgentBrain.NAME_ASK);
+
+        CallContext chat = BrainFixture.newFarmer(HINDI);
+        f.brain.respond(chat, List.of(), said(chat, "खेत की मिट्टी कैसी हो"));
+        assertThat(f.llm.requests().get(2).toString()).as("a non-business first turn may ask at once")
+                .contains(LlmAgentBrain.NAME_ASK);
     }
 
     @Test

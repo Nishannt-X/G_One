@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
  * it picks the tools worth offering and the questions that have a fixed truthful answer. It misses things; a miss only
  * means the model answers instead.
  */
-final class TurnIntent {
+public final class TurnIntent {
     enum Kind { NAME_SOURCE, IDENTITY, REPEAT, GREETING, THANKS, BYE, YES, NO, PRICE, WEATHER, SELL, FORGET }
 
     private static final int SHORT_TURN_WORDS = 7;
@@ -92,7 +92,7 @@ final class TurnIntent {
     }
 
     /** The name in "मेरा नाम X है", "my name is X" and the like; empty when the turn does not state one. */
-    static Optional<String> statedName(String text) {
+    public static Optional<String> statedName(String text) {
         Matcher m = STATED_NAME.matcher(SPACES.matcher(text == null ? "" : text.strip()).replaceAll(" "));
         if (!m.find()) return Optional.empty();
         List<String> words = new ArrayList<>(List.of(m.group(1).split(" ")));

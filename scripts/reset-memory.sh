@@ -7,6 +7,7 @@ dir="${1:-$(dirname "$0")/../backend/data}"
 mkdir -p -- "$dir"
 dir=$(cd -- "$dir" && pwd -P)
 take=$(mktemp -d "$dir/take-XXXXXXXX")
+printf '*\n' > "$take/.gitignore"
 if command -v cygpath >/dev/null 2>&1; then
   cygpath -w "$take"
 else

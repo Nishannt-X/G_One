@@ -30,7 +30,7 @@ export default function MemoryPanel({ call, saved }: { call: CallView | null; sa
             <div>
               <p className="text-sm font-medium text-faint">Open follow-ups</p>
               {open.length > 0 ? (
-                <ul className="list-disc pl-5">{open.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                <ul className="list-disc pl-5">{open.map((item) => <li key={item}>{item}</li>)}</ul>
               ) : <p className="text-muted">Nothing open</p>}
             </div>
             {last && <p key={last.callId} className="animate-fill text-muted"><span className="font-semibold text-ink">{shortDate(last.startedMs)}:</span> {last.summary}</p>}

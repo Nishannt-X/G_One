@@ -130,6 +130,13 @@ export function cropsOf(facts: ReadonlyArray<{ field: string; value: string }>):
 
 /** The assistant receives at most five open follow-ups from all stored gists. */
 export const MAX_OPEN_FOLLOW_UPS = 5
+const MAX_FOLLOW_UP_CHARS = 160
+
+function cleanFollowUp(text: string): string {
+  const flat = text.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').replace(/\s+/g, ' ').trim()
+  const points = Array.from(flat)
+  return points.length <= MAX_FOLLOW_UP_CHARS ? flat : points.slice(0, MAX_FOLLOW_UP_CHARS).join('').trimEnd() + '…'
+}
 
 /**
  * The follow-ups the assistant receives from MemoryBlock: all stored gists, newest first, once each, capped at five.
@@ -140,10 +147,10 @@ export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUp
   const seen = new Set<string>()
   for (const g of [...gists].sort((a, b) => b.startedMs - a.startedMs)) {
     for (const item of g.followUps) {
-      const key = item.trim().replace(/\s+/g, ' ').toLowerCase()
+      const key = cleanFollowUp(item)
       if (key && !seen.has(key)) {
         seen.add(key)
-        out.push(item)
+        out.push(key)
         if (out.length === MAX_OPEN_FOLLOW_UPS) return out
       }
     }

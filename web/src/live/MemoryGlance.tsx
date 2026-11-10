@@ -41,7 +41,7 @@ export default function MemoryGlance({ call }: { call: CallView }) {
             <div>
               <p className="text-xs font-semibold text-muted">{t('memory_open_items')}</p>
               {open.length > 0 ? (
-                <ul className="list-disc pl-5">{open.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                <ul className="list-disc pl-5">{open.map((item) => <li key={item}>{item}</li>)}</ul>
               ) : <p className="text-muted">{t('memory_open_none')}</p>}
             </div>
             {memory.gists[0] && (

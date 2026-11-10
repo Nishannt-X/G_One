@@ -37,10 +37,11 @@ describe('farmers', () => {
   test('open follow-ups match the assistant memory across older gists, capped at five', () => {
     const gist = (startedMs: number, followUps: string[]) => ({ callId: String(startedMs), startedMs, endedMs: startedMs, summary: 's', followUps })
     // The backend has already removed DONE items from the gist that held them, so what is left is open.
-    expect(openFollowUps([gist(2, ['sell tomato', 'Check rain']), gist(4, ['find onion buyer', 'check  rain']), gist(3, [])])).toEqual(['find onion buyer', 'check  rain', 'sell tomato'])
+    expect(openFollowUps([gist(2, ['sell tomato', 'Check rain']), gist(4, ['find onion buyer', 'check  rain']), gist(3, [])])).toEqual(['find onion buyer', 'check rain', 'sell tomato', 'Check rain'])
     expect(openFollowUps([gist(1, ['still open']), gist(2, []), gist(3, []), gist(4, ['new'])])).toEqual(['new', 'still open'])
     expect(openFollowUps([gist(1, ['sixth']), gist(2, ['fifth']), gist(3, ['fourth']), gist(4, ['third']), gist(5, ['second']), gist(6, ['first'])])).toEqual(['first', 'second', 'third', 'fourth', 'fifth'])
     expect(openFollowUps([gist(1, ['sell tomato']), gist(2, [])])).toEqual(['sell tomato'])
+    expect(openFollowUps([gist(1, ['x'.repeat(161)])])).toEqual(['x'.repeat(160) + '…'])
     expect(openFollowUps([])).toEqual([])
   })
 })

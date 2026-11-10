@@ -9,4 +9,5 @@ do {
     $take = Join-Path $parent ('take-' + [guid]::NewGuid().ToString('N'))
 } while (Test-Path -LiteralPath $take)
 [System.IO.Directory]::CreateDirectory($take) | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $take '.gitignore'), "*`n", [System.Text.UTF8Encoding]::new($false))
 Write-Output $take

@@ -143,8 +143,9 @@ export default function LandingPage({ section }: { section: string | null }) {
             <p className="mt-6 max-w-xl text-xl text-muted md:text-[1.375rem] md:leading-snug">
               G-One takes a farmer's ordinary phone call, finds a buyer, translates both ways, and quietly tells the farmer what the buyer can't hear.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a href="#/demo" className="btn-accent btn-lg"><PlayIcon /> Try the live demo</a>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <a href="#/demo" className="btn-accent btn-lg"><PlayIcon /> Watch the demo</a>
+              <a href="#/call" className="btn-quiet btn-lg"><PhoneIcon /> Try a call</a>
               <a href="#/how" className="btn-quiet btn-lg">See how it works <ArrowIcon /></a>
             </div>
             <p className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-lg font-medium text-muted">

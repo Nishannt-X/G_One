@@ -137,10 +137,10 @@ export default function SimulatorPage() {
             <h1 className="text-3xl font-bold md:text-4xl">Call simulator</h1>
           </div>
           <a
-            href="#/demo"
+            href="#/call"
             className={`btn-quiet text-base font-semibold ${FOCUS}`}
           >
-            Open the demo view
+            Open Try a call
           </a>
         </header>
 

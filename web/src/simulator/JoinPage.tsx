@@ -80,7 +80,7 @@ function useWakeLock(active: boolean) {
 }
 
 /**
- * The buyer's phone: #/join?call=<id>, opened from the demo page's QR code. Tapping join is the user gesture audio needs.
+ * The buyer's phone: #/join?call=<id>, opened from the QR code on the Try a call page (#/call). Tapping join is the user gesture audio needs.
  * It speaks the same /ws/simulator protocol as every other leg. G-One still asks for the buyer's spoken yes first.
  */
 export default function JoinPage({ query }: { query: URLSearchParams }) {

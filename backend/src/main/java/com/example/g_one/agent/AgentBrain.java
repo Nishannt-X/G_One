@@ -1,6 +1,7 @@
 package com.example.g_one.agent;
 
 import com.example.g_one.core.CallContext;
+import com.example.g_one.core.CallId;
 import com.example.g_one.core.Language;
 import com.example.g_one.core.Turn;
 import java.util.List;
@@ -26,6 +27,15 @@ public interface AgentBrain {
      * @param latest the farmer turn to answer
      */
     Reply respond(CallContext ctx, List<Line> history, Turn latest);
+
+    /**
+     * True while this call still waits for the farmer to answer an identity question the brain asked, such as a returning
+     * farmer's name check. The pipeline holds back a request heard before that question and answers it once this turns
+     * false. The default brain asks no such question.
+     */
+    default boolean awaitingIdentity(CallId callId) {
+        return false;
+    }
 
     /** Who said a line of the conversation. */
     enum Speaker { FARMER, BUYER, ASSISTANT }

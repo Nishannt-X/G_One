@@ -357,6 +357,21 @@ class LlmAgentBrainTest {
     }
 
     @Test
+    void identityIsAwaitedOnlyWhileTheNameCheckIsOpen() {
+        CallContext ctx = BrainFixture.returning(HINDI, f.seedSuresh());
+        assertThat(f.brain.awaitingIdentity(ctx.callId())).as("before the greeting").isFalse();
+        f.brain.greet(ctx);
+        assertThat(f.brain.awaitingIdentity(ctx.callId())).isTrue();
+        f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
+        f.brain.respond(ctx, List.of(), said(ctx, "हाँ"));
+        assertThat(f.brain.awaitingIdentity(ctx.callId())).isFalse();
+
+        CallContext first = BrainFixture.newFarmer(HINDI);
+        f.brain.greet(first);
+        assertThat(f.brain.awaitingIdentity(first.callId())).isFalse();
+    }
+
+    @Test
     void aModelThatForgetsTheNameQuestionStillAsksItAfterTheFirstBusinessAnswer() {
         CallContext ctx = BrainFixture.newFarmer(ENGLISH);
         f.llm.replyText("Onion prices in Lasalgaon were steady in early November.");

@@ -109,23 +109,87 @@ class CallPipelineLanguageTest {
         });
     }
 
+    private static final String NAME_CHECK = "क्या मैं Suresh जी से बात कर रही हूँ?";
+    private static final String REQUEST = "हाँ, मुझे गेहूँ का भाव बताइए";
+
+    private List<String> respondedTo() {
+        return brain.responds.stream().map(r -> r.latest().text()).toList();
+    }
+
     @Test
     void aSentenceThatChoosesTheLanguageIsNotTakenAsTheAnswerToTheNameCheckThatFollows() {
-        brain.greetText = "क्या मैं Suresh जी से बात कर रही हूँ?";
+        brain.greetText = NAME_CHECK;
         hearAll();
-        say("हाँ, मुझे प्याज़ का भाव बताइए");
+        say(REQUEST);
         hearAll();
 
-        assertThat(spoken()).endsWith("ठीक है, हिंदी में बात करते हैं।", "क्या मैं Suresh जी से बात कर रही हूँ?");
+        assertThat(spoken()).endsWith("ठीक है, हिंदी में बात करते हैं।", NAME_CHECK);
         assertThat(brain.responds).as("the farmer had not heard the name check yet").isEmpty();
+        assertThat(brain.identityOpen).isTrue();
+    }
+
+    @Test
+    void aRequestHeldThroughTheNameCheckIsAnsweredRightAfterAYes() {
+        brain.greetText = NAME_CHECK;
+        hearAll();
+        say(REQUEST);
+        hearAll();
+        say("हाँ");
+        hearAll();
+
+        assertThat(respondedTo()).containsExactly("हाँ", REQUEST);
+        assertThat(spoken()).endsWith(ScriptedBrain.replyTo("हाँ"), ScriptedBrain.replyTo(REQUEST));
+        assertThat(brain.responds.get(1)).satisfies(r -> {
+            assertThat(r.latest().language().code()).isEqualTo("hi-IN");
+            assertThat(r.history()).extracting(com.example.g_one.agent.AgentBrain.Line::text)
+                    .containsSubsequence(NAME_CHECK, "हाँ", ScriptedBrain.replyTo("हाँ"));
+        });
+
+        say("और टमाटर का");
+        hearAll();
+        assertThat(respondedTo()).as("answered once").containsExactly("हाँ", REQUEST, "और टमाटर का");
+    }
+
+    @Test
+    void aRequestHeldThroughTheNameCheckIsAnsweredRightAfterANo() {
+        brain.greetText = NAME_CHECK;
+        hearAll();
+        say(REQUEST);
+        hearAll();
+        say("नहीं");
+        hearAll();
+
+        assertThat(respondedTo()).containsExactly("नहीं", REQUEST);
+        assertThat(spoken()).endsWith(ScriptedBrain.replyTo("नहीं"), ScriptedBrain.replyTo(REQUEST));
+    }
+
+    @Test
+    void silenceKeepsTheRequestHeldAndAnotherQuestionBeforeTheNameCheckIsAnsweredReplacesIt() {
+        brain.greetText = NAME_CHECK;
+        hearAll();
+        say(REQUEST);
+        hearAll();
+        hearAll();
+        assertThat(brain.responds).as("silence answers nothing").isEmpty();
+
+        say("प्याज़ का भाव क्या है");
+        hearAll();
+        assertThat(brain.identityOpen).isTrue();
+        assertThat(respondedTo()).as("the newer question is answered; the held one is never read as a yes")
+                .containsExactly("प्याज़ का भाव क्या है");
 
         say("हाँ");
         hearAll();
-        assertThat(brain.responds).singleElement().satisfies(r -> {
-            assertThat(r.latest().text()).isEqualTo("हाँ");
-            assertThat(r.history()).extracting(com.example.g_one.agent.AgentBrain.Line::text)
-                    .contains("हाँ, मुझे प्याज़ का भाव बताइए", "क्या मैं Suresh जी से बात कर रही हूँ?");
-        });
+        assertThat(respondedTo()).containsExactly("प्याज़ का भाव क्या है", "हाँ");
+    }
+
+    @Test
+    void aFirstTimeCallersSentenceIsStillAnsweredRightAfterTheGreeting() {
+        hearAll();
+        say(REQUEST);
+        hearAll();
+        assertThat(respondedTo()).containsExactly(REQUEST);
+        assertThat(spoken()).endsWith(ScriptedBrain.GREETING, ScriptedBrain.replyTo(REQUEST));
     }
 
     @Test

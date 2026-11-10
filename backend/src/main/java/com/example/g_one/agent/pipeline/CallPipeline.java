@@ -203,6 +203,12 @@ public final class CallPipeline {
         private volatile MediationSession mediationSession;
         private String outcome;
         private String dealSummary;
+        /**
+         * A request heard in the same turn that chose the language, held back because the greeting after it asked the
+         * farmer something (a returning farmer's name check). Answered right after the farmer's next turn once the brain
+         * no longer waits for an identity answer; dropped if that turn did not settle it. Guarded by {@link #lock}.
+         */
+        private Turn heldRequest;
         /** Null for a leg started with a fixed language. */
         private final LanguageFlow languageFlow;
 
@@ -462,8 +468,48 @@ public final class CallPipeline {
                     return; // a newer turn already arrived; skip the brain call
                 }
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, answerTo), ctx.language());
-                deliver(turnGeneration, reply);
+                Turn held = takeHeldRequest();
+                if (held == null) {
+                    deliver(turnGeneration, reply);
+                } else if (brain.awaitingIdentity(callId)) {
+                    // The farmer moved on without settling who they are: their newer turn is the one answered.
+                    log.info("A request held from the language turn was dropped on leg {}: the name check is still open",
+                            leg.id());
+                    deliver(turnGeneration, reply);
+                } else {
+                    deliver(turnGeneration, reply, () -> answerHeld(turnGeneration, held));
+                }
             });
+        }
+
+        private Turn takeHeldRequest() {
+            synchronized (lock) {
+                Turn held = heldRequest;
+                heldRequest = null;
+                return held;
+            }
+        }
+
+        /**
+         * Answers the request held from the language turn, now that identity is settled, in the leg's current language.
+         * Its words never answered the name check: the brain reads them only after that decision.
+         */
+        private void answerHeld(long turnGeneration, Turn held) {
+            if (generation.get() != turnGeneration) {
+                return;
+            }
+            CallContext ctx;
+            List<Line> history;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return;
+                }
+                ctx = context;
+                history = List.copyOf(lines);
+            }
+            Turn request = withLanguage(held, ctx.language());
+            Reply reply = askBrain("respond", () -> brain.respond(ctx, history, request), ctx.language());
+            deliver(turnGeneration, reply);
         }
 
         // ---- the leg's language ----
@@ -552,8 +598,13 @@ public final class CallPipeline {
             }
             Reply greeting = askBrain("greet", () -> brain.greet(ctx), ctx.language());
             // A greeting that asks something, such as a returning farmer's name check, waits for its own answer: words
-            // said before it was heard cannot answer it. The turn stays in the transcript and the history.
+            // said before it was heard cannot answer it. The request is held and answered after that answer.
             boolean answerNow = answer && !asksSomething(greeting);
+            if (answer && !answerNow) {
+                synchronized (lock) {
+                    heldRequest = turn;
+                }
+            }
             deliver(turnGeneration, greeting, !answerNow ? null : () -> {
                 if (generation.get() != turnGeneration) {
                     return;

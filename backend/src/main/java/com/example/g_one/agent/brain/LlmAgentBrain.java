@@ -332,6 +332,12 @@ public class LlmAgentBrain implements AgentBrain {
         return gate.peek(callId);
     }
 
+    /** True while the returning farmer's name check is unanswered. */
+    @Override
+    public boolean awaitingIdentity(CallId callId) {
+        return gate.peek(callId).filter(s -> s == MemoryGate.State.NAME_CHECK).isPresent();
+    }
+
     /** What happened during one {@link #respond}, kept outside the try so a late failure still ends the call. */
     private static final class Progress {
         boolean endCall;

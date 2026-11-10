@@ -33,6 +33,13 @@ final class ScriptedBrain implements AgentBrain {
     volatile String replyText;
     /** When set, the greeting says exactly this, as a returning farmer's name check would. */
     volatile String greetText;
+    /** True from a {@link #greetText} greeting until a yes or no answers it, as a name check does. */
+    volatile boolean identityOpen;
+
+    @Override
+    public boolean awaitingIdentity(com.example.g_one.core.CallId callId) {
+        return identityOpen;
+    }
 
     static String replyTo(String turn) {
         return "reply to " + turn;
@@ -44,6 +51,7 @@ final class ScriptedBrain implements AgentBrain {
         if (failGreet) {
             throw new IllegalStateException("brain down (test)");
         }
+        identityOpen = greetText != null;
         String text = greetText != null ? greetText : ctx.memory().isEmpty() ? GREETING : GREETING + " Welcome back.";
         return new Reply(text, ctx.language(), false);
     }
@@ -51,6 +59,7 @@ final class ScriptedBrain implements AgentBrain {
     @Override
     public Reply respond(CallContext ctx, List<Line> history, Turn latest) {
         responds.add(new RespondCall(ctx, List.copyOf(history), latest));
+        if (List.of("हाँ", "नहीं", "yes", "no").contains(latest.text())) identityOpen = false;
         whileThinking.accept(latest.text());
         if (failRespond) {
             throw new IllegalStateException("brain down (test)");

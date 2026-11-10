@@ -212,6 +212,42 @@ class OfflineDemoTest {
         second.remoteHangup();
     }
 
+    /** A question asked with the language choice waits for the name check, then gets its answer. */
+    @Test
+    void aReturningFarmersQuestionAskedWithTheLanguageIsAnsweredAfterTheNameCheck() {
+        bus.subscribe(events::add);
+        CallerKey key = CallerKey.fromPhone("+15005550011", FakeLeg.SALT);
+        FakeLeg first = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
+        keepHearing(first);
+        registry.register(first);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("नोट रखूँगी")));
+        sleep();
+        typed.say(first.id(), "मेरा नाम सुरेश है");
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("सुरेश"));
+        first.remoteHangup();
+
+        events.clear();
+        FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
+        keepHearing(second);
+        registry.register(second);
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("Which language")));
+        sleep();
+        typed.say(second.id(), "Hindi, what is the wheat price?");
+        // An English sentence that mentions Hindi is English to the detector: the flow is the same in either language.
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.text().contains("Am I speaking with सुरेश ji?")));
+        sleep();
+        assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).as("nothing answered before the name check")
+                .noneMatch(t -> t.tool().equals("get_mandi_price") || t.tool().equals("confirm_name"));
+        typed.say(second.id(), "yes");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).extracting(ConsoleEvent.ToolCalled::tool)
+                .containsSubsequence("confirm_name", "get_mandi_price"));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).extracting(ConsoleEvent.AssistantSaid::text)
+                .anyMatch(t -> t.startsWith("Welcome back, सुरेश ji."))
+                .anyMatch(t -> t.contains("AGMARKNET")));
+        second.remoteHangup();
+    }
+
     @Test
     void aBuyerFirstCallHearsTheNameQuestionAndSavesTheAnswer() {
         bus.subscribe(events::add);

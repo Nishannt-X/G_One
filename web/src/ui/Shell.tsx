@@ -5,7 +5,7 @@ import { useTheme } from '../lib/theme'
 import { ChevronIcon, CrossIcon, Logo, MenuIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
 
 const ADVANCED: { href: string; view: Route['view']; label: string; note: string }[] = [
-  { href: '#/live', view: 'live', label: 'Operator console', note: 'Every signal from a running call' },
+  { href: '#/analytics', view: 'analytics', label: 'Analytics', note: 'The live call, and the calls kept with consent' },
   { href: '#/buyers', view: 'buyers', label: 'Buyer directory', note: 'The synthetic buyers G-One can match' },
   { href: '#/memory', view: 'memory', label: 'Memory lookup', note: 'Find a farmer by caller key' },
 ]

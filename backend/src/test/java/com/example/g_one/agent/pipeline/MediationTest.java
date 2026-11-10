@@ -526,6 +526,22 @@ class MediationTest {
         assertThat(agreed.quantity()).isEqualTo("20 quintal");
         assertThat(agreed.pickup()).contains("Monday at the farm").contains("payment on delivery");
 
+        // After the deal, both are asked whether to end the call, then whether G-One may remember it.
+        finishAll();
+        assertThat(spokenTo(farmer)).last().asString().contains("कॉल ख़त्म");
+        assertThat(spokenTo(buyer)).last().asString().isEqualTo("Would you like to end the call? Please say yes or no.");
+        assertThat(farmer.isEnded()).isFalse();
+        session(LegRole.FARMER).say("हाँ");
+        executor.runAll();
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).last().asString().contains("remember the main points");
+        session(LegRole.FARMER).say("हाँ जी");
+        executor.runAll();
+        session(LegRole.BUYER).say("no");
+        executor.runAll();
+
         for (int i = 0; i < 4; i++) {
             if (!buyer.isEnded()) buyer.finishPlayback();
             if (!farmer.isEnded()) farmer.finishPlayback();
@@ -535,6 +551,13 @@ class MediationTest {
         assertThat(farmer.isEnded()).isTrue();
         assertThat(eventsOf(ConsoleEvent.LegEnded.class)).filteredOn(e -> e.role() == LegRole.BUYER)
                 .singleElement().satisfies(e -> assertThat(e.reason()).isEqualTo("deal_agreed"));
+        // One consent event per party, farmer first, before call_ended.
+        assertThat(eventsOf(ConsoleEvent.ConsentRecorded.class))
+                .extracting(ConsoleEvent.ConsentRecorded::role, ConsoleEvent.ConsentRecorded::consent)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(LegRole.FARMER, "YES"),
+                        org.assertj.core.groups.Tuple.tuple(LegRole.BUYER, "NO"));
+        int lastConsent = events.indexOf(eventsOf(ConsoleEvent.ConsentRecorded.class).get(1));
+        assertThat(lastConsent).isLessThan(events.indexOf(eventsOf(ConsoleEvent.CallEnded.class).get(0)));
         assertThat(ended).singleElement().satisfies(e -> {
             assertThat(e.outcome()).isEqualTo("deal_confirmed");
             assertThat(e.dealSummary()).contains("Mehta Agro Traders").contains("20 quintal").contains("Not a contract");

@@ -189,6 +189,19 @@ export interface LanguageChanged {
   reason: string
 }
 
+/**
+ * One party's answer, before the call ended, to "may we remember the main points of this call?". Sent once per role
+ * (farmer, buyer) right before call_ended. NONE: not asked, no clear answer, silence, or hung up first.
+ */
+export interface ConsentRecorded {
+  type: 'consent_recorded'
+  callId: string
+  role: LegRole
+  /** "YES", "NO" or "NONE". */
+  consent: string
+  atMs: number
+}
+
 export type ConsoleEvent =
   | CallStarted
   | LegJoined
@@ -203,6 +216,7 @@ export type ConsoleEvent =
   | CallEnded
   | TurnMeasured
   | LanguageChanged
+  | ConsentRecorded
 
 export type ConsoleEventType = ConsoleEvent['type']
 
@@ -221,6 +235,7 @@ const KNOWN_TYPES: Record<ConsoleEventType, true> = {
   call_ended: true,
   turn_measured: true,
   language_changed: true,
+  consent_recorded: true,
 }
 
 export const CONSOLE_EVENT_TYPES = Object.keys(KNOWN_TYPES) as ConsoleEventType[]

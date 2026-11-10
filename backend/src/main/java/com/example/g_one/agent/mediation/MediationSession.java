@@ -2,6 +2,8 @@ package com.example.g_one.agent.mediation;
 
 import com.example.g_one.agent.AgentBrain.Speaker;
 import com.example.g_one.agent.caution.Caution;
+import com.example.g_one.agent.closing.CallClosing;
+import com.example.g_one.agent.closing.ClosingLines;
 import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
 import com.example.g_one.agent.deal.ReplyGuard;
@@ -330,6 +332,7 @@ public final class MediationSession {
                 phase = Phase.LIVE;
             }
             side.takeOver();
+            side.closing().joined(LegRole.BUYER);
             sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
             sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
                     Map.of("buyer", buyerName())), false, null);
@@ -367,6 +370,7 @@ public final class MediationSession {
 
     private void process(Turn turn, long n) {
         desk.tick();
+        if (closingTurn(turn)) return;
         LegRole speaker = turn.role();
         LegRole listener = speaker.other();
         Language to = language(listener);
@@ -617,15 +621,70 @@ public final class MediationSession {
 
     private void agreed(Terms terms) {
         synchronized (lock) {
-            phase = Phase.OVER;
             buyerEndReason = "deal_agreed";
         }
         side.outcome("deal_confirmed", DealDesk.summary(terms, buyerName()));
-        // The buyer's leg ends first, then the farmer hears the private wrap-up and the call ends.
-        sayAssistant(LegRole.BUYER, lines.get("endBuyer", buyer.language().code()), true, o -> {
-            hangUpBuyer();
-            sayAssistant(LegRole.FARMER, lines.get("endFarmer", language(LegRole.FARMER).code()), true, x -> side.hangUp());
-        });
+        // Both said yes to the terms: ask both whether to end the call, then whether G-One may remember it.
+        closingStep(side.closing().start());
+    }
+
+    // ---- the end of the call, asked of both parties (agent/closing) ----
+
+    /** A turn answering the end-of-call check, or a short "bye" outside any read-back. True when handled here. */
+    private boolean closingTurn(Turn turn) {
+        CallClosing closing = side.closing();
+        LegRole speaker = turn.role();
+        if (closing.active()) {
+            closingStep(closing.heard(speaker, turn.text()));
+            return true;
+        }
+        boolean deskIdle = desk.awaiting(LegRole.FARMER).isEmpty() && desk.awaiting(LegRole.BUYER).isEmpty();
+        if (deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text())) {
+            closingStep(closing.start());
+            return true;
+        }
+        closing.turnTaken(speaker);
+        return false;
+    }
+
+    private void closingStep(CallClosing.Step step) {
+        if (step.finished()) {
+            synchronized (lock) {
+                phase = Phase.OVER;
+            }
+            // The buyer's leg ends first, then the farmer hears the goodbye and the call ends.
+            sayClosing(LegRole.BUYER, ClosingLines.goodbye(language(LegRole.BUYER).code()), o -> {
+                hangUpBuyer();
+                sayClosing(LegRole.FARMER, ClosingLines.goodbye(language(LegRole.FARMER).code()), x -> side.hangUp());
+            });
+            return;
+        }
+        if (step.resumed()) {
+            for (LegRole role : LegRole.values()) sayClosing(role, ClosingLines.carryOn(language(role).code()), null);
+            return;
+        }
+        for (CallClosing.Ask ask : step.asks()) {
+            sayClosing(ask.role(), ClosingLines.ask(ask.question(), language(ask.role()).code()),
+                    o -> waitForAnswer(ask.role(), ask.token()));
+        }
+    }
+
+    private void waitForAnswer(LegRole role, long token) {
+        try {
+            CompletableFuture.delayedExecutor(CallClosing.ANSWER_WAIT_MS, TimeUnit.MILLISECONDS, executor)
+                    .execute(() -> enqueue(() -> closingStep(side.closing().timeout(role, token))));
+        } catch (RejectedExecutionException e) {
+            log.debug("No answer timer on call {}: shutting down", callId);
+        }
+    }
+
+    /** A fixed closing line, already written in the leg's language. */
+    private void sayClosing(LegRole role, String text, Consumer<PlaybackOutcome> done) {
+        Language lang = language(role);
+        Leg leg = role == LegRole.FARMER ? farmer.farmerLeg() : buyer;
+        voice(role).say(new LegVoice.Line(text, lang, false, done));
+        bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), role, lang.code(), text));
+        side.note(Speaker.ASSISTANT, text);
     }
 
     // ---- helpers ----
@@ -707,6 +766,13 @@ public final class MediationSession {
         buyerVoice.close();
         closeQuietly(toClose);
         bus.publish(new ConsoleEvent.LegEnded(callId, clock.millis(), buyer.id(), LegRole.BUYER, reason));
+        // A buyer who leaves mid-check counts as no answer; the farmer may still be asked.
+        CallClosing.Step left = side.closing().left(LegRole.BUYER);
+        if (left.finished()) {
+            sayClosing(LegRole.FARMER, ClosingLines.goodbye(language(LegRole.FARMER).code()), x -> side.hangUp());
+            return;
+        }
+        if (!left.asks().isEmpty()) enqueue(() -> closingStep(left));
         if (before != Phase.OVER) {
             sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", language(LegRole.FARMER).code()), false, null);
             side.release();

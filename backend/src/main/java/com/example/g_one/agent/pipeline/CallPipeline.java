@@ -4,6 +4,8 @@ import com.example.g_one.agent.AgentBrain;
 import com.example.g_one.agent.AgentBrain.Line;
 import com.example.g_one.agent.AgentBrain.Reply;
 import com.example.g_one.agent.AgentBrain.Speaker;
+import com.example.g_one.agent.closing.CallClosing;
+import com.example.g_one.agent.closing.ClosingLines;
 import com.example.g_one.agent.language.LanguageFlow;
 import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.llm.ReasoningText;
@@ -37,10 +39,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
@@ -211,12 +215,15 @@ public final class CallPipeline {
         private Turn heldRequest;
         /** Null for a leg started with a fixed language. */
         private final LanguageFlow languageFlow;
+        /** The end-of-call check and every party's answer to the save question. Thread safe on its own. */
+        private final CallClosing closing;
 
         FarmerLeg(Leg leg) {
             this.leg = leg;
             this.callId = leg.callId();
             this.startedMs = now();
             this.languageFlow = languages != null && leg.languagePending() ? new LanguageFlow(languages::find) : null;
+            this.closing = new CallClosing(leg.callerKey().isEmpty());
         }
 
         void begin() {
@@ -373,6 +380,11 @@ public final class CallPipeline {
         }
 
         @Override
+        public CallClosing closing() {
+            return closing;
+        }
+
+        @Override
         public void onSpeechStart() {
             MediationSession live = mediationSession;
             if (live != null && live.live()) {
@@ -433,6 +445,9 @@ public final class CallPipeline {
                 note(Speaker.FARMER, turn.text());
                 publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
                 live.farmerTurn(heard);
+                return;
+            }
+            if (closingTurn(turn)) {
                 return;
             }
             Turn answerTo = turn;
@@ -510,6 +525,93 @@ public final class CallPipeline {
             Turn request = withLanguage(held, ctx.language());
             Reply reply = askBrain("respond", () -> brain.respond(ctx, history, request), ctx.language());
             deliver(turnGeneration, reply);
+        }
+
+        // ---- the end of the call: "end the call?", then "may we remember?" (decided by code) ----
+
+        /**
+         * A turn that answers the end-of-call check, or a short "bye / that's all" that starts it. True when the turn was
+         * handled here and must not reach the brain. Never starts while the name check waits or a request is held.
+         */
+        private boolean closingTurn(Turn turn) {
+            boolean identityOpen = brain.awaitingIdentity(callId);
+            CallClosing.Step step;
+            long turnGeneration;
+            boolean wasSpeaking;
+            Synthesis toCancel;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return false;
+                }
+                if (closing.finished()) {
+                    return true; // the goodbye is on its way
+                }
+                if (closing.active()) {
+                    step = closing.heard(LegRole.FARMER, turn.text());
+                } else if (!identityOpen && heldRequest == null && closing.mayAsk(LegRole.FARMER)
+                        && CallClosing.saysDone(turn.text())) {
+                    step = closing.start();
+                } else {
+                    closing.turnTaken(LegRole.FARMER);
+                    return false;
+                }
+                lines.add(new Line(Speaker.FARMER, turn.text()));
+                turnGeneration = generation.incrementAndGet();
+                wasSpeaking = speaking;
+                quiet();
+                toCancel = synthesis;
+                synthesis = null;
+            }
+            if (wasSpeaking) {
+                stopSpeaking(toCancel);
+            }
+            publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
+            submit("closing", () -> closingStep(turnGeneration, step));
+            return true;
+        }
+
+        private void closingStep(long stepGeneration, CallClosing.Step step) {
+            Language lang;
+            synchronized (lock) {
+                if (ended || context == null) {
+                    return;
+                }
+                lang = context.language();
+            }
+            if (step.finished()) {
+                deliver(stepGeneration, new Reply(ClosingLines.goodbye(lang.code()), lang, true));
+            } else if (step.resumed()) {
+                deliver(stepGeneration, new Reply(ClosingLines.carryOn(lang.code()), lang, false));
+            } else {
+                for (CallClosing.Ask ask : step.asks()) {
+                    if (ask.role() == LegRole.FARMER) { // a buyer is asked by mediation, on its own leg
+                        deliver(stepGeneration, new Reply(ClosingLines.ask(ask.question(), lang.code()), lang, false),
+                                () -> waitForAnswer(ask.token()));
+                    }
+                }
+            }
+        }
+
+        /** No answer within {@link CallClosing#ANSWER_WAIT_MS}: ask once more, then count it as no answer. */
+        private void waitForAnswer(long token) {
+            try {
+                CompletableFuture.delayedExecutor(CallClosing.ANSWER_WAIT_MS, TimeUnit.MILLISECONDS, executor).execute(() -> {
+                    CallClosing.Step step = closing.timeout(LegRole.FARMER, token);
+                    if (step.asks().isEmpty() && !step.resumed() && !step.finished()) {
+                        return;
+                    }
+                    long stepGeneration;
+                    synchronized (lock) {
+                        if (ended) {
+                            return;
+                        }
+                        stepGeneration = generation.incrementAndGet();
+                    }
+                    closingStep(stepGeneration, step);
+                });
+            } catch (RejectedExecutionException e) {
+                log.debug("No answer timer on leg {}: shutting down", leg.id());
+            }
         }
 
         // ---- the leg's language ----
@@ -823,6 +925,9 @@ public final class CallPipeline {
             cancelQuietly(toCancel);
             closeQuietly(toClose);
             long endedMs = now();
+            // Once per party, before call_ended: what each said to "may we remember?" (NONE when never answered).
+            closing.consent().forEach((role, answer) ->
+                    publish(new ConsoleEvent.ConsentRecorded(callId, role, answer.name(), endedMs)));
             publish(new ConsoleEvent.LegEnded(callId, endedMs, leg.id(), LegRole.FARMER, reason));
             publish(new ConsoleEvent.CallEnded(callId, endedMs, endedMs - startedMs, reason));
             if (ctx == null) {

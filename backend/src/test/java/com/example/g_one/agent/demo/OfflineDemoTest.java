@@ -129,10 +129,29 @@ class OfflineDemoTest {
         typed.say(buyer.id(), "Yes");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).anyMatch(d -> d.state() == DealState.AGREED));
 
+        // The end of the call is asked of both, then whether G-One may remember it.
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.role() == LegRole.BUYER && a.text().contains("end the call")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.role() == LegRole.FARMER && a.text().contains("कॉल ख़त्म")));
+        assertThat(farmer.isEnded()).isFalse();
+        typed.say(farmer.id(), "हाँ");
+        typed.say(buyer.id(), "Yes");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.role() == LegRole.BUYER && a.text().contains("remember the main points")));
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
+                .anyMatch(a -> a.role() == LegRole.FARMER && a.text().contains("मुख्य बातें")));
+        typed.say(farmer.id(), "हाँ");
+        typed.say(buyer.id(), "No");
+
         waitFor(() -> {
             assertThat(farmer.isEnded()).isTrue();
             assertThat(buyer.isEnded()).isTrue();
         });
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.ConsentRecorded.class))
+                .extracting(ConsoleEvent.ConsentRecorded::role, ConsoleEvent.ConsentRecorded::consent)
+                .containsExactly(org.assertj.core.groups.Tuple.tuple(LegRole.FARMER, "YES"),
+                        org.assertj.core.groups.Tuple.tuple(LegRole.BUYER, "NO")));
         waitFor(() -> assertThat(store.load(FakeLeg.FARMER_KEY)).isPresent());
         assertThat(store.load(FakeLeg.FARMER_KEY).orElseThrow().gists().get(0).summary())
                 .contains("Mehta Agro Traders").contains("4,300").contains("Not a contract");

@@ -46,7 +46,7 @@ class ConsoleEventJsonTest {
      * Events described only on their Java record and in console.ts. The owner's rule keeps markdown out of commits, so
      * docs/console-events.md stays as it is for these. Java and TypeScript still have to agree on them.
      */
-    private static final Set<String> NOT_IN_DOC = Set.of("language_changed");
+    private static final Set<String> NOT_IN_DOC = Set.of("language_changed", "consent_recorded");
 
     /** Fields every event has; the docs describe them once under "Common rules" instead of per event. */
     private static final Set<String> COMMON = Set.of("type", "callId", "atMs");

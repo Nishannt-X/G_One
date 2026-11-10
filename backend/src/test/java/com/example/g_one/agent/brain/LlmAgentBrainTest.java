@@ -93,10 +93,11 @@ class LlmAgentBrainTest {
         Reply r = f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "नमस्ते")), said(ctx, "प्याज का भाव क्या है?"));
 
         assertThat(r.text()).isEqualTo("AGMARKNET के अनुसार चार नवंबर को Lasalgaon में लाल प्याज़ का भाव चार हज़ार पाँच सौ "
-                + "रुपये प्रति क्विंटल लिखा था। यह उसी तारीख की जानकारी है। क्या आप इसे बेचना चाहते हैं?");
+                + "रुपये प्रति क्विंटल लिखा था। यह उसी तारीख की जानकारी है। और आपका नाम क्या है?");
         assertThat(r.language()).isEqualTo(HINDI);
         assertThat(r.endCall()).isFalse();
         assertThat(f.llm.requests()).as("the price is spoken from code, with no second model call").hasSize(1);
+        assertThat(r.text()).contains("आपका नाम क्या है?");
 
         JsonNode first = f.llm.requests().get(0);
         assertThat(toolNames(first)).containsExactly("end_call", "get_mandi_price", "save_profile_fact");
@@ -237,8 +238,9 @@ class LlmAgentBrainTest {
         f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
         f.llm.replyText("आपने कहा था कि कटाई के बाद प्याज़ के लिए ख़रीदार ढूँढूँ।");
 
+        // Not a bare yes (it asks something), so the model goes on after confirm_name.
         f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "क्या मैं Suresh जी से बात कर रही हूँ?")),
-                said(ctx, "हाँ, मैं सुरेश हूँ"));
+                said(ctx, "हाँ, मैं सुरेश हूँ। प्याज़ के ख़रीदार का क्या हुआ?"));
 
         assertThat(systemPrompt(0)).doesNotContain("Lasalgaon APMC").doesNotContain("Nashik").doesNotContain("Suresh")
                 .contains("call confirm_name");
@@ -336,6 +338,31 @@ class LlmAgentBrainTest {
         assertThat(f.store.calls).hasValue(0);
         assertThat(f.store.load(FakeLeg.FARMER_KEY).orElseThrow().fact("name").orElseThrow().value()).isEqualTo("Suresh");
         assertThat(String.join("\n", f.toolEvents.stream().map(e -> e.result()).toList())).doesNotContain("Lasalgaon");
+    }
+
+    @Test
+    void aFirstTimeCallerIsAskedTheirNameAfterTheFirstAnsweredBusinessTurn() {
+        CallContext ctx = BrainFixture.newFarmer(HINDI);
+        f.llm.replyText("बताइए, कितना प्याज़ है?");
+        f.brain.respond(ctx, List.of(), said(ctx, "मुझे प्याज़ बेचना है"));
+        assertThat(systemPrompt(0)).contains(LlmAgentBrain.NAME_ASK);
+
+        f.llm.replyText("ठीक है। आपका नाम क्या है?");
+        f.brain.respond(ctx, List.of(), said(ctx, "बीस क्विंटल प्याज़ बेचना है"));
+        assertThat(systemPrompt(1)).contains(LlmAgentBrain.NAME_ASK);
+
+        f.llm.replyText("ठीक है।");
+        f.brain.respond(ctx, List.of(), said(ctx, "अभी नहीं बताना"));
+        assertThat(systemPrompt(2)).doesNotContain(LlmAgentBrain.NAME_ASK).contains("do not ask again");
+    }
+
+    @Test
+    void shortNameAnswersAreRecognisedOnlyWhenAsked() {
+        for (String answer : List.of("Ramesh", "रमेश", "Ramesh hai", "main Ramesh")) {
+            assertThat(TurnIntent.shortName(answer)).isPresent();
+        }
+        assertThat(TurnIntent.shortName("नहीं बताना")).isEmpty();
+        assertThat(TurnIntent.shortName("onion price")).isEmpty();
     }
 
     @Test

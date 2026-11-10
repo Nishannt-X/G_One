@@ -15,9 +15,17 @@ import java.util.Locale;
 /**
  * {@link CallSummarizer} backed by the configured OpenAI-compatible LLM ({@code G_ONE_LLM_*}, through
  * {@link LlmClient}). One request per call, JSON in and out, in the shape docs/memory.md "Write timing" gives.
+ *
+ * <p>The transcript sent is capped to its last {@value #MAX_LINES} lines and {@value #MAX_CHARS} characters, so a long
+ * call cannot spend the per-model token budget the farmer's next call needs. The end of a call (the deal readback, what
+ * is still open) matters most, so the oldest lines go first; the request says how many were left out.
  */
 public final class LlmCallSummarizer implements CallSummarizer {
     static final String STAGE = "gist_failed";
+    /** At most this many transcript lines go to the summarizer, the newest ones. */
+    static final int MAX_LINES = 40;
+    /** At most this many characters of transcript text go to the summarizer. */
+    static final int MAX_CHARS = 6_000;
     static final String SYSTEM = """
             You write the call memory for G-One, a phone assistant that helps Indian farmers sell produce.
             Reply with ONE JSON object and nothing else:
@@ -32,6 +40,9 @@ public final class LlmCallSummarizer implements CallSummarizer {
             - Never write phone numbers, OTPs, PINs, account, Aadhaar or other ID numbers anywhere.
             - followUps: things G-One should do on a later call. When this call completed an earlier open follow-up
               (openFollowUps), list it with its "id" and status DONE.
+            - After a deal both sides confirmed, add an OPEN follow-up to check the pickup and payment with that
+              buyer, with the pickup day as dueHint.
+            - transcriptOmitted, when present, counts earlier lines left out of a long call.
             - profileUpdates: only stable facts about the FARMER (never the buyer). Allowed fields: name, village,
               district, state, crops (one entry per crop), usualMandi, language (one of HI, EN, HI_EN, BN). Leave a
               field out when unsure.
@@ -67,8 +78,11 @@ public final class LlmCallSummarizer implements CallSummarizer {
         for (OpenFollowUp f : CallSummarizer.openFollowUps(current)) {
             open.addObject().put("id", f.id()).put("text", f.text());
         }
+        List<CallTranscript.Line> kept = capped(transcript.lines());
+        int omitted = transcript.lines().size() - kept.size();
+        if (omitted > 0) root.put("transcriptOmitted", omitted);
         ArrayNode lines = root.putArray("transcript");
-        for (CallTranscript.Line line : transcript.lines()) {
+        for (CallTranscript.Line line : kept) {
             lines.addObject().put("speaker", line.speaker().name().toLowerCase(Locale.ROOT)).put("text", line.text());
         }
         try {
@@ -76,6 +90,26 @@ public final class LlmCallSummarizer implements CallSummarizer {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not encode the gist request", e);
         }
+    }
+
+    /** The newest lines within {@value #MAX_LINES} lines and {@value #MAX_CHARS} characters, in call order. */
+    static List<CallTranscript.Line> capped(List<CallTranscript.Line> all) {
+        int chars = 0;
+        int from = all.size();
+        while (from > 0 && all.size() - from < MAX_LINES) {
+            String text = all.get(from - 1).text();
+            if (chars + text.length() > MAX_CHARS) {
+                if (from == all.size()) {
+                    // One overlong last line: keep its end rather than nothing.
+                    CallTranscript.Line l = all.get(from - 1);
+                    return List.of(new CallTranscript.Line(l.speaker(), text.substring(text.length() - MAX_CHARS), l.atMs()));
+                }
+                break;
+            }
+            chars += text.length();
+            from--;
+        }
+        return all.subList(from, all.size());
     }
 
     static Draft parse(JsonNode answer) {

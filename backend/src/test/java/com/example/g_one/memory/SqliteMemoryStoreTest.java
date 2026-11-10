@@ -36,6 +36,19 @@ class SqliteMemoryStoreTest extends MemoryStoreContract {
     }
 
     @Test
+    void anOtherSpeakerGistFromAnOlderBuildIsNotLoaded() {
+        try (SqliteMemoryStore store = SqliteMemoryStore.open(tmp.resolve("legacy"))) {
+            store.saveGist(SURESH, new CallGist(CallId.of("c-other"), 3_000, 4_000,
+                    com.example.g_one.agent.tools.memory.MemoryBlock.OTHER_SPEAKER_PREFIX + "Someone asked prices.",
+                    List.of()));
+            assertThat(store.load(SURESH)).isEmpty();
+            CallGist own = new CallGist(CallId.of("c-own"), 1_000, 2_000, "Asked the red onion price.", List.of());
+            store.saveGist(SURESH, own);
+            assertThat(store.load(SURESH).orElseThrow().gists()).containsExactly(own);
+        }
+    }
+
+    @Test
     void memorySurvivesARestart() {
         Path dir = tmp.resolve("restart");
         ProfileFact name = new ProfileFact("name", "Suresh", Provenance.said(CallId.of("c-1028"), 10));

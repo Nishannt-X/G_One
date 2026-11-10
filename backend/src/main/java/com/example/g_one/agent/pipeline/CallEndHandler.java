@@ -41,9 +41,17 @@ public interface CallEndHandler {
      * @param outcome how the sale ended, when it got that far: {@code "deal_confirmed"} or {@code "buyer_declined"};
      *     null otherwise
      * @param dealSummary the confirmed terms in one English sentence, or null when no deal was confirmed
+     * @param farmerConsent the farmer's answer to "may we remember the main points of this call?": "YES", "NO" or
+     *     "NONE". Nothing about the farmer may be stored unless it is "YES".
      */
     record EndedCall(CallContext context, List<AgentBrain.Line> transcript, long startedMs, long endedMs,
-                     String reason, String outcome, String dealSummary) {
+                     String reason, String outcome, String dealSummary, String farmerConsent) {
+
+        /** A call whose farmer gave no consent: nothing is stored. */
+        public EndedCall(CallContext context, List<AgentBrain.Line> transcript, long startedMs, long endedMs,
+                         String reason, String outcome, String dealSummary) {
+            this(context, transcript, startedMs, endedMs, reason, outcome, dealSummary, "NONE");
+        }
 
         /** A call with no sale outcome. */
         public EndedCall(CallContext context, List<AgentBrain.Line> transcript, long startedMs, long endedMs,
@@ -55,6 +63,12 @@ public interface CallEndHandler {
             Objects.requireNonNull(context, "context");
             Objects.requireNonNull(reason, "reason");
             transcript = transcript == null ? List.of() : List.copyOf(transcript);
+            farmerConsent = farmerConsent == null ? "NONE" : farmerConsent;
+        }
+
+        /** True only when the farmer said yes to being remembered. */
+        public boolean farmerAgreed() {
+            return "YES".equals(farmerConsent);
         }
 
         public CallId callId() {

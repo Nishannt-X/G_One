@@ -66,6 +66,33 @@ class OfflineDemoTest {
         t.start();
     }
 
+    /** The farmer says goodbye, yes to ending the call and yes to being remembered: only then is anything stored. */
+    private void endAndAgree(FakeLeg leg) {
+        // The last turn has been answered first, so its facts were noted.
+        waitFor(() -> assertThat(lastOn(leg, ConsoleEvent.AssistantSaid.class)).isGreaterThan(lastOn(leg, ConsoleEvent.TurnHeard.class)));
+        sleep();
+        typed.say(leg.id(), "bye");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.legId().equals(leg.id())
+                && (a.text().contains("कॉल ख़त्म") || a.text().contains("end the call"))));
+        sleep();
+        typed.say(leg.id(), "हाँ");
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.legId().equals(leg.id())
+                && (a.text().contains("मुख्य बातें") || a.text().contains("main points"))));
+        sleep();
+        typed.say(leg.id(), "हाँ");
+        waitFor(() -> assertThat(leg.isEnded()).isTrue());
+    }
+
+    private int lastOn(FakeLeg leg, Class<? extends ConsoleEvent> type) {
+        int last = -1;
+        for (int i = 0; i < events.size(); i++) {
+            ConsoleEvent e = events.get(i);
+            if (e instanceof ConsoleEvent.AssistantSaid a && type.isInstance(e) && a.legId().equals(leg.id())) last = i;
+            if (e instanceof ConsoleEvent.TurnHeard t && type.isInstance(e) && t.legId().equals(leg.id())) last = i;
+        }
+        return last;
+    }
+
     private void waitForSaid(int count) {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).size()).isGreaterThanOrEqualTo(count));
     }
@@ -178,7 +205,7 @@ class OfflineDemoTest {
         typed.say(first.id(), "रमेश");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
                 .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
-        first.remoteHangup();
+        endAndAgree(first);
         waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
 
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
@@ -211,8 +238,8 @@ class OfflineDemoTest {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आपका नाम क्या है?")));
         sleep();
         typed.say(first.id(), "रमेश");
+        endAndAgree(first);
         waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
-        first.remoteHangup();
 
         events.clear();
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
@@ -263,8 +290,8 @@ class OfflineDemoTest {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).anyMatch(a -> a.text().contains("आज मैं आपकी क्या मदद करूँ?")));
         sleep();
         typed.say(first.id(), "मेरा नाम सुरेश है");
+        endAndAgree(first);
         waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("सुरेश"));
-        first.remoteHangup();
 
         events.clear();
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
@@ -303,14 +330,19 @@ class OfflineDemoTest {
         assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).noneMatch(a -> a.text().contains("फ़ोन लगाऊँ"));
         sleep();
         typed.say(farmer.id(), "रमेश");
-        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
                 .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी") && a.text().contains("फ़ोन लगाऊँ")));
         sleep();
         typed.say(farmer.id(), "हाँ");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.ToolCalled.class))
                 .anyMatch(t -> t.tool().equals("connect_buyer") && t.ok()));
+        assertThat(store.load(key).flatMap(m -> m.fact("name"))).as("held for the call only").isEmpty();
         farmer.remoteHangup();
+        // A hang-up is no consent: the stated name is never stored.
+        waitFor(() -> assertThat(eventsOf(ConsoleEvent.ConsentRecorded.class)).hasSize(2));
+        sleep();
+        assertThat(eventsOf(ConsoleEvent.ConsentRecorded.class)).allMatch(c -> c.consent().equals("NONE"));
+        assertThat(store.load(key).flatMap(m -> m.fact("name"))).isEmpty();
     }
 
     @Test

@@ -19,7 +19,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * {@code save_profile_fact(field, value)}: saves one stable fact the farmer said about themselves, with provenance
+ * {@code save_profile_fact(field, value)}: notes one stable fact (kept for the call; stored only if the farmer agrees at
+ * the end of the call that it may be remembered, see {@link PendingFacts}) the farmer said about themselves, with provenance
  * "said" and this call's id. Writes nothing (and says so honestly) when memory is off: a withheld caller ID, an
  * unanswered name check, another speaker, or after {@code forget_me}.
  *
@@ -45,17 +46,28 @@ public class SaveProfileFactTool implements Tool {
     private final Supplier<MemoryStore> store;
     private final MemoryGate gate;
     private final Clock clock;
+    /** Null only for tests that check the tool's own rules against a store directly. */
+    private final PendingFacts pending;
 
     @Autowired
-    public SaveProfileFactTool(ObjectProvider<MemoryStore> store, MemoryGate gate) {
-        this(store::getIfAvailable, gate, Clock.systemUTC());
+    public SaveProfileFactTool(ObjectProvider<MemoryStore> store, MemoryGate gate, PendingFacts pending) {
+        this(store::getIfAvailable, gate, Clock.systemUTC(), pending);
     }
 
-    /** @param store gives the store, or null when none is wired */
+    /** Writes straight to the store: for tests of the tool's validation only. */
     public SaveProfileFactTool(Supplier<MemoryStore> store, MemoryGate gate, Clock clock) {
+        this(store, gate, clock, null);
+    }
+
+    /**
+     * @param store gives the store, or null when none is wired
+     * @param pending holds facts until the farmer agrees, at the end of the call, that the call may be remembered
+     */
+    public SaveProfileFactTool(Supplier<MemoryStore> store, MemoryGate gate, Clock clock, PendingFacts pending) {
         this.store = store;
         this.gate = gate;
         this.clock = clock;
+        this.pending = pending;
     }
 
     @Override
@@ -96,8 +108,13 @@ public class SaveProfileFactTool implements Tool {
         if (!state.maySave()) return ToolResult.error("Not saved: " + why(state));
         MemoryStore s = store.get();
         if (s == null) return ToolResult.error("Not saved: memory is not available right now.");
-        s.upsertFacts(key.get(), List.of(new ProfileFact(field.get(), value,
-                Provenance.said(ctx.callId(), clock.millis()))));
+        ProfileFact fact = new ProfileFact(field.get(), value, Provenance.said(ctx.callId(), clock.millis()));
+        if (pending != null) {
+            // Kept for this call only; stored only if the farmer says yes to being remembered at the end of the call.
+            pending.add(ctx.callId(), key.get(), fact);
+            return ToolResult.ok("Noted " + field.get() + " for this call.");
+        }
+        s.upsertFacts(key.get(), List.of(fact));
         return ToolResult.ok("Saved " + field.get() + ".");
     }
 

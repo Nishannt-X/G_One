@@ -370,6 +370,7 @@ public class LlmAgentBrain implements AgentBrain {
         messages.add(ChatMessage.user(capped(latest.text())));
 
         Set<String> called = new HashSet<>();
+        boolean toolAnswered = false;
         saveStatedName(ctx, past, latest, memo, called);
         Language expected = ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages);
         for (int call = 1; call <= MAX_MODEL_CALLS; call++) {
@@ -385,19 +386,15 @@ public class LlmAgentBrain implements AgentBrain {
             if (!reply.wantsTools()) {
                 String text = spoken(reply);
                 if (text.isEmpty()) break;
-                if (!memo.askedName && memo.name() == null && state.maySave()
-                        && !(state.usesMemory() && rememberedName(ctx) != null)
-                        && TurnIntent.asksName(speakable(reply.content())) && !TurnIntent.asksName(text)) {
-                    String question = FixedLines.prefix(expected.code()).equals("hi")
-                            ? "और आपका नाम क्या है?" : "May I know your name?";
-                    text = cappedSentences(text, MAX_SENTENCES - 1) + " " + question;
-                }
+                boolean modelAskedName = TurnIntent.asksName(speakable(reply.content()));
                 text = inRightLanguage(text, expected, messages, turn);
                 text = withoutUngroundedAmounts(text, expected, past, latest, called);
                 memo.failures = 0;
                 memo.modelTurns++;
-                if (TurnIntent.asksName(text)) memo.askedName = true;
                 Language lang = ReplyLanguage.of(text, ctx.language(), languages);
+                text = withNameQuestion(text, lang, ctx, state, memo, latest, called, toolAnswered, turn.endCall,
+                        modelAskedName);
+                if (TurnIntent.asksName(text)) memo.askedName = true;
                 return new Reply(SpokenNumbers.digitsToWords(text.replace("₹", " "), lang.code()).strip(), lang, turn.endCall);
             }
             if (offered.isEmpty()) break; // asked for tools on the last call: no more rounds
@@ -406,20 +403,19 @@ public class LlmAgentBrain implements AgentBrain {
                 called.add(tc.name());
                 ToolResult result = run(tc, ctx);
                 if (SaveProfileFactTool.NAME.equals(tc.name()) && result.ok()) memo.remember(tc, json);
+                if ((ToolDiet.MANDI.equals(tc.name()) || ToolDiet.WEATHER.equals(tc.name())) && result.ok()) toolAnswered = true;
                 if (ToolDiet.MANDI.equals(tc.name()) && result.ok() && reply.toolCalls().size() == 1) {
                     Reply price = priceReply(tc, expected);
                     if (price != null) {
                         memo.failures = 0;
                         memo.modelTurns++;
-                        if (!memo.askedName && memo.name() == null && state.maySave()
-                                && !(state.usesMemory() && rememberedName(ctx) != null)) {
-                            String question = FixedLines.prefix(price.language().code()).equals("hi")
-                                    ? " और आपका नाम क्या है?" : " And may I know your name?";
+                        if (nameStillWanted(ctx, state, memo)) {
                             memo.askedName = true;
                             String afterPrice = local.line(expected.code(), "afterPrice");
                             String answer = price.text();
                             if (answer.endsWith(afterPrice)) answer = answer.substring(0, answer.length() - afterPrice.length()).strip();
-                            return new Reply(answer + question, price.language(), price.endCall());
+                            return new Reply(answer + " " + local.line(price.language().code(), "askName"), price.language(),
+                                    price.endCall());
                         }
                         return price;
                     }
@@ -444,6 +440,56 @@ public class LlmAgentBrain implements AgentBrain {
         }
         log.warn("Agent brain gave no spoken answer within {} model calls on call {}", MAX_MODEL_CALLS, ctx.callId());
         return null;
+    }
+
+    /** A first-time caller whose name is still unknown and was not asked on this call, outside a name check. */
+    private boolean nameStillWanted(CallContext ctx, MemoryGate.State state, CallMemo memo) {
+        return !memo.askedName && memo.name() == null && state.maySave() && state != MemoryGate.State.NAME_CHECK
+                && !(state.usesMemory() && rememberedName(ctx) != null);
+    }
+
+    /**
+     * The reply with the fixed name question added, so a first-time caller is asked their name after the first completed
+     * business answer even when the model ignored {@link #NAME_ASK}. A completed business answer is a price or weather
+     * question answered with at least one statement, or any answer built on a price or weather tool result. Nothing is
+     * added when the reply already asks it, on a turn that offers or places a buyer call, confirms a name or ends the
+     * call, when the model only asked something back, or in a language with no fixed name question (the prompt still
+     * asks the model to). A trailing question after such an answer gives way to the name question, so the farmer hears
+     * one question.
+     */
+    private String withNameQuestion(String text, Language lang, CallContext ctx, MemoryGate.State state, CallMemo memo,
+                                    Turn latest, Set<String> called, boolean toolAnswered, boolean endCall,
+                                    boolean modelAskedName) {
+        if (!nameStillWanted(ctx, state, memo) || TurnIntent.asksName(text) || endCall) return text;
+        if (called.contains(ToolDiet.FIND) || called.contains(ToolDiet.CONNECT) || called.contains(ToolDiet.CONFIRM)) return text;
+        String key = local.key(lang.code());
+        if (!FixedLines.prefix(key).equals(FixedLines.prefix(lang.code()))) return text;
+        String body = cappedSentences(text, MAX_SENTENCES - 1).strip();
+        if (!modelAskedName) {
+            Set<TurnIntent.Kind> intents = TurnIntent.of(latest.text());
+            boolean infoAsked = intents.contains(TurnIntent.Kind.PRICE) || intents.contains(TurnIntent.Kind.WEATHER);
+            if (!toolAnswered && !infoAsked) return text;
+            if (endsWithQuestion(body)) {
+                // A reply that is only a question asks for what the answer still needs; the name can wait.
+                body = withoutLastSentence(body);
+                if (body.isEmpty()) return text;
+            }
+        }
+        return body + " " + local.line(lang.code(), "askName");
+    }
+
+    private static boolean endsWithQuestion(String text) {
+        return text.endsWith("?");
+    }
+
+    /** The text up to and including the end of its second-to-last sentence; empty for a single sentence. */
+    private static String withoutLastSentence(String text) {
+        for (int i = text.length() - 2; i >= 0; i--) {
+            if (SENTENCE_ENDS.indexOf(text.charAt(i)) >= 0 && Character.isWhitespace(text.charAt(i + 1))) {
+                return text.substring(0, i + 1).strip();
+            }
+        }
+        return "";
     }
 
     /**

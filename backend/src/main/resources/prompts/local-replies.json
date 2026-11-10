@@ -22,6 +22,7 @@
         "मैं ठीक से सुन नहीं पाई। फसल का नाम बोलकर बताइए।"
       ],
       "afterPrice": "क्या आप इसे बेचना चाहते हैं?",
+      "askName": "और आपका नाम क्या है?",
       "sellBusy": "समझ गई, आपको बेचना है। दस सेकंड बाद यही बात फिर बोलिए, मैं खरीदार ढूँढूँगी।",
       "confirmAmount": "रकम की पक्की जानकारी अपने कृषि कार्यालय से लीजिए।"
     },
@@ -46,6 +47,7 @@
         "मैं ठीक से सुन नहीं पाई। Crop का नाम बोलकर बताइए।"
       ],
       "afterPrice": "क्या आपको इसे sell करना है?",
+      "askName": "और आपका नाम क्या है?",
       "sellBusy": "समझ गई, आपको sell करना है। दस second बाद यही बात फिर बोलिए, मैं buyer ढूँढूँगी।",
       "confirmAmount": "Amount की पक्की जानकारी अपने कृषि office से लीजिए।"
     },
@@ -70,6 +72,7 @@
         "I could not hear you well. Please tell me the name of the crop."
       ],
       "afterPrice": "Would you like to sell it?",
+      "askName": "May I know your name?",
       "sellBusy": "Got it, you want to sell. Say that again in ten seconds and I will look for buyers.",
       "confirmAmount": "Please confirm the exact amount at your local agriculture office."
     },
@@ -94,6 +97,7 @@
         "ঠিকমতো শুনতে পাইনি। ফসলের নামটা বলুন।"
       ],
       "afterPrice": "আপনি কি এটা বিক্রি করতে চান?",
+      "askName": "আর আপনার নামটা কী?",
       "sellBusy": "বুঝেছি, আপনি বিক্রি করতে চান। দশ সেকেন্ড পরে কথাটা আবার বলুন, আমি ক্রেতা খুঁজব।",
       "confirmAmount": "টাকার সঠিক পরিমাণ স্থানীয় কৃষি অফিস থেকে জেনে নিন।"
     },
@@ -118,6 +122,7 @@
         "ঠিকমতো শুনতে পাইনি। Crop-এর নামটা বলুন।"
       ],
       "afterPrice": "আপনি কি এটা sell করতে চান?",
+      "askName": "আর আপনার নামটা কী?",
       "sellBusy": "বুঝেছি, আপনি sell করতে চান। দশ second পরে কথাটা আবার বলুন, আমি buyer খুঁজব।",
       "confirmAmount": "Amount-টা স্থানীয় কৃষি office থেকে জেনে নিন।"
     }

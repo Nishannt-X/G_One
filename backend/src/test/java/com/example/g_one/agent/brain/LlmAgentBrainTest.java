@@ -357,6 +357,55 @@ class LlmAgentBrainTest {
     }
 
     @Test
+    void aModelThatForgetsTheNameQuestionStillAsksItAfterTheFirstBusinessAnswer() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("Onion prices in Lasalgaon were steady in early November.");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "What is the onion price in Lasalgaon?"));
+        assertThat(r.text()).isEqualTo("Onion prices in Lasalgaon were steady in early November. May I know your name?");
+
+        f.llm.replyText("All right.");
+        f.brain.respond(ctx, List.of(), said(ctx, "Not now"));
+        assertThat(systemPrompt(1)).as("asked once per call").contains("do not ask again");
+    }
+
+    @Test
+    void aTrailingQuestionAfterAnAnswerGivesWayToTheNameQuestion() {
+        CallContext ctx = BrainFixture.newFarmer(HINDI);
+        f.llm.replyText("नासिक में कल बारिश हो सकती है। और कुछ जानना है?");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "नासिक में मौसम कैसा रहेगा?"));
+        assertThat(r.text()).isEqualTo("नासिक में कल बारिश हो सकती है। और आपका नाम क्या है?");
+    }
+
+    @Test
+    void aModelThatAlreadyAsksTheNameIsNotAskedTwice() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("Onion prices in Lasalgaon were steady in early November. May I know your name?");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "What is the onion price in Lasalgaon?"));
+        assertThat(r.text()).isEqualTo("Onion prices in Lasalgaon were steady in early November. May I know your name?");
+    }
+
+    @Test
+    void theNameQuestionWaitsWhileTheModelAsksForDetailsOrASaleIsOpen() {
+        CallContext ctx = BrainFixture.newFarmer(ENGLISH);
+        f.llm.replyText("Which market should I check?");
+        assertThat(f.brain.respond(ctx, List.of(), said(ctx, "What is the onion price?")).text())
+                .isEqualTo("Which market should I check?");
+
+        f.llm.replyText("Sure. Shall I find you a buyer?");
+        assertThat(f.brain.respond(ctx, List.of(), said(ctx, "I want to sell onion in Nashik")).text())
+                .as("a sale is not answered yet: no name question on top of it").isEqualTo("Sure. Shall I find you a buyer?");
+    }
+
+    @Test
+    void aReturningFarmerInTheNameCheckIsNeverAskedTheirName() {
+        CallContext ctx = BrainFixture.returning(ENGLISH, f.seedSuresh());
+        f.brain.greet(ctx);
+        f.llm.replyText("Onion prices in Lasalgaon were steady in early November.");
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "What is the onion price in Lasalgaon?"));
+        assertThat(r.text()).doesNotContain("your name");
+    }
+
+    @Test
     void shortNameAnswersAreRecognisedOnlyWhenAsked() {
         for (String answer : List.of("Ramesh", "रमेश", "Ramesh hai", "main Ramesh")) {
             assertThat(TurnIntent.shortName(answer)).isPresent();

@@ -126,7 +126,7 @@ public class AskGone {
             input.set("call", digest);
             String answer = chat.complete(new ChatRequest(List.of(ChatMessage.system(system(asker)),
                     ChatMessage.user(input.toString())), List.of(), TEMPERATURE, MAX_TOKENS).numeric().once()).content();
-            return checked(answer, digest, language.code());
+            return checked(answer, digest, question, language.code());
         } catch (ChatException e) {
             log.warn("ask_gone model failed: {} {}", e.kind(), e.status());
         } catch (RuntimeException | IOException e) {
@@ -136,7 +136,8 @@ public class AskGone {
     }
 
     /** The model's answer made speakable, or null when it may not be spoken. */
-    String checked(String answer, ObjectNode digest, String code) throws IOException {
+    /** @param question its own figures may be echoed back ("not fifty, twenty"): repeating them is not inventing them */
+    String checked(String answer, ObjectNode digest, String question, String code) throws IOException {
         if (answer == null) return null;
         int start = answer.indexOf('{');
         int end = answer.lastIndexOf('}');
@@ -153,7 +154,7 @@ public class AskGone {
             log.warn("ask_gone answer withheld: a long digit run");
             return null;
         }
-        NumberGuard.Check c = NumberGuard.check(digest.toString(), code, text, code);
+        NumberGuard.Check c = NumberGuard.check(digest + "\n" + question, code, text, code);
         if (!c.invented().isEmpty()) {
             log.warn("ask_gone answer withheld: {} number(s) not in the call", c.invented().size());
             return null;

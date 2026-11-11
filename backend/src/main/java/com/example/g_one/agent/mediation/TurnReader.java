@@ -61,15 +61,14 @@ public class TurnReader {
      */
     static final String ADDRESSED_RULES = """
 
-            Also add one more field to the answer object: "toAssistant", true or false.
-            toAssistant: true only when the speaker talks to the assistant itself (G-One, "the assistant", "the system",
-            "the translator") and asks it a question or asks it to do something, instead of talking to the other party.
-            Typical: a question that names the other party in the third person and is not a message for them, such as
-            "what did the buyer just offer?", "how much does that farmer have?", "can you tell me his quantity?", or "ask
-            the assistant how much he has". false for everything said to the other party: offers, counter-offers, replies,
-            greetings, questions in the second person ("how much do you have?", "can you tell me your quantity?") and
-            messages to pass on ("tell him...", "ask him...", "उनसे पूछो..."). When unsure, false.
+            Also add "toAssistant" (true or false) to the answer object. true only when the speaker asks the assistant
+            itself (G-One, "the assistant") a question or a favour instead of speaking to the other party, typically
+            naming the other party in the third person and not as a message for them: "what did the buyer offer?", "how
+            much does that farmer have?", "ask the assistant how much he has". false for offers, replies, greetings,
+            questions to the other party ("how much do you have?") and messages to pass on ("tell him...", "ask
+            him..."). When unsure, false.
             """;
+
 
     /**
      * What a turn meant.

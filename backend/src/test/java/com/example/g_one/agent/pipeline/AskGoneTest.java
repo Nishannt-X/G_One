@@ -371,6 +371,18 @@ class AskGoneTest {
     }
 
     @Test
+    void aFigureTheAskerSaidMayBeEchoedInTheAnswer() {
+        buyerJoinsAndAgrees();
+        llm.replyText(answer("Not fifty: twenty quintals have been mentioned."));
+
+        session(LegRole.BUYER).say("G-One, does he have fifty quintal?");
+        executor.runAll();
+        finishAll();
+
+        assertThat(spokenTo(buyer)).last().isEqualTo("Not fifty: twenty quintals have been mentioned.");
+    }
+
+    @Test
     void anAnswerWithAPhoneLikeNumberIsNotSpoken() {
         buyerJoinsAndAgrees();
         llm.replyText(answer("Call him on 9876543210."));

@@ -28,9 +28,15 @@ import org.springframework.web.client.RestClient;
  * OpenAI-compatible /chat/completions with function calling, for the agent brain. Endpoint, key, model and timeout come
  * from G_ONE_LLM_*. Uses the shared HTTP/1.1 client with bounded timeouts. Every failure becomes a
  * {@link ChatException}. Timeouts and server errors are not retried, because a phone turn cannot afford a second
- * timeout. The one exception is a model that answered but gave nothing usable (an empty answer after spending its
- * budget on hidden reasoning, or a malformed tool call): that gets one more try with a larger budget. A cut-off answer
- * that has content is kept as it is, because a second call would spend the rate limit twice.
+ * timeout. The one exception is a model that answered but gave nothing usable: an empty answer after spending its
+ * budget on hidden reasoning gets one more try with a larger budget, and a tool call the provider refused
+ * ({@code tool_use_failed}: a malformed call, or a tool that was not offered) gets one more try without tools, so the
+ * model has to answer in words. Repeating the same request would fail the same way. A cut-off answer that has content
+ * is kept as it is, because a second call would spend the rate limit twice.
+ *
+ * <p>gpt-oss on Groq reasons at {@code medium} unless told otherwise, and its hidden reasoning spends the same
+ * {@code max_tokens} as the answer, so a spoken reply of a few dozen tokens ran out of a 300-token budget. It gets
+ * {@code reasoning_effort: low} when no effort is configured.
  */
 @Component
 public class ChatClient {
@@ -38,6 +44,10 @@ public class ChatClient {
     /** A chat answer is a few kilobytes at most; anything far larger is not a reply we want to buffer. */
     private static final int MAX_BODY_BYTES = 512 * 1024;
     private static final int RETRY_TOKEN_FACTOR = 3;
+    /** The retry budget never goes above this: a spoken reply is short, and the tokens-per-minute limit is small. */
+    static final int MAX_RETRY_TOKENS = 900;
+    /** What gpt-oss on Groq gets when no reasoning effort is configured. */
+    static final String DEFAULT_GPT_OSS_EFFORT = "low";
     /** Only the limit's name and numbers are read from a 429 message; the rest is never logged. */
     private static final Pattern BUCKET = Pattern.compile("on ((?:tokens|requests) per (?:minute|day))[^:]*: Limit (\\d+), Used (\\d+)");
     private static final Logger log = LoggerFactory.getLogger(ChatClient.class);
@@ -47,10 +57,18 @@ public class ChatClient {
     /** The model named is not available on this key; another one may be. */
     private static final Set<String> MODEL_GONE_CODES = Set.of("model_not_found", "model_decommissioned", "model_terminated");
 
-    /** The model answered but produced nothing usable. */
+    /** The model answered but produced nothing usable. {@code code} is the provider's error code, or empty. */
     private static final class Unfinished extends ChatException {
-        Unfinished(int status, String message) {
+        final String code;
+
+        Unfinished(int status, String code, String message) {
             super(status == 0 ? Kind.BAD_RESPONSE : Kind.HTTP_ERROR, status, message);
+            this.code = code;
+        }
+
+        /** The provider refused the tool call the model made; the same request would fail again. */
+        boolean toolRefused() {
+            return "tool_use_failed".equals(code);
         }
     }
 
@@ -108,13 +126,30 @@ public class ChatClient {
         try {
             return send(request);
         } catch (Unfinished unfinished) {
-            log.warn("Language model produced nothing usable within {} tokens; retrying once with more", request.maxTokens());
+            if (!request.retry()) throw unfinished;
+            ChatRequest again = retryOf(request, unfinished);
+            log.warn("Language model produced nothing usable ({}) within {} tokens; retrying once with {} tokens{}",
+                    unfinished.code.isEmpty() ? "empty answer" : unfinished.code, request.maxTokens(), again.maxTokens(),
+                    again.tools().size() < request.tools().size() ? " and no tools" : "");
             try {
-                return send(request.withMaxTokens(request.maxTokens() * RETRY_TOKEN_FACTOR));
+                return send(again);
             } catch (ChatException e) {
-                throw unfinished;
+                log.warn("Language model retry failed too: {} {}", e.kind(), e.status());
+                // A rate limit on the retry says more about the turn than the first unusable answer does.
+                throw e.kind() == ChatException.Kind.RATE_LIMITED ? e : unfinished;
             }
         }
+    }
+
+    /**
+     * The one retry after an unusable answer: without tools when the provider refused the model's tool call (the same
+     * tools would fail the same way), always with a larger budget for hidden reasoning, at most {@value #MAX_RETRY_TOKENS}.
+     */
+    static ChatRequest retryOf(ChatRequest request, ChatException failure) {
+        ChatRequest again = request.withMaxTokens(Math.max(request.maxTokens(),
+                Math.min(MAX_RETRY_TOKENS, request.maxTokens() * RETRY_TOKEN_FACTOR)));
+        if (failure instanceof Unfinished u && u.toolRefused() && !request.tools().isEmpty()) again = again.withoutTools();
+        return again;
     }
 
     /** The router's choice of model, turning "nobody can take this" into the caller's rate-limit error. */
@@ -163,7 +198,7 @@ public class ChatClient {
             }
             String code = errorCode(r.body());
             if (r.status() == 400 && UNFINISHED_CODES.contains(code)) {
-                throw new Unfinished(400, "The language model could not finish its answer (HTTP 400 " + code + ").");
+                throw new Unfinished(400, code, "The language model could not finish its answer (HTTP 400 " + code + ").");
             }
             log.warn("Language model refused the request: HTTP {} {} model={}", r.status(), code, slot.model());
             ChatException refused = new ChatException(ChatException.Kind.HTTP_ERROR, r.status(),
@@ -191,6 +226,10 @@ public class ChatClient {
         body.put("temperature", request.temperature());
         body.put("max_tokens", request.maxTokens());
         cfg.reasoningFields(model).forEach((k, v) -> body.set(k, json.valueToTree(v)));
+        if (body.has("include_reasoning") && !body.has("reasoning_effort") && isGptOss(model)) {
+            // Groq gpt-oss defaults to medium effort, and its reasoning spends the answer's budget.
+            body.put("reasoning_effort", DEFAULT_GPT_OSS_EFFORT);
+        }
         ArrayNode messages = body.putArray("messages");
         for (ChatMessage m : request.messages()) {
             ObjectNode node = messages.addObject();
@@ -266,7 +305,7 @@ public class ChatClient {
             String id = c.path("id").asText("");
             calls.add(new ToolCall(id.isBlank() ? "call_" + calls.size() : id, name, argsJson));
         }
-        if (content.isEmpty() && calls.isEmpty()) throw new Unfinished(0, "The language model returned an empty answer.");
+        if (content.isEmpty() && calls.isEmpty()) throw new Unfinished(0, "", "The language model returned an empty answer.");
         JsonNode usage = root.path("usage");
         return new ChatReply(content, calls, choice.path("finish_reason").asText(""), new ChatReply.Usage(model,
                 usage.path("prompt_tokens").asInt(0), usage.path("completion_tokens").asInt(0), latencyMs));
@@ -289,6 +328,10 @@ public class ChatClient {
         } catch (IOException e) {
             return "";
         }
+    }
+
+    private static boolean isGptOss(String model) {
+        return model != null && model.toLowerCase(java.util.Locale.ROOT).contains("gpt-oss");
     }
 
     /** Bytes, not a String: a String body would go through a converter whose default charset is not UTF-8. */

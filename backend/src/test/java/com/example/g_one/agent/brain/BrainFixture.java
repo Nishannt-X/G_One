@@ -61,28 +61,45 @@ final class BrainFixture implements AutoCloseable {
     final FallbackLines fallback = new FallbackLines(JSON);
     final Language.Registry registry;
     final LlmAgentBrain brain;
+    final com.example.g_one.agent.tools.buyers.BuyerConsent consent = new com.example.g_one.agent.tools.buyers.BuyerConsent();
+    final List<com.example.g_one.agent.tools.buyers.BuyerConnector.ConnectRequest> connected = new CopyOnWriteArrayList<>();
+    final List<ConsoleEvent.MemoryLoaded> memoryEvents = new CopyOnWriteArrayList<>();
 
     BrainFixture() throws Exception {
         this(true);
     }
 
     BrainFixture(boolean configured) throws Exception {
+        this(configured, false);
+    }
+
+    /** @param buyers also wire find_buyers and connect_buyer against the bundled synthetic directory */
+    BrainFixture(boolean configured, boolean buyers) throws Exception {
         llm = new FakeLlm();
         GOneProperties props = new GOneProperties(List.of("hi-IN:Hindi:Nalini", "en-IN:English:Kaveri"), "",
                 new GOneProperties.Agmarknet("http://127.0.0.1:9", "", "", "", "", "", "", 5, 3, 30), null,
                 new GOneProperties.Llm(configured ? llm.baseUrl() : "", FakeLlm.KEY, "fake-model", 5));
         registry = new Language.Registry(props);
         MandiQuote quote = new MandiQuote(new MandiSource(props, JSON), new MandiCatalog(JSON));
-        List<Tool> tools = List.of(
+        List<Tool> tools = new java.util.ArrayList<>(List.of(
                 new MandiPriceTool(quote),
                 new SaveProfileFactTool(() -> store, gate, CLOCK),
                 new ForgetMeTool(() -> store, gate, lines, CLOCK),
                 new ConfirmNameTool(gate),
-                new EndCallTool());
+                new EndCallTool()));
+        if (buyers) {
+            com.example.g_one.agent.tools.buyers.BuyerDirectory directory =
+                    new com.example.g_one.agent.tools.buyers.BuyerDirectory(JSON);
+            com.example.g_one.agent.tools.buyers.BuyerRanker ranker = new com.example.g_one.agent.tools.buyers.BuyerRanker(
+                    directory, new MandiCatalog(JSON), new com.example.g_one.agent.tools.weather.DistrictTable(JSON));
+            tools.add(new com.example.g_one.agent.tools.buyers.FindBuyersTool(ranker, consent));
+            tools.add(new com.example.g_one.agent.tools.buyers.ConnectBuyerTool(directory, consent, () -> connected::add));
+        }
         bus.subscribe(e -> {
             if (e instanceof ConsoleEvent.ToolCalled t) toolEvents.add(t);
+            if (e instanceof ConsoleEvent.MemoryLoaded m) memoryEvents.add(m);
         });
-        brain = new LlmAgentBrain(new ChatClient(props, JSON), tools, gate, lines, fallback, registry, bus, JSON, CLOCK);
+        brain = new LlmAgentBrain(new ChatClient(props, JSON), tools, gate, lines, fallback, registry, bus, JSON, CLOCK, consent);
     }
 
     /** The seed farmer's remembered profile and last gist, also saved in the store. */

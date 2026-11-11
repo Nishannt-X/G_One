@@ -31,10 +31,18 @@ public class BuyerConsent {
 
     /** The farmer finished a turn. The brain calls this before the model runs. */
     public void heard(CallId callId, String farmerTurn) {
+        heard(callId, farmerTurn, ReplyGuard.isConsent(farmerTurn));
+    }
+
+    /**
+     * The farmer finished a turn that was already read: {@code yes} is the layered reading of an explicit yes. A turn
+     * that {@link ReplyGuard#permitsYes} vetoes is never a yes, whatever {@code yes} says.
+     */
+    public void heard(CallId callId, String farmerTurn, boolean yes) {
         Call c = call(callId);
         synchronized (c) {
             c.turn++;
-            c.yes = ReplyGuard.isConsent(farmerTurn);
+            c.yes = yes && ReplyGuard.permitsYes(farmerTurn);
         }
     }
 

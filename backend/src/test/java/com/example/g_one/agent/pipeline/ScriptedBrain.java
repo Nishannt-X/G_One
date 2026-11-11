@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 /**
  * An {@link AgentBrain} for pipeline tests. It greets with {@link #GREETING} and answers a turn "x" with "reply to x",
- * ending the call when the turn is "end now" (as the end_call tool would; a short "bye" goes to the end-of-call check instead) and switching to English for {@link #SWITCH_TO_ENGLISH}. It records every
+ * asking to end the call when the turn is "end now" (as a model goodbye would; the pipeline then starts the end-of-call check) and switching to English for {@link #SWITCH_TO_ENGLISH}. It records every
  * call, can throw on purpose, and can run a hook while "thinking" so a test can make another turn arrive mid-reply.
  */
 final class ScriptedBrain implements AgentBrain {
@@ -41,6 +41,24 @@ final class ScriptedBrain implements AgentBrain {
     @Override
     public boolean awaitingIdentity(com.example.g_one.core.CallId callId) {
         return identityOpen;
+    }
+
+    /** What the layered reader would say about an answer the words do not settle; null reads words only. */
+    volatile java.util.function.Function<String, com.example.g_one.agent.deal.ReplyGuard.Reading> modelReads;
+    /** The questions the pipeline asked to read an answer to, in order. */
+    final List<String> yesNoQuestions = new CopyOnWriteArrayList<>();
+
+    @Override
+    public com.example.g_one.agent.deal.ReplyGuard.Reading readYesNo(com.example.g_one.core.CallId callId,
+                                                                     String question, String reply) {
+        yesNoQuestions.add(question);
+        // The contract of the real reader: words first, and a vetoed reply never reaches a model.
+        com.example.g_one.agent.deal.ReplyGuard.Verdict words = com.example.g_one.agent.deal.ReplyGuard.verdict(reply);
+        if (words.reading() != com.example.g_one.agent.deal.ReplyGuard.Reading.UNCLEAR || words.vetoed()
+                || modelReads == null) {
+            return words.reading();
+        }
+        return modelReads.apply(reply);
     }
 
     static String replyTo(String turn) {

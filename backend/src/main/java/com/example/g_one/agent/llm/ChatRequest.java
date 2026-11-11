@@ -8,9 +8,14 @@ import java.util.List;
  * replies are one or two sentences, so a small cap also bounds latency.
  */
 public record ChatRequest(List<ChatMessage> messages, List<ToolSpec> tools, double temperature, int maxTokens,
-                          ModelRouter.Task task) {
+                          ModelRouter.Task task, boolean retry) {
     public static final double DEFAULT_TEMPERATURE = 0.3;
     public static final int DEFAULT_MAX_TOKENS = 300;
+
+    public ChatRequest(List<ChatMessage> messages, List<ToolSpec> tools, double temperature, int maxTokens,
+                       ModelRouter.Task task) {
+        this(messages, tools, temperature, maxTokens, task, true);
+    }
 
     public ChatRequest(List<ChatMessage> messages, List<ToolSpec> tools, double temperature, int maxTokens) {
         this(messages, tools, temperature, maxTokens, ModelRouter.Task.CHAT);
@@ -25,12 +30,25 @@ public record ChatRequest(List<ChatMessage> messages, List<ToolSpec> tools, doub
 
     /** The same request with a different answer budget. */
     public ChatRequest withMaxTokens(int newMaxTokens) {
-        return new ChatRequest(messages, tools, temperature, newMaxTokens, task);
+        return new ChatRequest(messages, tools, temperature, newMaxTokens, task, retry);
+    }
+
+    /** The same request without tools, so the model has to answer in words. */
+    public ChatRequest withoutTools() {
+        return new ChatRequest(messages, List.of(), temperature, maxTokens, task, retry);
     }
 
     /** The same request, for figures: it must not reach a model that gets numbers wrong. */
     public ChatRequest numeric() {
-        return new ChatRequest(messages, tools, temperature, maxTokens, ModelRouter.Task.NUMERIC);
+        return new ChatRequest(messages, tools, temperature, maxTokens, ModelRouter.Task.NUMERIC, retry);
+    }
+
+    /**
+     * The same request, never retried when the model gives nothing usable: for small side calls (reading a yes or no)
+     * where a second call would cost more than the answer is worth.
+     */
+    public ChatRequest once() {
+        return new ChatRequest(messages, tools, temperature, maxTokens, task, false);
     }
 
     public static ChatRequest of(List<ChatMessage> messages, List<ToolSpec> tools) {

@@ -1,5 +1,6 @@
 package com.example.g_one.agent;
 
+import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.core.CallContext;
 import com.example.g_one.core.CallId;
 import com.example.g_one.core.Language;
@@ -45,6 +46,17 @@ public interface AgentBrain {
      */
     default boolean awaitingIdentity(CallId callId) {
         return false;
+    }
+
+    /**
+     * Reads the farmer's answer to a yes or no question G-One asked outside the conversation (the end-of-call questions).
+     * Blocks for at most a few seconds, so call it off the audio thread. Never throws; unclear when unsure. The default
+     * reads words only ({@link ReplyGuard}).
+     *
+     * @param question the question as the farmer heard it
+     */
+    default ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
+        return ReplyGuard.read(reply);
     }
 
     /** Who said a line of the conversation. */

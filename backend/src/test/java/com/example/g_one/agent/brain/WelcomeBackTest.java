@@ -164,12 +164,10 @@ class WelcomeBackTest {
         try (BrainFixture f = new BrainFixture()) {
             CallContext ctx = BrainFixture.returning(HINDI, f.seedSuresh());
             f.brain.greet(ctx);
-            f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
-
             Reply r = f.brain.respond(ctx, List.of(), said(ctx, "हाँ जी"));
 
             assertThat(r.text()).contains("find a buyer for about twenty quintal red onion");
-            assertThat(f.llm.requests()).hasSize(1);
+            assertThat(f.llm.requests()).as("a bare yes is read by code: no model call").isEmpty();
             assertThat(f.brain.memoryState(ctx.callId())).contains(MemoryGate.State.CONFIRMED);
         }
     }

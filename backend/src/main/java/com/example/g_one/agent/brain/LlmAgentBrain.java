@@ -1,6 +1,8 @@
 package com.example.g_one.agent.brain;
 
 import com.example.g_one.agent.AgentBrain;
+import com.example.g_one.agent.deal.ReplyGuard;
+import com.example.g_one.agent.deal.YesNoReader;
 import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.llm.ChatException;
 import com.example.g_one.agent.llm.ChatMessage;
@@ -13,6 +15,7 @@ import com.example.g_one.agent.llm.SpokenEnglish;
 import com.example.g_one.agent.llm.SpokenNumbers;
 import com.example.g_one.agent.llm.ToolCall;
 import com.example.g_one.agent.llm.ToolSpec;
+import com.example.g_one.agent.mediation.CropNames;
 import com.example.g_one.agent.tools.EndCallTool;
 import com.example.g_one.agent.tools.buyers.BuyerConsent;
 import com.example.g_one.agent.tools.mandi.MandiAnswer;
@@ -99,6 +102,23 @@ public class LlmAgentBrain implements AgentBrain {
     private static final Pattern MONEY_WORD = Pattern.compile("(?i)₹|रुपय|रुपए|rupee|টাকা");
     private static final Pattern AMOUNT = Pattern.compile("(?i)₹|(\\d|हज़ार|हजार|लाख|सौ|thousand|lakh|hundred|হাজার|লাখ|শো)[^।.?!]{0,16}(रुपय|रुपए|rupee|টাকা)");
     private static final Pattern SENTENCE_BREAK = Pattern.compile("(?<=[।.?!॥])\\s+");
+    /** A phone number offered, given or promised: "मेरे पास उनका नंबर है", "I have the number", "फ़ोन नंबर". */
+    private static final Pattern PHONE_TALK = Pattern.compile("(?iu)(फ़ोन|फोन|मोबाइल|संपर्क|कांटेक्ट|कॉन्टैक्ट|phone|mobile|contact"
+            + "|ফোন|মোবাইল|போன்|ಫೋನ್)\\s*(नंबर|नम्बर|number|no\\b|নম্বর|எண்|ನಂಬರ್)|(नंबर|नम्बर|number|নম্বর)\\s*(है|हैं|दे|बता|लिख|is|দিচ্ছি|আছে)"
+            + "|(उनका|उसका|इनका|खरीदार का|their|his|her|the buyer'?s)\\s+(नंबर|नम्बर|number)");
+    /** A question about calling or connecting a buyer. */
+    private static final Pattern CALL_QUESTION = Pattern.compile("(?iu)कॉल|फ़ोन|फोन|जोड़|जोड|मिला|बात करा|\\bcall|connect|phone"
+            + "|\\bdial|ফোন|কল|জুড়ে|কথা বলিয়ে|அழை|ಕರೆ");
+    /** A quantity in a turn: a number or a unit. */
+    private static final Pattern QUANTITY = Pattern.compile("(?iu)\\d|क्विंटल|quintal|किलो|kilo|\\bkg\\b|टन|\\btons?\\b|কুইন্টাল|কেজি"
+            + "|तीन|चार|पाँच|पांच|दस|बीस|पचास|सौ|\\b(one|two|three|five|ten|twenty|fifty|hundred|teen|das|bees|pachas|sau)\\b");
+    /** Six or more digits in a row (spaces and dashes allowed): what a phone number looks like. */
+    private static final Pattern LONG_DIGITS = Pattern.compile("\\d(?:[\\s-]?\\d){5,}");
+    /** Advice to go elsewhere instead of being helped: directories, websites, apps. */
+    private static final Pattern ELSEWHERE = Pattern.compile("(?iu)निर्देशिका|डायरेक्टरी|directory|वेबसाइट|website|ऑनलाइन|online"
+            + "|\\bapp\\b|ऐप|এপ|ওয়েবসাইট|অনলাইন|ডিরেক্টরি");
+    /** Where the first clause of an answer ends: "हाँ, ...", "नहीं। ...". */
+    private static final Pattern LEAD = Pattern.compile("[,،।.!?;]\\s*");
     /** Languages with price wording in code. */
     private static final Set<String> WORDED = Set.of("hi", "en", "bn");
     private static final Set<String> NUMERIC_TOOLS = Set.of(ToolDiet.MANDI, ToolDiet.WEATHER, ToolDiet.FIND, ToolDiet.CONNECT);
@@ -116,6 +136,7 @@ public class LlmAgentBrain implements AgentBrain {
     private final PromptTemplate system = PromptTemplate.load(PromptTemplate.ASSISTANT_SYSTEM);
     private final LocalReplies local;
     private final WelcomeBack welcomeBack;
+    private final YesNoReader yesNo;
     /** The offline demo scripts every reply, including what follows a price. */
     private final boolean scripted;
     /** Bounded, so a missed hang-up cannot grow it for ever. */
@@ -143,6 +164,7 @@ public class LlmAgentBrain implements AgentBrain {
         this.consent = consent;
         this.local = new LocalReplies(json);
         this.welcomeBack = new WelcomeBack(json);
+        this.yesNo = new YesNoReader(chat);
         this.scripted = chat.isScripted();
         this.chat = chat;
         Map<String, Tool> byName = new LinkedHashMap<>();
@@ -202,15 +224,22 @@ public class LlmAgentBrain implements AgentBrain {
         CallMemo memo = memo(ctx.callId());
         Reply reply;
         try {
-            if (latest != null && !latest.text().isBlank()) consent.heard(ctx.callId(), latest.text());
+            if (latest != null && !latest.text().isBlank()) consentHeard(ctx, past, latest);
             reply = direct(ctx, past, latest, memo);
             if (reply != null) {
                 turn.handler = "local";
             } else {
-                reply = converse(ctx, past, latest, turn, memo);
+                noteCrop(latest, memo);
+                MemoryGate.State state = gate.state(ctx);
+                if (state == MemoryGate.State.NAME_CHECK) reply = nameCheck(ctx, past, latest, memo, turn);
+                else if (memo.awaitingName) reply = nameAnswer(ctx, past, latest, memo, turn);
+                if (reply == null) reply = guided(ctx, past, latest, memo, turn);
                 if (reply == null) {
-                    turn.failure = "no_answer";
-                    reply = degrade(ctx, past, latest, turn, memo);
+                    reply = converse(ctx, past, latest, turn, memo);
+                    if (reply == null) {
+                        turn.failure = "no_answer";
+                        reply = degrade(ctx, past, latest, turn, memo);
+                    }
                 }
             }
         } catch (ChatException e) {
@@ -228,6 +257,35 @@ public class LlmAgentBrain implements AgentBrain {
         bus.publish(new ConsoleEvent.TurnMeasured(ctx.callId(), clock.millis(), turn.handler, turn.model, turn.prompt,
                 turn.completion, turn.calls, latencyMs, turn.failure));
         return reply;
+    }
+
+    @Override
+    public ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
+        return yesNo.read(question, reply);
+    }
+
+    /**
+     * Records whether this turn is the farmer's yes to calling a suggested buyer. Words decide first; only when buyers
+     * were suggested and the last line asked something does an unclear reply get the layered reading.
+     */
+    private void consentHeard(CallContext ctx, List<Line> past, Turn latest) {
+        String text = latest.text();
+        boolean yes = ReplyGuard.isConsent(text);
+        if (!yes && !consent.suggested(ctx.callId()).isEmpty() && !aboutBusiness(latest)) {
+            // Only an answer to "shall I call them?" is worth the small model call, never a new request.
+            String asked = lastQuestion(past);
+            if (CALL_QUESTION.matcher(asked).find()) yes = yesNo.read(asked, text) == ReplyGuard.Reading.YES;
+        }
+        consent.heard(ctx.callId(), text, yes);
+    }
+
+    /** What the assistant said last on this call, or empty. */
+    private static String lastAssistantLine(List<Line> past) {
+        for (int i = past.size() - 1; i >= 0; i--) {
+            Line l = past.get(i);
+            if (l != null && l.speaker() == Speaker.ASSISTANT && !l.text().isBlank()) return l.text();
+        }
+        return "";
     }
 
     private static String failureOf(ChatException e) {
@@ -257,6 +315,182 @@ public class LlmAgentBrain implements AgentBrain {
             return didNotHear(ctx, memo);
         }
         return null;
+    }
+
+    // ---- the returning farmer's name check, and a caller who is someone else ----
+
+    /**
+     * The answer to the name check, decided in code where it is clear, so a no is never lost on a model that skipped
+     * {@code confirm_name}. A no, a denial ("मैं वो नहीं हूँ", "wrong number") or a different name ("नहीं, मैं राम हूँ",
+     * "मेरा नाम अनिकेत है") makes the caller someone else for the rest of the call. A yes unlocks memory. A request heard
+     * before the answer ("मुझे भुट्टा बेचना है") is held and taken up once the check is settled; the check is asked
+     * again once, then an unclear caller counts as someone else (fail closed). Null when the model should read the turn.
+     */
+    private Reply nameCheck(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, Progress turn) {
+        String text = latest.text();
+        String remembered = rememberedName(ctx);
+        if (remembered == null) return null;
+        Language lang = ReplyLanguage.ofTurn(text, ctx.language(), languages);
+        Optional<String> given = TurnIntent.introducedName(text);
+        boolean otherName = given.isPresent() && NameMatch.differs(given.get(), remembered);
+        boolean business = aboutBusiness(latest) || TurnIntent.wantsConnection(text);
+        ReplyGuard.Reading answer = leadAnswer(text);
+        if (answer == ReplyGuard.Reading.UNCLEAR && !business && !otherName && !TurnIntent.deniesIdentity(text)) {
+            answer = yesNo.read(lastAssistantLine(past), text);
+        }
+        if (answer == ReplyGuard.Reading.NO || TurnIntent.deniesIdentity(text) || otherName) {
+            turn.handler = "local";
+            // "नहीं, मैं रमेश हूँ": after a no, the name they give is theirs, unless it is plainly the remembered one.
+            Optional<String> theirs = given.filter(n -> !NameMatch.same(n, remembered));
+            return otherSpeaker(ctx, past, latest, memo, theirs, business, lang, turn);
+        }
+        if (answer == ReplyGuard.Reading.YES) {
+            answerNameCheck(ctx, true);
+            if (!plainYes(latest)) return null; // the rest of the turn is a request: the model takes it with memory
+            turn.handler = "local";
+            if (memo.held == null) return welcomeBack(ctx, lang);
+            String welcome = local.greeting(lang.code(), remembered);
+            return continueHeld(ctx, past, latest, memo, welcome.substring(0, firstSentenceEnd(welcome)), lang, turn);
+        }
+        if (!business) return null;
+        if (memo.held == null) memo.held = text;
+        turn.handler = "local";
+        if (memo.nameChecksAsked++ == 0) return local(local.line(lang.code(), "nameCheckFirst", remembered), lang);
+        return otherSpeaker(ctx, past, latest, memo, Optional.empty(), false, lang, turn);
+    }
+
+    /** The reading of an answer, or of its first clause when the rest goes on ("हाँ, मैं सुरेश हूँ। प्याज़ का क्या हुआ?"). */
+    private static ReplyGuard.Reading leadAnswer(String text) {
+        ReplyGuard.Verdict whole = ReplyGuard.verdict(text);
+        if (whole.reading() != ReplyGuard.Reading.UNCLEAR) return whole.reading();
+        String[] parts = LEAD.split(text.strip(), 2);
+        if (parts.length < 2 || parts[0].isBlank()) return ReplyGuard.Reading.UNCLEAR;
+        ReplyGuard.Reading lead = ReplyGuard.read(parts[0]);
+        if (lead == ReplyGuard.Reading.YES && ReplyGuard.read(parts[1]) == ReplyGuard.Reading.NO) return ReplyGuard.Reading.UNCLEAR;
+        return lead;
+    }
+
+    /** Records the name check answer through {@code confirm_name}, so the console shows it like any tool call. */
+    private void answerNameCheck(CallContext ctx, boolean yes) {
+        run(new ToolCall("name_check", ConfirmNameTool.NAME, json.createObjectNode().put("confirmed", yes).toString()), ctx);
+    }
+
+    /**
+     * The caller is not the remembered farmer. Memory stays hidden for the rest of the call and the console stops
+     * showing the remembered profile as theirs. Their own name is taken if they gave it, else asked once; then the
+     * request they already made is taken up.
+     */
+    private Reply otherSpeaker(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, Optional<String> given,
+                               boolean business, Language lang, Progress turn) {
+        if (gate.state(ctx) == MemoryGate.State.NAME_CHECK) answerNameCheck(ctx, false);
+        notOurFarmer(ctx, memo);
+        if (business && memo.held == null) memo.held = latest.text();
+        if (given.isPresent()) {
+            memo.facts.put("name", given.get());
+            return continueHeld(ctx, past, latest, memo, local.line(lang.code(), "thanksName", given.get()), lang, turn);
+        }
+        memo.askedName = true;
+        memo.awaitingName = true;
+        return local(local.line(lang.code(), "askNameOther"), lang);
+    }
+
+    /** Once per call: the console's memory panel is cleared, because the remembered profile is not this caller's. */
+    private void notOurFarmer(CallContext ctx, CallMemo memo) {
+        if (memo.memoryHidden) return;
+        memo.memoryHidden = true;
+        ctx.memory().callerKey().ifPresent(key -> bus.publish(
+                new ConsoleEvent.MemoryLoaded(ctx.callId(), clock.millis(), key, false, List.of(), List.of())));
+    }
+
+    /**
+     * The answer to the one name question asked of someone who is not the remembered farmer: "अनिकेत", "मेरा नाम अनिकेत
+     * है". A turn that is not a name is answered as usual and the name is not asked again.
+     */
+    private Reply nameAnswer(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, Progress turn) {
+        memo.awaitingName = false;
+        Optional<String> name = TurnIntent.introducedName(latest.text());
+        if (name.isEmpty()) name = TurnIntent.shortName(latest.text());
+        if (name.isEmpty()) return null;
+        memo.facts.put("name", name.get());
+        Language lang = ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages);
+        String thanks = local.line(lang.code(), "thanksName", name.get());
+        if (aboutBusiness(latest) || TurnIntent.wantsConnection(latest.text())) {
+            // "मेरा नाम अनिकेत है और मैं भुट्टा बेचना चाहता हूँ": the sale in this turn is the request now.
+            memo.held = null;
+            Reply r = answerOrStep(ctx, past, latest, memo, turn, lang);
+            return new Reply(thanks + " " + withoutGreetingBy(r.text(), name.get()), r.language(), r.endCall());
+        }
+        return continueHeld(ctx, past, latest, memo, thanks, lang, turn);
+    }
+
+    /** {@code prefix}, then the request held from before the name was settled, or "how can I help". */
+    private Reply continueHeld(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, String prefix, Language lang,
+                               Progress turn) {
+        String held = memo.held;
+        memo.held = null;
+        if (held == null) return local(prefix + " " + local.line(lang.code(), "followUp"), lang);
+        List<Line> history = new ArrayList<>(past);
+        history.add(new Line(Speaker.FARMER, latest.text()));
+        Turn request = new Turn(latest.legId(), latest.role(), latest.language(), held, latest.startedMs(), latest.endedMs());
+        memo.held = held; // kept for the in-context step if no model answers
+        Reply r = answerOrStep(ctx, history, request, memo, turn, lang);
+        memo.held = null;
+        return new Reply(prefix + " " + withoutGreetingBy(r.text(), memo.name()), r.language(), r.endCall());
+    }
+
+    /** The model's answer to {@code request}, or the next step of the sale from code when no model answers. */
+    private Reply answerOrStep(CallContext ctx, List<Line> history, Turn request, CallMemo memo, Progress turn, Language lang) {
+        Reply r = null;
+        try {
+            r = converse(ctx, history, request, turn, memo);
+            if (r != null) turn.handler = "model";
+        } catch (ChatException e) {
+            turn.failure = failureOf(e);
+            log.warn("Language model failed on call {}: {} {}", ctx.callId(), e.kind(), e.status());
+        }
+        if (r != null) return r;
+        if (turn.failure.isEmpty()) turn.failure = "no_answer";
+        Reply step = offline(ctx, history, request, memo);
+        return step != null ? step : sellStep(ctx, lang, memo);
+    }
+
+    /** The reply without a first sentence that only greets or thanks {@code name} again. */
+    private static String withoutGreetingBy(String text, String name) {
+        if (name == null || text == null) return text;
+        int end = firstSentenceEnd(text);
+        String first = text.substring(0, end);
+        if (end < text.length() && first.contains(name) && first.split("\\s+").length <= 5) return text.substring(end).strip();
+        return text;
+    }
+
+    private static int firstSentenceEnd(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (SENTENCE_ENDS.indexOf(text.charAt(i)) >= 0) return i + 1;
+        }
+        return text.length();
+    }
+
+    /** The crop named on this turn becomes this call's crop: it wins over anything remembered. */
+    private void noteCrop(Turn latest, CallMemo memo) {
+        if (latest == null || !(tools.get(ToolDiet.MANDI) instanceof MandiPriceTool m)) return;
+        m.cropIn(latest.text()).ifPresent(c -> {
+            memo.crop = c;
+            memo.facts.put("crop", c);
+        });
+        if (QUANTITY.matcher(latest.text()).find()) memo.quantityHeard = true;
+    }
+
+    /**
+     * "Connect me to someone" with no crop on this call yet: the one thing a buyer search needs is asked from code, so
+     * the model cannot offer a phone number or send the farmer elsewhere. Null otherwise.
+     */
+    private Reply guided(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, Progress turn) {
+        if (!TurnIntent.wantsConnection(latest.text()) || memo.crop != null || !consent.suggested(ctx.callId()).isEmpty()) {
+            return null;
+        }
+        if (!tools.containsKey(ToolDiet.FIND)) return null;
+        turn.handler = "local";
+        return sellStep(ctx, ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages), memo);
     }
 
     private Reply didNotHear(CallContext ctx, CallMemo memo) {
@@ -294,7 +528,7 @@ public class LlmAgentBrain implements AgentBrain {
     /** No model answered. In order: a common turn answered from code, then one honest line and a next step. */
     private Reply degrade(CallContext ctx, List<Line> past, Turn latest, Progress turn, CallMemo memo) {
         if (turn.endCall) return goodbye(ctx.language());
-        Reply offline = latest == null ? null : offline(ctx, latest, memo);
+        Reply offline = latest == null ? null : offline(ctx, past, latest, memo);
         if (offline != null) {
             turn.handler = "local";
             return offline;
@@ -306,16 +540,20 @@ public class LlmAgentBrain implements AgentBrain {
         return new Reply(memo.unlike(lines), spokenIn(fallback.busyKey(lang.code()), lang), false);
     }
 
-    private Reply offline(CallContext ctx, Turn latest, CallMemo memo) {
+    /**
+     * A turn answered from code when no model could answer, kept in the conversation: a question still waiting (the name
+     * check, the caller's name) is asked again, a sale or a "connect me" goes to its next step, and only then a common
+     * turn gets its fixed line. Null when nothing fits.
+     */
+    private Reply offline(CallContext ctx, List<Line> past, Turn latest, CallMemo memo) {
         Set<TurnIntent.Kind> intents = TurnIntent.of(latest.text());
         Language lang = ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages);
         String code = lang.code();
         MemoryGate.State state = gate.state(ctx);
-        if (state == MemoryGate.State.NAME_CHECK && (intents.contains(TurnIntent.Kind.YES) || intents.contains(TurnIntent.Kind.NO))) {
-            boolean yes = intents.contains(TurnIntent.Kind.YES);
-            gate.answerNameCheck(ctx, yes);
-            return yes ? welcomeBack(ctx, lang) : local(local.line(code, "nameOtherSpeaker"), lang);
+        if (state == MemoryGate.State.NAME_CHECK && rememberedName(ctx) != null) {
+            return local(local.line(code, "askNameAgain", rememberedName(ctx)), lang);
         }
+        if (memo.awaitingName) return local(local.line(code, "askNameOther"), lang);
         if (intents.contains(TurnIntent.Kind.BYE)) return goodbye(lang);
         if (intents.contains(TurnIntent.Kind.THANKS)) return local(local.line(code, "thanks"), lang);
         if (intents.contains(TurnIntent.Kind.GREETING)) {
@@ -325,10 +563,37 @@ public class LlmAgentBrain implements AgentBrain {
             Optional<String> crop = m.cropIn(latest.text());
             return local(crop.isPresent() ? local.mandi(m.answer(crop.get()), code) : local.line(code, "askCrop"), lang);
         }
-        if (intents.contains(TurnIntent.Kind.SELL)) return local(local.line(code, "sellBusy"), lang);
+        if (intents.contains(TurnIntent.Kind.SELL) || intents.contains(TurnIntent.Kind.CONNECT) || memo.held != null) {
+            return sellStep(ctx, lang, memo);
+        }
+        String asked = lastQuestion(past);
+        if (!asked.isEmpty() && !fallback.isFallbackLine(asked)) {
+            return local(local.line(code, "sorryAgain") + " " + asked, lang);
+        }
         if (intents.contains(TurnIntent.Kind.YES)) return local(local.line(code, "yes"), lang);
         if (intents.contains(TurnIntent.Kind.NO)) return local(local.line(code, "no"), lang);
         return null;
+    }
+
+    /**
+     * The next step of a sale, from code: which crop, or how much of the crop named on this call. When buyers were
+     * already suggested, the farmer is asked again whether to call them.
+     */
+    private Reply sellStep(CallContext ctx, Language lang, CallMemo memo) {
+        String code = lang.code();
+        String crop = memo.crop;
+        if (crop == null) return local(local.line(code, "sellAskCrop"), lang);
+        // Crop and quantity known: only a buyer search is left, and that needs the model.
+        if (memo.quantityHeard) return local(local.line(code, "sellBusy"), lang);
+        return local(local.line(code, "sellAskQuantity").replace("{crop}", CropNames.spoken(crop, null, local.key(code))), lang);
+    }
+
+    /** The last question the assistant asked on this call (its last sentence, when that is a question), or empty. */
+    private static String lastQuestion(List<Line> past) {
+        String line = lastAssistantLine(past).strip();
+        if (!line.endsWith("?")) return "";
+        String[] sentences = SENTENCE_BREAK.split(line);
+        return sentences[sentences.length - 1].strip();
     }
 
     /** Drops this call's per-call state. The pipeline calls it at hang-up, after reading {@link #memoryState}. */
@@ -380,8 +645,11 @@ public class LlmAgentBrain implements AgentBrain {
         int firstReplayed = Math.max(0, past.size() - MAX_HISTORY_LINES);
         ObjectNode digest = CallDigest.of(past.subList(0, firstReplayed), memo.facts);
         boolean hasData = addData(messages, state, ctx, digest);
+        String hidden = state.usesMemory() || state == MemoryGate.State.NAME_CHECK ? null : rememberedName(ctx);
         for (Line line : past.subList(firstReplayed, past.size())) {
             if (line == null || line.text().isBlank()) continue;
+            // Someone else: the name check that named the remembered farmer is not replayed, so it is not asked again.
+            if (hidden != null && line.speaker() == Speaker.ASSISTANT && mentions(line.text(), hidden)) continue;
             messages.add(switch (line.speaker()) {
                 case FARMER -> ChatMessage.user(capped(line.text()));
                 case BUYER -> ChatMessage.user("The buyer said: " + capped(line.text()));
@@ -410,6 +678,8 @@ public class LlmAgentBrain implements AgentBrain {
                 boolean modelAskedName = TurnIntent.asksName(speakable(reply.content()));
                 text = inRightLanguage(text, expected, messages, turn);
                 text = withoutUngroundedAmounts(text, expected, past, latest, called);
+                text = guarded(text, ctx, gate.state(ctx), expected, memo,
+                        aboutBusiness(latest) || TurnIntent.wantsConnection(latest.text()));
                 memo.failures = 0;
                 memo.modelTurns++;
                 Language lang = ReplyLanguage.of(text, ctx.language(), languages);
@@ -426,7 +696,7 @@ public class LlmAgentBrain implements AgentBrain {
                 if (SaveProfileFactTool.NAME.equals(tc.name()) && result.ok()) memo.remember(tc, json);
                 if ((ToolDiet.MANDI.equals(tc.name()) || ToolDiet.WEATHER.equals(tc.name())) && result.ok()) toolAnswered = true;
                 if (ToolDiet.MANDI.equals(tc.name()) && result.ok() && reply.toolCalls().size() == 1) {
-                    Reply price = priceReply(tc, expected);
+                    Reply price = priceReply(tc, expected, memo);
                     if (price != null) {
                         memo.failures = 0;
                         memo.modelTurns++;
@@ -451,6 +721,7 @@ public class LlmAgentBrain implements AgentBrain {
                 memo.modelTurns++;
                 return welcomeBack(ctx, expected);
             }
+            if (after == MemoryGate.State.OTHER_SPEAKER && state != after) notOurFarmer(ctx, memo);
             if (after != state) {
                 // A confirmed name check unlocks memory; any other change hides it again. Both prompt parts follow.
                 state = after;
@@ -517,11 +788,21 @@ public class LlmAgentBrain implements AgentBrain {
      * A price is spoken from code, not reworded by a model: the date and the source cannot be dropped, the number cannot
      * change, and the turn needs no second model call. Tamil and Kannada have no such wording and stay with the model.
      */
-    private Reply priceReply(ToolCall call, Language lang) {
+    private Reply priceReply(ToolCall call, Language lang, CallMemo memo) {
         if (!scripted && tools.get(ToolDiet.MANDI) instanceof MandiPriceTool m && WORDED.contains(FixedLines.prefix(lang.code()))) {
             JsonNode args = call.arguments(json);
             String market = args.path("market").isTextual() ? args.path("market").asText() : null;
             MandiAnswer answer = m.answer(args.path("commodity").asText(""), market);
+            if (answer instanceof MandiAnswer.NoReference n && memo != null) {
+                String crop = n.crop() == null ? "" : n.crop();
+                if (!memo.noPriceSaid.add(crop.toLowerCase(java.util.Locale.ROOT))) {
+                    // Said once already: no second "no dated price", the useful next step instead.
+                    String spoken = crop.isBlank() ? "" : CropNames.spoken(crop, null, local.key(lang.code()));
+                    String line = crop.isBlank() ? local.line(lang.code(), "sellAskCrop")
+                            : local.line(lang.code(), "noPriceAgain").replace("{crop}", spoken);
+                    return local(line, lang);
+                }
+            }
             return local(local.mandi(answer, lang.code()) + " " + local.line(lang.code(), "afterPrice"), lang);
         }
         return null;
@@ -529,7 +810,13 @@ public class LlmAgentBrain implements AgentBrain {
 
     /** A name stated outright is saved by code, because smaller models often skip the tool. */
     private void saveStatedName(CallContext ctx, List<Line> past, Turn latest, CallMemo memo, Set<String> called) {
-        if (!tools.containsKey(ToolDiet.SAVE) || !gate.state(ctx).maySave()) return;
+        MemoryGate.State state = gate.state(ctx);
+        if (state == MemoryGate.State.OTHER_SPEAKER || state == MemoryGate.State.WITHHELD) {
+            // Nothing may be stored, but the caller is still greeted by the name they gave on this call.
+            TurnIntent.statedName(latest.text()).ifPresent(n -> memo.facts.put("name", n));
+            return;
+        }
+        if (!tools.containsKey(ToolDiet.SAVE) || !state.maySave()) return;
         Optional<String> name = TurnIntent.statedName(latest.text());
         if (name.isEmpty() && !past.isEmpty()) {
             Line previous = past.get(past.size() - 1);
@@ -583,6 +870,46 @@ public class LlmAgentBrain implements AgentBrain {
     }
 
     /**
+     * The last checks on a model's words. Sentences are dropped that: name the remembered farmer to someone who said
+     * they are not that farmer; offer, give or promise a phone number (G-One connects buyers on the call and never
+     * speaks a number); or send the farmer elsewhere (an online directory, a website, an app) instead of helping. When
+     * nothing is left, the next step of the conversation is said instead.
+     */
+    private String guarded(String text, CallContext ctx, MemoryGate.State state, Language lang, CallMemo memo, boolean sale) {
+        String hidden = state.usesMemory() || state == MemoryGate.State.NAME_CHECK ? null : rememberedName(ctx);
+        StringBuilder kept = new StringBuilder();
+        boolean numberTalk = false;
+        boolean dropped = false;
+        for (String sentence : SENTENCE_BREAK.split(text)) {
+            boolean phone = PHONE_TALK.matcher(sentence).find() || LONG_DIGITS.matcher(sentence).find();
+            if ((hidden != null && mentions(sentence, hidden)) || phone || ELSEWHERE.matcher(sentence).find()) {
+                numberTalk |= phone;
+                dropped = true;
+                continue;
+            }
+            kept.append(kept.isEmpty() ? "" : " ").append(sentence);
+        }
+        if (!dropped) return text;
+        log.info("brain_guard dropped sentences on call {} (phone={})", ctx.callId(), numberTalk);
+        String code = lang.code();
+        String out = kept.toString().strip();
+        if (numberTalk) out = local.line(code, "noNumbers") + (out.isEmpty() ? "" : " " + out);
+        if (out.isEmpty() || (sale && !out.endsWith("?"))) {
+            String next = sale && consent.suggested(ctx.callId()).isEmpty() ? sellStep(ctx, lang, memo).text() : "";
+            out = (out.isEmpty() ? "" : out + " ") + next;
+        }
+        return out.isBlank() ? local.line(code, "followUp") : capped3(out.strip());
+    }
+
+    /** True when {@code text} contains a word of the remembered name (three letters or more). */
+    private static boolean mentions(String text, String name) {
+        for (String w : name.split("[^\\p{L}\\p{M}]+")) {
+            if (w.codePointCount(0, w.length()) >= 3 && text.contains(w)) return true;
+        }
+        return false;
+    }
+
+    /**
      * Drops sentences that state a rupee amount nothing on this call supports. Models recite scheme amounts confidently and
      * wrongly; a farmer may act on them. Amounts the farmer or a tool brought into the call stay.
      */
@@ -615,6 +942,10 @@ public class LlmAgentBrain implements AgentBrain {
         if (!nameKnown && state.maySave()) {
             if (memo.askedName) memory += " The name is still unknown; you already asked, do not ask again.";
             else memory += " " + NAME_ASK;
+        }
+        if (state == MemoryGate.State.OTHER_SPEAKER) {
+            memory += nameKnown ? " Their own name from this call is statedThisCall.name; use only that one."
+                    : " Their name is unknown; do not ask for it again.";
         }
         return system.render(Map.of(
                 "language", ctx.language().label(),
@@ -743,6 +1074,18 @@ public class LlmAgentBrain implements AgentBrain {
     private static final class CallMemo {
         final Map<String, String> facts = new java.util.concurrent.ConcurrentHashMap<>();
         volatile boolean askedName;
+        /** The caller is someone else and was asked their name once; the next turn may answer it. */
+        volatile boolean awaitingName;
+        /** A request made before the name check was settled, taken up right after. */
+        volatile String held;
+        /** The crop named on this call, which wins over the remembered one. */
+        volatile String crop;
+        volatile int nameChecksAsked;
+        volatile boolean quantityHeard;
+        /** The console no longer shows the remembered profile as this caller's. */
+        volatile boolean memoryHidden;
+        /** Crops this call already heard "no dated price" for. */
+        final Set<String> noPriceSaid = java.util.concurrent.ConcurrentHashMap.newKeySet();
         volatile int failures;
         volatile int modelTurns;
         private volatile String lastLine = "";

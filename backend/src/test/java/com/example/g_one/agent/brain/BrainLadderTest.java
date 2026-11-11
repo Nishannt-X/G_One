@@ -225,6 +225,13 @@ class BrainLadderTest {
         CallContext ctx = BrainFixture.newFarmer(ENGLISH);
         f.llm.failures.set(1);
         assertThat(f.brain.respond(ctx, List.of(), said(ctx, "I want to sell ten quintal onion")).text()).contains("you want to sell");
+        CallContext other = BrainFixture.newFarmer(ENGLISH);
+        f.llm.failures.set(1);
+        assertThat(f.brain.respond(other, List.of(), said(other, "I want to sell onion")).text())
+                .as("the next step of the sale, not a generic apology").contains("How many quintals");
+        CallContext none = BrainFixture.newFarmer(ENGLISH);
+        f.llm.failures.set(1);
+        assertThat(f.brain.respond(none, List.of(), said(none, "I want to sell my crop")).text()).contains("Which crop");
     }
 
     @Test
@@ -268,6 +275,7 @@ class BrainLadderTest {
         CallContext ctx = BrainFixture.newFarmer(HINDI);
         f.llm.replyText("जी।");
         f.brain.respond(ctx, List.of(), said(ctx, "खेत में पानी कब दूँ?"));
-        assertThat(f.llm.requests().get(0).path("tools").toString()).doesNotContain("get_mandi_price").contains("end_call");
+        assertThat(f.llm.requests().get(0).path("tools").toString()).doesNotContain("get_mandi_price").doesNotContain("end_call")
+                .contains("save_profile_fact");
     }
 }

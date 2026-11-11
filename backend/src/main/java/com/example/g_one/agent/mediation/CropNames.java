@@ -12,11 +12,11 @@ public final class CropNames {
     private static final Map<String, Map<String, String>> WORDS = Map.of(
             "hi", Map.ofEntries(Map.entry("onion", "प्याज़"), Map.entry("rice", "चावल"), Map.entry("paddy", "धान"),
                     Map.entry("potato", "आलू"), Map.entry("tomato", "टमाटर"), Map.entry("wheat", "गेहूँ"),
-                    Map.entry("soyabean", "सोयाबीन"), Map.entry("cotton", "कपास"), Map.entry("red", "लाल"),
+                    Map.entry("soyabean", "सोयाबीन"), Map.entry("cotton", "कपास"), Map.entry("maize", "मक्का"), Map.entry("red", "लाल"),
                     Map.entry("quintal", "क्विंटल"), Map.entry("kg", "किलो"), Map.entry("ton", "टन")),
             "bn", Map.ofEntries(Map.entry("onion", "পেঁয়াজ"), Map.entry("rice", "চাল"), Map.entry("paddy", "ধান"),
                     Map.entry("potato", "আলু"), Map.entry("tomato", "টমেটো"), Map.entry("wheat", "গম"),
-                    Map.entry("soyabean", "সয়াবিন"), Map.entry("cotton", "তুলা"), Map.entry("red", "লাল"),
+                    Map.entry("soyabean", "সয়াবিন"), Map.entry("cotton", "তুলা"), Map.entry("maize", "ভুট্টা"), Map.entry("red", "লাল"),
                     Map.entry("quintal", "কুইন্টাল"), Map.entry("kg", "কেজি"), Map.entry("ton", "টন")));
     private static final Pattern QUANTITY = Pattern.compile("^\\s*([\\d.,]+)\\s*(.*)$");
 

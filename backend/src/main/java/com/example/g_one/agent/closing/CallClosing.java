@@ -68,7 +68,19 @@ public final class CallClosing {
             + "|और कुछ नहीं|कुछ और नहीं|हो गया|\\bbye\\b|goodbye|good bye|phone rakh|rakhta hu|rakhti hu|bas itna|bas yahi"
             + "|aur kuch nahi|kuch aur nahi|ho gaya|that'?s all|that is all|that'?s it|nothing else|nothing more|i'?m done"
             + "|we'?re done|বিদায়|রাখছি|আর কিছু না|আর কিছু নেই|ব্যস|rakhchi|ar kichu na|போதும்|வேறு எதுவும் இல்லை|வேறு ஒன்றும் இல்லை"
-            + "|போய் வருகிறேன்|ಸಾಕು|ಬೇರೆ ಏನೂ ಇಲ್ಲ|ಬೇರೆ ಏನು ಇಲ್ಲ|ಹೋಗಿ ಬರುತ್ತೇನೆ");
+            + "|போய் வருகிறேன்|ಸಾಕು|ಬೇರೆ ಏನೂ ಇಲ್ಲ|ಬೇರೆ ಏನು ಇಲ್ಲ|ಹೋಗಿ ಬರುತ್ತೇನೆ"
+            // Later, more ways to say it: "बस हो गया", "फिर बात करेंगे", "chalo bye", "that will be all".
+            + "|बस हो गया|बस बस|बस धन्यवाद|बस शुक्रिया|और कुछ नहीं चाहिए|कुछ और नहीं चाहिए|फिर बात करेंगे|बाद में बात करेंगे"
+            + "|चलिए फिर|चलो फिर|अच्छा चलता हूँ|अच्छा चलती हूँ|चलता हूँ|चलती हूँ|नमस्ते जी चलता|आज के लिए इतना"
+            + "|bas ho gaya|bas bas|bas thank you|aur kuch nahi chahiye|phir baat karenge|baad mein baat karenge|chalo bye"
+            + "|chaliye phir|chalta hoon|chalti hoon|aaj ke liye itna|that will be all|that'?ll be all|i'?m good thanks"
+            + "|no more questions|talk later|see you|we are done|all done|i have to go|gotta go"
+            + "|পরে কথা হবে|আজ এই পর্যন্ত|ঠিক আছে রাখি|রাখি এখন|আর কিছু লাগবে না|pore kotha hobe"
+            + "|பிறகு பேசலாம்|சரி வைக்கிறேன்|நன்றி போதும்|ಮತ್ತೆ ಮಾತಾಡೋಣ|ಇಷ್ಟೇ|ಸರಿ ಇಡ್ತೀನಿ");
+    /** Whole short turns that close a conversation, but would mean something else inside a longer one. */
+    private static final java.util.Set<String> DONE_EXACT = java.util.Set.of("बस", "bas", "कुछ नहीं", "kuch nahi",
+            "kuch nahin", "nothing", "बस जी", "bas ji", "ok bas", "ओके बस", "ठीक है बस", "theek hai bas", "আর না");
+    private static final Pattern EDGE_PUNCTUATION = Pattern.compile("^[\\p{P}\\s]+|[\\p{P}\\s]+$");
     private static final int SHORT_TURN_WORDS = 8;
 
     private final Set<LegRole> present = EnumSet.noneOf(LegRole.class);
@@ -92,6 +104,7 @@ public final class CallClosing {
     public static boolean saysDone(String text) {
         if (text == null || text.isBlank()) return false;
         String t = text.strip().toLowerCase(Locale.ROOT);
+        if (DONE_EXACT.contains(EDGE_PUNCTUATION.matcher(t).replaceAll("").replaceAll("[,\\s]+", " "))) return true;
         return t.split("\\s+").length <= SHORT_TURN_WORDS && DONE.matcher(t).find();
     }
 
@@ -100,8 +113,17 @@ public final class CallClosing {
         return phase == Phase.END || phase == Phase.SAVE;
     }
 
-    public boolean finished() {
+    public synchronized boolean finished() {
         return phase == Phase.DONE;
+    }
+
+    /** The question waiting for answers, or empty when neither is being asked. */
+    public synchronized java.util.Optional<Question> pending() {
+        return switch (phase) {
+            case END -> java.util.Optional.of(Question.END);
+            case SAVE -> java.util.Optional.of(Question.SAVE);
+            default -> java.util.Optional.empty();
+        };
     }
 
     /** A party joined the call (the buyer said yes to being connected). */
@@ -131,10 +153,17 @@ public final class CallClosing {
         return new Step(asks, false, null);
     }
 
-    /** A turn of {@code role} while {@link #active}. */
+    /** A turn of {@code role} while {@link #active}, read by words alone ({@link ReplyGuard}). */
     public synchronized Step heard(LegRole role, String text) {
+        return heard(role, ReplyGuard.read(text));
+    }
+
+    /**
+     * A turn of {@code role} while {@link #active}, already read as {@code reading} (by {@link ReplyGuard}, or by the
+     * layered reader that may ask a model about a reply the words did not settle). Only {@code YES} saves.
+     */
+    public synchronized Step heard(LegRole role, ReplyGuard.Reading reading) {
         if (!active() || !present.contains(role)) return Step.NOTHING;
-        ReplyGuard.Reading reading = ReplyGuard.read(text);
         if (phase == Phase.END) {
             if (endAnswers.containsKey(role)) return Step.NOTHING;
             return switch (reading) {

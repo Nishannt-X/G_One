@@ -62,6 +62,21 @@ public final class FakeLlm implements AutoCloseable {
         return this;
     }
 
+    /** Queues an error answer, such as Groq's {@code 400 tool_use_failed}. */
+    public FakeLlm replyError(int status, String body) {
+        ObjectNode error = JSON.createObjectNode().put("__status", status).put("__body", body);
+        replies.add(error);
+        return this;
+    }
+
+    /** Queues an answer that is only hidden reasoning: empty content, cut off by the token limit. */
+    public FakeLlm replyOnlyReasoning() {
+        ObjectNode message = JSON.createObjectNode().put("role", "assistant").put("content", "")
+                .put("reasoning", "The caller gave a name. I should save it and then...");
+        replies.add(choice(message, "length"));
+        return this;
+    }
+
     /** Request bodies received so far, in order. */
     public List<JsonNode> requests() {
         return List.copyOf(requests);
@@ -100,6 +115,10 @@ public final class FakeLlm implements AutoCloseable {
             if (reply == null) {
                 reply = choice(JSON.createObjectNode().put("role", "assistant").put("content", "{\"text\":\"ok\"}"),
                         "stop");
+            }
+            if (reply.has("__status")) {
+                send(x, reply.path("__status").asInt(), reply.path("__body").asText());
+                return;
             }
             send(x, 200, JSON.writeValueAsString(reply));
         }

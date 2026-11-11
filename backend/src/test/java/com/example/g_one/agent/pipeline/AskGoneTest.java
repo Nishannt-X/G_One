@@ -220,14 +220,8 @@ class AskGoneTest {
         assertThat(farmer.played()).hasSize(farmerFrames);
         assertThat(farmer.clearCount()).isEqualTo(farmerClears);
         assertThat(spokenTo(buyer)).last().isEqualTo("The farmer said twenty quintals of red onion.");
-        assertThat(saidTo(LegRole.BUYER)).last().satisfies(a -> {
-            assertThat(a.legId()).isEqualTo(buyer.id());
-            assertThat(a.text()).isEqualTo("The farmer said twenty quintals of red onion.");
-        });
-        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).anySatisfy(t -> {
-            assertThat(t.role()).isEqualTo(LegRole.BUYER);
-            assertThat(t.text()).contains("G-One, how much crop");
-        });
+        assertThat(saidTo(LegRole.BUYER)).noneMatch(a -> a.text().equals("The farmer said twenty quintals of red onion."));
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).noneMatch(t -> t.text().contains("G-One, how much crop"));
     }
 
     @Test
@@ -293,6 +287,42 @@ class AskGoneTest {
         assertThat(view.path("deal").path("quantity").asText()).isEqualTo("20 quintal");
         assertThat(view.path("lines").toString()).as("the follow-up sees the earlier question and answer")
                 .contains("you, to G-One only").contains("So far twenty quintals");
+    }
+
+    @Test
+    void aQuestionToTheAssistantThatCarriesAPriceIsNeverRelayedNorAnOffer() {
+        buyerJoinsAndAgrees();
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        int deals = eventsOf(ConsoleEvent.DealUpdated.class).size();
+        List<String> farmerHeard = spokenTo(farmer);
+        // The model reads it as spoken to the assistant, and also as a clear price: the address wins.
+        llm.replyText(reading("क्या किसान अड़तीस सौ लेगा?", clearOffer(3800), "none", true));
+        llm.replyText(answer("I cannot say."));
+
+        session(LegRole.BUYER).say("Would the farmer take 3800?");
+        executor.runAll();
+        finishAll();
+
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).as("never relayed").hasSize(translated);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).as("never an offer").hasSize(deals);
+        assertThat(spokenTo(farmer)).isEqualTo(farmerHeard);
+        assertThat(eventsOf(ConsoleEvent.WhisperSent.class)).as("no price whisper for a question").isEmpty();
+    }
+
+    @Test
+    void aQuestionToTheAssistantWithACautionFlagIsStillNotRelayed() {
+        buyerJoinsAndAgrees();
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        llm.replyText("{\"translation\":\"x\",\"offer\":" + NO_OFFER + ",\"caution\":{\"status\":\"none\",\"secretRequest\":true,"
+                + "\"secretShare\":false,\"advancePayment\":false},\"reply\":\"none\",\"toAssistant\":true}");
+        llm.replyText(answer("I cannot help with that."));
+
+        session(LegRole.BUYER).say("Can the assistant get me his OTP?");
+        executor.runAll();
+        finishAll();
+
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(spokenTo(farmer)).noneMatch(t -> t.contains("OTP"));
     }
 
     @Test
@@ -565,7 +595,7 @@ class AskGoneTest {
     }
 
     @Test
-    void theQuestionAndAnswerReachTheTranscriptButTheOtherPartysNextTurnIsStillTranslated() {
+    void thePrivateExchangeStaysOutOfTheTranscriptAndTheNextTurnIsStillTranslated() {
         buyerJoinsAndAgrees();
         llm.replyText(answer("Twenty quintals so far."));
         session(LegRole.BUYER).say("G-One, how much?");
@@ -578,6 +608,41 @@ class AskGoneTest {
         farmer.remoteHangup();
         executor.runAll();
         assertThat(ended).singleElement().satisfies(e -> assertThat(e.transcript()).extracting(line -> line.text())
-                .contains("Twenty quintals so far."));
+                .doesNotContain("Twenty quintals so far.", "G-One, how much?"));
+    }
+
+    // ---- the shared record: what is published and noted, and when ----
+
+    @Test
+    void anOrdinaryTurnIsPublishedWithTheTimeItWasHeardNotWhenItWasRead() {
+        buyerJoinsAndAgrees();
+        long heardAt = now.get();
+        llm.replyText(reading("मैं कल माल उठा लूँगा", NO_OFFER, "none", false));
+        session(LegRole.BUYER).say("I will pick it up tomorrow");
+        now.addAndGet(1_500); // the turn read takes its time before the lane gets to publish
+        executor.runAll();
+
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).filteredOn(t -> t.text().contains("pick it up"))
+                .singleElement().satisfies(t -> assertThat(t.atMs()).isEqualTo(heardAt));
+    }
+
+    @Test
+    void anAnswerToTheEndOfCallCheckAndAWithheldSecretAreStillPublishedAndNoted() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("mera OTP 482913 hai");
+        executor.runAll();
+        finishAll();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+
+        List<String> heard = eventsOf(ConsoleEvent.TurnHeard.class).stream().map(ConsoleEvent.TurnHeard::text).toList();
+        assertThat(heard).contains("bye", "yes").anyMatch(t -> t.startsWith("mera OTP")).noneMatch(t -> t.contains("482913"));
+        farmer.remoteHangup();
+        executor.runAll();
+        assertThat(ended).singleElement().satisfies(e -> assertThat(e.transcript()).extracting(line -> line.text())
+                .contains("bye", "yes").noneMatch(t -> t.contains("482913")));
     }
 }

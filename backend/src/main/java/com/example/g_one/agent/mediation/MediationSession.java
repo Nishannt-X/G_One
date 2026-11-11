@@ -168,7 +168,8 @@ public final class MediationSession {
         synchronized (lock) {
             if (phase != Phase.LIVE || buyerLegEnded) return false;
             long n = seq.incrementAndGet();
-            lane.addLast(() -> process(turn, n));
+            long heardAt = clock.millis();
+            lane.addLast(() -> process(turn, n, heardAt));
             start = !laneBusy;
             if (start) laneBusy = true;
         }
@@ -304,14 +305,16 @@ public final class MediationSession {
             }
         }
         Turn current = turn;
-        publishHeard(current);
-        side.note(Speaker.BUYER, current.text());
         long n = seq.incrementAndGet();
+        long heardAt = clock.millis();
         enqueue(() -> {
             if (askingBuyer()) {
+                recordHeard(current, heardAt);
                 buyerAnswered(current);
             } else if (live()) {
-                process(current, n);
+                process(current, n, heardAt);
+            } else {
+                recordHeard(current, heardAt); // heard after mediation ended: shown and kept, but not mediated
             }
         });
     }
@@ -398,15 +401,20 @@ public final class MediationSession {
 
     // ---- a turn during mediation ----
 
-    private void process(Turn turn, long n) {
+    /**
+     * One mediated turn. It is published and noted in the shared transcript only once it is known not to be a question
+     * for G-One ({@link #recordHeard}), with the time it was heard, so the console's timings stay true.
+     */
+    private void process(Turn turn, long n, long heardAt) {
         desk.tick();
-        if (closingTurn(turn)) return;
+        if (closingTurn(turn, heardAt)) return;
         LegRole speaker = turn.role();
         LegRole listener = speaker.other();
         Language to = language(listener);
         var awaiting = desk.awaiting(speaker);
         ReplyGuard.Reading quick = ReplyGuard.read(turn.text());
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent() && quick != ReplyGuard.Reading.UNCLEAR) {
+            recordHeard(turn, heardAt);
             desk.heard(speaker, quick == ReplyGuard.Reading.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO, n, turn.startedMs());
             return; // a plain yes or no to the read-back is answered by the read-back flow, and needs no model
         }
@@ -414,6 +422,7 @@ public final class MediationSession {
         boolean sameLanguage = language(speaker).equals(to);
         boolean farmerSecret = speaker == LegRole.FARMER && ScamPatterns.farmerSharedSecret(turn.text());
         if (farmerSecret) {
+            recordHeard(turn, heardAt); // masked: the digits never reach the console or the transcript
             whisperCaution("cautionShareWithheld");
             oneMoment();
             return; // never sent to the model, and never translated for the buyer
@@ -432,10 +441,11 @@ public final class MediationSession {
         Set<Caution> cautions = EnumSet.noneOf(Caution.class);
         cautions.addAll(ScamPatterns.supported(read.cautions(), turn.text()));
         if (speaker == LegRole.BUYER) cautions.addAll(ScamPatterns.buyer(turn.text()));
-        if (!replying && cautions.isEmpty() && read.addressed()) {
+        if (!replying && read.addressed()) {
             aside(turn, "model");
             return; // spoken to the assistant without its name: never translated, remembered or read as deal terms
         }
+        recordHeard(turn, heardAt);
         // A line that earned a caution stays out of the context, so it cannot colour how the next turn is read.
         if (cautions.isEmpty()) remember(turn.text());
 
@@ -522,8 +532,6 @@ public final class MediationSession {
         ledger.aside(asker, ScamPatterns.masked(turn.text()), text);
         Leg leg = asker == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(asker).say(new LegVoice.Line(text, lang, false, null));
-        bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), asker, lang.code(), text));
-        side.note(Speaker.ASSISTANT, text);
         log.info("ask_gone call={} asker={} detected={} source={} ms={}", callId, asker.wire(), detectedBy,
                 answer.source(), clock.millis() - started);
     }
@@ -727,15 +735,17 @@ public final class MediationSession {
     // ---- the end of the call, asked of both parties (agent/closing) ----
 
     /** A turn answering the end-of-call check, or a short "bye" outside any read-back. True when handled here. */
-    private boolean closingTurn(Turn turn) {
+    private boolean closingTurn(Turn turn, long heardAt) {
         CallClosing closing = side.closing();
         LegRole speaker = turn.role();
         if (closing.active()) {
+            recordHeard(turn, heardAt);
             closingStep(closing.heard(speaker, turn.text()));
             return true;
         }
         boolean deskIdle = desk.awaiting(LegRole.FARMER).isEmpty() && desk.awaiting(LegRole.BUYER).isEmpty();
         if (deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text())) {
+            recordHeard(turn, heardAt);
             closingStep(closing.start());
             return true;
         }
@@ -815,6 +825,14 @@ public final class MediationSession {
 
     private void publishHeard(Turn turn) {
         bus.publish(ConsoleEvent.TurnHeard.of(callId, turn, clock.millis()));
+    }
+
+    /** A turn that is part of the shared conversation: published, masked, at the time it was heard, and noted. */
+    private void recordHeard(Turn turn, long heardAt) {
+        Turn masked = new Turn(turn.legId(), turn.role(), turn.language(), ScamPatterns.masked(turn.text()),
+                turn.startedMs(), turn.endedMs());
+        bus.publish(ConsoleEvent.TurnHeard.of(callId, masked, heardAt));
+        side.note(turn.role() == LegRole.FARMER ? Speaker.FARMER : Speaker.BUYER, masked.text());
     }
 
     private List<String> recent() {

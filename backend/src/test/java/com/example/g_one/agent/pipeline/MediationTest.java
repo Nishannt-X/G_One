@@ -1183,4 +1183,22 @@ class MediationTest {
         assertThat(farmer.isEnded()).as("a held goodbye never hangs up without asking").isFalse();
         assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.END));
     }
+
+    @Test
+    void aHeldTurnReleasedAfterADeclineIsSupersededByANewerFarmerTurn() {
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("No");
+        executor.runAll();
+        assertThat(farmer.unheardFrames()).as("the decline line is playing").isPositive();
+
+        session(LegRole.FARMER).emitTurn("first"); // no speech start: held while mediation has the leg
+        executor.runAll();
+        assertThat(brain.responds).as("held, not answered over the decline line").isEmpty();
+        farmer.finishPlayback(); // the decline line ends: release queues the held turn's answer
+        session(LegRole.FARMER).say("second"); // before that answer has run
+        executor.runAll();
+
+        assertThat(brain.responds).as("the held turn is bound to the release; the newer turn supersedes it")
+                .singleElement().extracting(call -> call.latest().text()).isEqualTo("second");
+    }
 }

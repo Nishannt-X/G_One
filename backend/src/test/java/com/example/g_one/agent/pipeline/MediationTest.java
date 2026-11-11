@@ -1201,4 +1201,26 @@ class MediationTest {
         assertThat(brain.responds).as("the held turn is bound to the release; the newer turn supersedes it")
                 .singleElement().extracting(call -> call.latest().text()).isEqualTo("second");
     }
+
+    @Test
+    void aFarmerTurnRacingTheBuyersYesIsTranslatedNotHeldForTheAssistant() {
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("Yes"); // queued on the mediation lane, not yet run
+        // The farmer's turn has already seen mediation as not live when the yes is accepted: the acceptance runs
+        // between that check and the intake lock (the closing check asks the brain about identity in between).
+        brain.onIdentityCheck.set(executor::runAll);
+        llm.replyText(reading("I have twenty quintals", NO_OFFER, NO_CAUTION, "none"));
+
+        session(LegRole.FARMER).emitTurn("bees quintal hai");
+        assertThat(brain.onIdentityCheck.get()).as("the acceptance ran inside the race window").isNull();
+        executor.runAll();
+        finishAll();
+
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).as("the turn reaches the buyer during mediation")
+                .anySatisfy(t -> {
+                    assertThat(t.role()).isEqualTo(LegRole.FARMER);
+                    assertThat(t.text()).isEqualTo("I have twenty quintals");
+                });
+        assertThat(brain.responds).as("never answered by the intake assistant").isEmpty();
+    }
 }

@@ -38,8 +38,13 @@ final class ScriptedBrain implements AgentBrain {
     /** True from a {@link #greetText} greeting until a yes or no answers it, as a name check does. */
     volatile boolean identityOpen;
 
+    /** Runs once, inside the next {@link #awaitingIdentity} call: a seam for a step that races a farmer turn. */
+    final java.util.concurrent.atomic.AtomicReference<Runnable> onIdentityCheck = new java.util.concurrent.atomic.AtomicReference<>();
+
     @Override
     public boolean awaitingIdentity(com.example.g_one.core.CallId callId) {
+        Runnable once = onIdentityCheck.getAndSet(null);
+        if (once != null) once.run();
         return identityOpen;
     }
 

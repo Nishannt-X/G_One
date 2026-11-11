@@ -1,5 +1,6 @@
 package com.example.g_one.agent.mediation;
 
+import com.example.g_one.core.LegRole;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Set;
@@ -7,26 +8,37 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Plain-code check: does a mediated turn call G-One by name, as a question or request to the assistant itself? Costs no
- * model call, so a turn that names G-One goes straight to the answer and never to translation.
+ * Plain-code check: is a mediated turn for G-One rather than for the other party? Costs no model call, so a turn that
+ * names G-One goes straight to G-One and never to translation.
  *
  * <p>The name is recognised as speech recognition writes it: "G-One", "G one", "G1", "Gee one", "ji one", "जी-वन",
  * "जी वन", "जी 1", "জি ওয়ান", "ஜி ஒன்", "ಜಿ ಒನ್". Two spellings are also ordinary words and count only at the very start
- * of the turn, followed by a pause or a question: "gone" ("the price has gone up") and "जीवन" ("life").
+ * of the turn, set off by a comma or question mark with more after it, or followed by a request ("जीवन बताओ"): "gone"
+ * ("the price has gone up") and "जीवन" ("life"), so "जीवन क्या है?" is not a call to G-One.
  *
- * <p>Addressed means the name is a vocative: at the start of the turn (after "hey", "ok", "अरे" and the like), right after
- * a pause (comma, full stop, "।"), right before a comma, or at the end of a question ("kitna maal hai G-One?"). A name used
- * in the third person is not addressed: "the G-One said it is fine", "ask G-One", "जी-वन ने कहा", "जी-वन से पूछो". Such a
- * turn is relayed like any other.
+ * <p>Each mention of the name is one of:
+ * <ul>
+ *   <li><b>reported</b>, never addressed: "the G-One said", "G-One said", "G-One can tell you", "I told G-One",
+ *       "जी-वन ने कहा", "G-One ki baat", "জি ওয়ান বলেছে", "ஜி ஒன் சொன்னது";</li>
+ *   <li><b>routed</b> through G-One, always addressed, because it is G-One's to handle and never the other party's:
+ *       "ask G-One", "tell G-One", "जी-वन से पूछो", "G-One ko batao", "জি-ওয়ানের কাছে", "ஜி ஒன் கிட்ட", "ಜಿ ಒನ್ ಗೆ";</li>
+ *   <li><b>vocative</b>, addressed: at the start (after "hey", "ok", "अरे" and the like), after a pause, before a comma
+ *       or question mark, or at the end of a question;</li>
+ *   <li><b>ambiguous</b>, anything else ("I really like G-One", "maybe G-One knows his rate"). A farmer's ambiguous
+ *       mention is relayed. A buyer's is not: it may be asking for something private to the farmer, so it goes to G-One,
+ *       whose answer to a buyer can only state what the buyer already heard.</li>
+ * </ul>
  */
 public final class AddressDetector {
+    private enum Mention { VOCATIVE, ROUTED, REPORTED, AMBIGUOUS }
+
     /** Spellings that are only ever the assistant's name. */
     private static final Pattern STRONG = Pattern.compile(nfc(
             "(?<![\\p{L}\\p{M}\\p{Nd}])(?:"
                     + "(?:g|gee|ji|jee|zee)(?:[\\s.\\-]+(?:one|1|van|wan|won)|1)"
                     + "|geeone"
                     + "|जी(?:\\s*-\\s*|\\s+)(?:वन|वान)|जी\\s*[-]?\\s*(?:1|१|one)"
-                    + "|জি\\s*[-]?\\s*(?:ওয়ান|ওয়ান|ওআন|ওয়ান|ওন|1|১|one)"
+                    + "|জি\\s*[-]?\\s*(?:ওয়ান|ওয়ান|ওআন|ওয়ান|ওন|1|১|one)(?:ের|এর|কে)?"
                     + "|ஜி\\s*[-]?\\s*(?:ஒன்|ஒண்|வன்|1|௧|one)"
                     + "|ஜீ\\s*[-]?\\s*(?:ஒன்|ஒண்|வன்|1|one)"
                     + "|ಜಿ\\s*[-]?\\s*(?:ಒನ್|ವನ್|1|೧|one)"
@@ -39,6 +51,7 @@ public final class AddressDetector {
             Pattern.UNICODE_CASE | Pattern.CASE_INSENSITIVE);
     private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{M}\\p{Nd}']+");
     private static final Pattern PAUSE = Pattern.compile("[,.!?।;:،…]");
+    private static final Pattern BENGALI_CASE = Pattern.compile(nfc("(?:ের|এর|কে)$"));
 
     /** Words that may come before a vocative at the start: greetings, fillers, thanks. */
     private static final Set<String> OPENERS = words("hey", "hi", "hello", "helo", "ok", "okay", "oh", "o", "so", "and",
@@ -47,56 +60,79 @@ public final class AddressDetector {
             "अरे", "हे", "ओ", "हेलो", "हलो", "हैलो", "सुनो", "सुनिए", "सुनिये", "अच्छा", "तो", "हाँ", "हां", "जी", "भाई",
             "धन्यवाद", "शुक्रिया", "ठीक", "है", "ওহে", "এই", "হ্যালো", "শুনুন", "শোনো", "আচ্ছা", "হ্যাঁ", "দাদা", "ধন্যবাদ",
             "ஹலோ", "சரி", "ஏய்", "நன்றி", "ಹಲೋ", "ಸರಿ", "ಏ", "ಧನ್ಯವಾದ");
-    /** A word right before the name that makes it an object or a subject talked about: "ask G-One", "the G-One". */
-    private static final Set<String> BEFORE_THIRD_PERSON = words("the", "ask", "tell", "told", "asked", "thank", "with", "from", "by",
-            "about", "that", "this", "our", "your", "his", "her", "their", "called", "named", "trust", "using", "via",
-            "per", "said", "says");
-    /** A word right after the name that makes it a subject or object: "G-One said", "जी-वन ने", "जी-वन से पूछो". */
-    private static final Set<String> AFTER_THIRD_PERSON = words("said", "says", "told", "tells", "is", "was", "will",
-            "has", "had", "thinks", "knows", "and", "or", "ne", "ko", "se", "ka", "ki", "ke", "wala", "wali", "ने", "को",
-            "से", "का", "की", "के", "वाला", "वाली", "বলেছে", "বলল", "এর", "কে", "কাছে", "கிட்ட", "இடம்",
-            "சொன்னது", "சொன்னார்", "ಗೆ", "ಹೇಳಿದ್ದು", "ಹೇಳಿದರು", "ಅವರಿಗೆ");
-    /** Question words and requests: what makes a turn-initial "gone" or "जीवन" a question to the assistant. */
-    private static final Set<String> CUES = words("what", "whats", "what's", "how", "when", "where", "who", "which",
-            "why", "tell", "please", "repeat", "say",
-            "give", "check", "summarise", "summarize", "explain", "kya", "kitna", "kitni", "kitne", "kaun", "kab",
-            "kahan", "kaisa", "kaise", "batao", "bataiye", "bataye", "bolo", "boliye", "sunao", "dobara",
-            "phir", "zara", "jara", "क्या", "कितना", "कितनी", "कितने", "कौन", "कब", "कहाँ", "कहां", "कैसे", "बताओ",
-            "बताइए", "बताइये", "बताना", "बोलो", "बोलिए", "सुनाओ", "दोबारा", "फिर", "ज़रा", "जरा", "কী", "কি", "কত", "কে",
-            "কখন", "কোথায়", "কেমন", "বলো", "বলুন", "বলেন", "আবার", "என்ன", "எவ்வளவு", "எத்தனை", "யார்", "எப்போது",
-            "எங்கே", "சொல்லு", "சொல்லுங்க", "சொல்லுங்கள்", "ಏನು", "ಎಷ್ಟು", "ಯಾರು", "ಯಾವಾಗ", "ಎಲ್ಲಿ", "ಹೇಳಿ", "ಹೇಳು");
+    /** Right after the name, these make it reported speech or a possessive: "G-One said", "जी-वन ने", "G-One ki". */
+    private static final Set<String> REPORTED_AFTER = words("said", "says", "told", "tells", "ne", "ka", "ki", "ke",
+            "ने", "का", "की", "के", "বলেছে", "বলল", "বলেছেন", "বললেন", "சொன்னது", "சொன்னார்", "சொன்னாங்க",
+            "ಹೇಳಿದ್ದು", "ಹೇಳಿದರು", "ಹೇಳಿದ್ದಾರೆ");
+    /** Right before the name, these make it someone talked about: "the G-One", "I told G-One". */
+    private static final Set<String> REPORTED_BEFORE = words("the", "told", "trust", "using", "via", "by", "from",
+            "with", "about", "that", "this", "our", "your", "his", "her", "their", "called", "named", "said", "says",
+            "per");
+    /** A modal right after the name is a third-person statement ("G-One can tell you"), unless "you" follows it. */
+    private static final Set<String> MODALS = words("can", "could", "will", "would", "should", "may", "might", "shall",
+            "does", "did", "do");
+    private static final Set<String> SECOND_PERSON = words("you", "u", "ya", "aap", "tum", "आप", "तुम", "আপনি", "তুমি",
+            "நீங்க", "நீங்கள்", "நீ", "ನೀವು", "ನೀನು");
+    /** Right after the name: a request routed to G-One ("जी-वन से पूछो", "G-One ko batao", "ஜி ஒன் கிட்ட"). */
+    private static final Set<String> ROUTED_AFTER = words("se", "ko", "से", "को", "কাছে", "কে", "கிட்ட", "இடம்", "ಗೆ",
+            "ಅವರಿಗೆ");
+    /** Right before the name: a request routed to G-One ("ask G-One", "tell G-One"). */
+    private static final Set<String> ROUTED_BEFORE = words("ask", "tell", "asking", "telling");
+    /** Right after the name, these make it a subject talked about, which is ambiguous: "G-One knows", "G-One is". */
+    private static final Set<String> THIRD_PERSON_AFTER = words("is", "was", "has", "had", "thinks", "knows", "and",
+            "or", "wala", "wali", "वाला", "वाली");
+    /** Requests that make a turn-initial "gone" or "जीवन" a call to the assistant. */
+    private static final Set<String> IMPERATIVES = words("tell", "repeat", "say", "give", "check", "summarise",
+            "summarize", "explain", "batao", "bataiye", "bataye", "bolo", "boliye", "sunao", "बताओ", "बताइए", "बताइये",
+            "बोलो", "बोलिए", "सुनाओ", "বলো", "বলুন", "சொல்லு", "சொல்லுங்க", "சொல்லுங்கள்", "ಹೇಳಿ", "ಹೇಳು");
+    /** Question words: a name at the very end of a question is a vocative ("kitna maal hai G-One"). */
+    private static final Set<String> QUESTION_WORDS = words("what", "whats", "what's", "how", "when", "where", "who",
+            "which", "why", "kya", "kitna", "kitni", "kitne", "kaun", "kab", "kahan", "kaisa", "kaise", "क्या", "कितना",
+            "कितनी", "कितने", "कौन", "कब", "कहाँ", "कहां", "कैसे", "কী", "কি", "কত", "কে", "কখন", "কোথায়", "কেমন",
+            "என்ன", "எவ்வளவு", "எத்தனை", "யார்", "எப்போது", "எங்கே", "ಏನು", "ಎಷ್ಟು", "ಯಾರು", "ಯಾವಾಗ", "ಎಲ್ಲಿ");
     private static final Pattern QUESTION = Pattern.compile("[?？]");
 
     private AddressDetector() {}
 
-    /** True when the turn calls G-One by name as someone being spoken to. */
-    public static boolean addressed(String turn) {
+    /** True when {@code speaker}'s turn is for G-One and must not be relayed ({@link AddressDetector}). */
+    public static boolean addressed(String turn, LegRole speaker) {
         if (turn == null || turn.isBlank()) return false;
         String text = nfc(turn).toLowerCase(Locale.ROOT);
-        boolean question = QUESTION.matcher(text).find() || hasCue(text);
+        boolean question = QUESTION.matcher(text).find() || has(text, QUESTION_WORDS) || has(text, IMPERATIVES);
         Matcher strong = STRONG.matcher(text);
         while (strong.find()) {
-            if (vocative(text, strong.start(), strong.end(), question)) return true;
+            Mention m = mention(text, strong.start(), strong.end(), strong.group(), question);
+            if (m == Mention.VOCATIVE || m == Mention.ROUTED) return true;
+            if (m == Mention.AMBIGUOUS && speaker == LegRole.BUYER) return true;
         }
         Matcher weak = WEAK.matcher(text);
         while (weak.find()) {
+            if (!atStart(text, weak.start())) continue;
             char after = charAfter(text, weak.end());
-            if (atStart(text, weak.start()) && (after == ',' || after == '?' || CUES.contains(nextWord(text, weak.end())))) {
-                return true;
-            }
+            boolean setOff = (after == ',' || after == '?') && !nextWord(text, weak.end()).isEmpty();
+            if (setOff || IMPERATIVES.contains(nextWord(text, weak.end()))) return true;
         }
         return false;
     }
 
-    private static boolean vocative(String text, int start, int end, boolean question) {
+    private static Mention mention(String text, int start, int end, String name, boolean question) {
         char after = charAfter(text, end);
         boolean pauseBefore = PAUSE.matcher(String.valueOf(charBefore(text, start))).matches();
         // A comma or question mark right after the name sets it off as someone spoken to.
         boolean setOff = after == ',' || after == '،' || after == '?' || after == '？';
-        if (!pauseBefore && BEFORE_THIRD_PERSON.contains(previousWord(text, start))) return false;
-        if (!setOff && AFTER_THIRD_PERSON.contains(nextWord(text, end))) return false;
-        if (atStart(text, start) || pauseBefore || setOff) return true;
-        return question && text.substring(end).replaceAll("[\\p{P}\\s]", "").isEmpty();
+        String before = previousWord(text, start);
+        String next = nextWord(text, end);
+        if (!setOff && REPORTED_AFTER.contains(next)) return Mention.REPORTED;
+        if (!setOff && MODALS.contains(next) && !SECOND_PERSON.contains(wordAfter(text, end, next))) return Mention.REPORTED;
+        if (!pauseBefore && REPORTED_BEFORE.contains(before)) return Mention.REPORTED;
+        if (BENGALI_CASE.matcher(name).find()) return Mention.ROUTED;
+        if (!setOff && ROUTED_AFTER.contains(next)) return Mention.ROUTED;
+        if (!pauseBefore && ROUTED_BEFORE.contains(before)) return Mention.ROUTED;
+        if (setOff || pauseBefore) return Mention.VOCATIVE;
+        if (THIRD_PERSON_AFTER.contains(next)) return Mention.AMBIGUOUS;
+        if (atStart(text, start)) return Mention.VOCATIVE;
+        if (question && text.substring(end).replaceAll("[\\p{P}\\s]", "").isEmpty()) return Mention.VOCATIVE;
+        return Mention.AMBIGUOUS;
     }
 
     /** Only openers ("hey", "ok", "अरे") come before this point. */
@@ -156,10 +192,16 @@ public final class AddressDetector {
         return java.util.Arrays.stream(w).map(AddressDetector::nfc).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
-    private static boolean hasCue(String text) {
+    /** The word after {@code first}, the word that follows {@code at}. */
+    private static String wordAfter(String text, int at, String first) {
+        int i = text.indexOf(first, at);
+        return i < 0 ? "" : nextWord(text, i + first.length());
+    }
+
+    private static boolean has(String text, Set<String> words) {
         Matcher m = WORD.matcher(text);
         while (m.find()) {
-            if (CUES.contains(m.group())) return true;
+            if (words.contains(m.group())) return true;
         }
         return false;
     }

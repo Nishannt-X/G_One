@@ -421,7 +421,7 @@ public final class MediationSession {
 
         // A yes or no to a pending question is an answer to the deal, never a question for the assistant.
         boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
-        if (!replying && AddressDetector.addressed(turn.text())) {
+        if (!replying && AddressDetector.addressed(turn.text(), speaker)) {
             aside(turn, "name");
             return; // called by name: answered without reading or translating the turn, so one model call in all
         }

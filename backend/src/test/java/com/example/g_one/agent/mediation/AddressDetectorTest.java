@@ -2,12 +2,15 @@ package com.example.g_one.agent.mediation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.g_one.core.LegRole;
+
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 /**
  * Which turns call G-One by name. Each language group has turns that are addressed (true) and turns that only mention
- * the name, or use a word that sounds like it, and must be relayed (false). The separator is '|'.
+ * the name, or use a word that sounds like it, and must be relayed (false). A request routed through G-One ("ask G-One",
+ * "G-One se pucho") is addressed: it is for G-One to handle, never for the other party. The separator is '|'.
  */
 class AddressDetectorTest {
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -24,7 +27,7 @@ class AddressDetectorTest {
             Thanks G-One, and what is left to agree?                    | true
             The G-One said it is fine                                   | false
             G-One said it is fine for me                                | false
-            Ask G-One if you want                                       | false
+            Ask G-One if you want                                       | true
             The price has gone up this week                             | false
             Gone are the days of low prices                             | false
             I can give twenty quintal at two thousand                   | false
@@ -32,7 +35,7 @@ class AddressDetectorTest {
             gone                                                        | false
             """)
     void english(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -48,13 +51,13 @@ class AddressDetectorTest {
             jee van, kya bacha hai tay karna?                           | true
             Suno G-One, summary batao                                   | true
             G-One ne bola tha theek hai                                 | false
-            G-One se pucho                                              | false
-            G-One ko bata do                                            | false
+            G-One se pucho                                              | true
+            G-One ko bata do                                            | true
             Main bees quintal de sakta hoon                             | false
             Rate thoda badhao bhai                                      | false
             """)
     void hinglish(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -72,12 +75,12 @@ class AddressDetectorTest {
             जीवन में बहुत मेहनत है                                        | false
             मेरा जीवन खेती में बीता                                       | false
             जी-वन ने कहा था ठीक है                                        | false
-            जी-वन से पूछ लीजिए                                           | false
+            जी-वन से पूछ लीजिए                                           | true
             जी हाँ, बीस क्विंटल है                                        | false
             हाँ जी, वन विभाग के पास खेत है                                | false
             """)
     void hindi(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -91,12 +94,12 @@ class AddressDetectorTest {
             কত মাল আছে ওনার কাছে, জি ওয়ান?                                | true
             জীবন, কত কুইন্টাল?                                            | true
             জি ওয়ান বলেছে ঠিক আছে                                         | false
-            জি-ওয়ানের কাছে জিজ্ঞেস করুন                                   | false
+            জি-ওয়ানের কাছে জিজ্ঞেস করুন                                   | true
             আমার জীবন চাষে কেটেছে                                          | false
             কুড়ি কুইন্টাল পেঁয়াজ আছে                                      | false
             """)
     void bengali(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -110,12 +113,12 @@ class AddressDetectorTest {
             ஜீ ஒன் என்ன பாக்கி இருக்கு?                                     | true
             G one, evvalavu quintal?                                      | true
             ஜி ஒன் சொன்னது சரி                                             | false
-            ஜி ஒன் கிட்ட கேளுங்க                                           | false
+            ஜி ஒன் கிட்ட கேளுங்க                                           | true
             இருபது குவிண்டால் வெங்காயம் இருக்கு                              | false
             விலை கொஞ்சம் அதிகம்                                            | false
             """)
     void tamil(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
     }
 
     @ParameterizedTest(name = "[{index}] {0} -> {1}")
@@ -129,11 +132,48 @@ class AddressDetectorTest {
             ಜೀ ಒನ್ ಏನು ಬಾಕಿ ಇದೆ?                                            | true
             G one, eshtu quintal?                                         | true
             ಜಿ ಒನ್ ಹೇಳಿದ್ದು ಸರಿ                                             | false
-            ಜಿ ಒನ್ ಗೆ ಕೇಳಿ                                                  | false
+            ಜಿ ಒನ್ ಗೆ ಕೇಳಿ                                                  | true
             ಇಪ್ಪತ್ತು ಕ್ವಿಂಟಲ್ ಈರುಳ್ಳಿ ಇದೆ                                     | false
             ಬೆಲೆ ಸ್ವಲ್ಪ ಜಾಸ್ತಿ                                               | false
             """)
     void kannada(String turn, boolean addressed) {
-        assertThat(AddressDetector.addressed(turn)).isEqualTo(addressed);
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
+    }
+
+    @ParameterizedTest(name = "[{index}] {0} -> {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+            G-One can tell you the price                                | false
+            G-One will tell you later                                   | false
+            G-One can you tell me the price?                            | true
+            Please ask G-One what his price is                          | true
+            Tell G-One to repeat the price                              | true
+            जीवन क्या है?                                                | false
+            जीवन क्या है                                                 | false
+            जीवन, क्या है रेट?                                            | true
+            gone how much                                               | false
+            Maybe G-One knows his rate                                  | false
+            """)
+    void ambiguityPolicyForTheFarmer(String turn, boolean addressed) {
+        assertThat(AddressDetector.addressed(turn, LegRole.FARMER)).isEqualTo(addressed);
+    }
+
+    /** A buyer turn that names G-One and is not reported speech is kept from the farmer: it may ask for private things. */
+    @ParameterizedTest(name = "[{index}] {0} -> {1}")
+    @CsvSource(delimiter = '|', textBlock = """
+            Maybe G-One knows his rate                                  | true
+            I really like G-One                                         | true
+            What would G-One say about his lowest price                 | true
+            Please ask G-One what his price is                          | true
+            G-One, how much does he have?                               | true
+            The G-One said it is fine                                   | false
+            G-One said it is fine                                       | false
+            G-One can tell you the price                                | false
+            I told G-One about the price                                | false
+            G-One ki baat sahi hai                                      | false
+            I can pay four thousand per quintal                         | false
+            जीवन क्या है?                                                | false
+            """)
+    void ambiguityPolicyForTheBuyer(String turn, boolean addressed) {
+        assertThat(AddressDetector.addressed(turn, LegRole.BUYER)).isEqualTo(addressed);
     }
 }

@@ -9,6 +9,7 @@ import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.ConsoleEvent.DealState;
 import com.example.g_one.core.LegRole;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -78,6 +79,43 @@ public final class DealDesk {
         Ask ask = agreement.ask(role);
         if (ask == null) return Optional.empty();
         return Optional.of(ask.phase() == Agreement.Phase.ACCEPT ? Awaiting.ACCEPT : Awaiting.CONFIRM);
+    }
+
+    /**
+     * The deal as it stands, for answering a question about it: only what was said aloud on the call. {@code state} is
+     * "none", "offer_open", "readback", "confirming" or "agreed"; price, unit, crop, variety and market are null until a
+     * buyer states a clear price. Quantity, pickup and payment are the latest stated (quantity starts as the amount the
+     * buyer was told in the introduction).
+     */
+    public record Card(String state, String commodity, String variety, String market, BigDecimal price, String unit,
+                       String quantity, String pickup, String payment, boolean farmerYes, boolean buyerYes) {
+        public boolean hasPrice() {
+            return price != null;
+        }
+    }
+
+    public Card card() {
+        Agreement.View v = agreement.view();
+        Terms t = agreed.get() != null ? agreed.get() : v.terms();
+        String q;
+        String p;
+        String pay;
+        synchronized (this) {
+            q = quantity;
+            p = pickup;
+            pay = payment;
+        }
+        String state = switch (v.state()) {
+            case IDLE -> "none";
+            case OFFER_OPEN -> "offer_open";
+            case READBACK -> "readback";
+            case CONFIRMING -> "confirming";
+            case AGREED -> "agreed";
+        };
+        if (t == null) return new Card(state, null, null, null, null, null, q, p, pay, false, false);
+        return new Card(state, t.commodity(), t.variety(), t.market(), t.price(), t.unit(),
+                firstNonNull(t.quantity(), q), firstNonNull(t.pickup(), p), firstNonNull(t.payment(), pay),
+                agreed.get() != null || v.farmerYes(), agreed.get() != null || v.buyerYes());
     }
 
     /** What a turn stated about the sale. Only a clear buyer offer opens or replaces a draft. */

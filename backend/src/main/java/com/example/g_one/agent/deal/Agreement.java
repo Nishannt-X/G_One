@@ -80,6 +80,13 @@ final class Agreement {
         return state;
     }
 
+    /** Read-only: the state, the terms in play (null while idle) and who has said yes to them. */
+    record View(State state, Terms terms, boolean farmerYes, boolean buyerYes) {}
+
+    synchronized View view() {
+        return new View(state, state == State.IDLE ? null : terms, yes.contains(LegRole.FARMER), yes.contains(LegRole.BUYER));
+    }
+
     synchronized int version() {
         return version;
     }

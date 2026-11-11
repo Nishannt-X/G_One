@@ -59,8 +59,15 @@ public class MediationEngine {
     private final ConsoleBus bus;
     private final Language.Registry languages;
     private final Clock clock;
+    private final AskGone ask;
 
     @Autowired
+    public MediationEngine(TurnReader reader, MediationLines lines, MandiQuote mandi, MandiCatalog catalog,
+                           BuyerConsent consent, MemoryGate gate, ConsoleBus bus, Language.Registry languages,
+                           AskGone ask) {
+        this(reader, lines, mandi, catalog, consent, gate, bus, languages, Clock.systemUTC(), ask);
+    }
+
     public MediationEngine(TurnReader reader, MediationLines lines, MandiQuote mandi, MandiCatalog catalog,
                            BuyerConsent consent, MemoryGate gate, ConsoleBus bus, Language.Registry languages) {
         this(reader, lines, mandi, catalog, consent, gate, bus, languages, Clock.systemUTC());
@@ -69,6 +76,13 @@ public class MediationEngine {
     public MediationEngine(TurnReader reader, MediationLines lines, MandiQuote mandi, MandiCatalog catalog,
                            BuyerConsent consent, MemoryGate gate, ConsoleBus bus, Language.Registry languages,
                            Clock clock) {
+        this(reader, lines, mandi, catalog, consent, gate, bus, languages, clock, reader.askGone());
+    }
+
+    public MediationEngine(TurnReader reader, MediationLines lines, MandiQuote mandi, MandiCatalog catalog,
+                           BuyerConsent consent, MemoryGate gate, ConsoleBus bus, Language.Registry languages,
+                           Clock clock, AskGone ask) {
+        this.ask = ask;
         this.reader = reader;
         this.lines = lines;
         this.mandi = mandi;
@@ -85,6 +99,6 @@ public class MediationEngine {
         Optional<String> name = gate.peek(farmer.callId()).filter(MemoryGate.State::usesMemory)
                 .flatMap(s -> MemoryBlock.rememberedName(farmer.memory()));
         return new MediationSession(farmer, side, buyer, stt, tts, executor, reader, lines, mandi, catalog,
-                consent.request(farmer.callId()).orElse(null), name.orElse(null), bus, languages, clock);
+                consent.request(farmer.callId()).orElse(null), name.orElse(null), bus, languages, clock, ask);
     }
 }

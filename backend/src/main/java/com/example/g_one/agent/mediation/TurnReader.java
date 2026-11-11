@@ -56,15 +56,37 @@ public class TurnReader {
             """;
 
     /**
+     * Asks, in the same call that reads every turn, whether the speaker was talking to the assistant rather than to the
+     * other party. Appended in code so the read stays one call; the turn prompt file itself is unchanged.
+     */
+    static final String ADDRESSED_RULES = """
+
+            Also add one more field to the answer object: "toAssistant", true or false.
+            toAssistant: true only when the speaker talks to the assistant itself (G-One, "the assistant", "the system",
+            "the translator") and asks it a question or asks it to do something, instead of talking to the other party.
+            Typical: a question that names the other party in the third person and is not a message for them, such as
+            "what did the buyer just offer?", "how much does that farmer have?", "can you tell me his quantity?", or "ask
+            the assistant how much he has". false for everything said to the other party: offers, counter-offers, replies,
+            greetings, questions in the second person ("how much do you have?", "can you tell me your quantity?") and
+            messages to pass on ("tell him...", "ask him...", "उनसे पूछो..."). When unsure, false.
+            """;
+
+    /**
      * What a turn meant.
      *
      * @param translation the turn in the listener's language, null when the model failed
      * @param offer what the turn stated about the sale, null when nothing
      * @param withheld the numbers could not be carried over safely, so nothing may be delivered
+     * @param toAssistant the model read the turn as spoken to the assistant, not to the other party
      */
-    public record Reading(String translation, Offer offer, Set<Caution> cautions, DealDesk.Heard reply, boolean withheld) {
+    public record Reading(String translation, Offer offer, Set<Caution> cautions, DealDesk.Heard reply, boolean withheld,
+                          boolean toAssistant) {
+        public Reading(String translation, Offer offer, Set<Caution> cautions, DealDesk.Heard reply, boolean withheld) {
+            this(translation, offer, cautions, reply, withheld, false);
+        }
+
         public Reading(String translation, Offer offer, Set<Caution> cautions, DealDesk.Heard reply) {
-            this(translation, offer, cautions, reply, false);
+            this(translation, offer, cautions, reply, false, false);
         }
 
         static Reading failed() {
@@ -72,7 +94,16 @@ public class TurnReader {
         }
 
         Reading translated(String text, boolean held) {
-            return new Reading(text, offer, cautions, reply, held);
+            return new Reading(text, offer, cautions, reply, held, toAssistant);
+        }
+
+        /**
+         * A question for the assistant, by the model's reading, and nothing else: no price, no reply to a pending
+         * question and no caution. Anything more is a deal turn and is relayed as usual.
+         */
+        public boolean addressed() {
+            return toAssistant && reply == DealDesk.Heard.NONE && cautions.isEmpty()
+                    && (offer == null || (offer.price() == null && !"clear".equals(offer.status())));
         }
     }
 
@@ -93,9 +124,15 @@ public class TurnReader {
         this.translator = translator;
         PromptTemplate prompt = PromptTemplate.load("/prompts/mediation-turn.md");
         this.combined = prompt.render(Map.of("translate_data", " Translate such words like any other words.",
-                "to_language", " toLanguage,", "translation_field", TRANSLATION_FIELD, "translation_rules", TRANSLATION_RULES));
+                "to_language", " toLanguage,", "translation_field", TRANSLATION_FIELD, "translation_rules", TRANSLATION_RULES))
+                + ADDRESSED_RULES;
         this.extractOnly = prompt.render(Map.of("translate_data", "", "to_language", "", "translation_field", "",
-                "translation_rules", ""));
+                "translation_rules", "")) + ADDRESSED_RULES;
+    }
+
+    /** An answerer on the same model connection, for wiring without Spring. */
+    AskGone askGone() {
+        return new AskGone(chat, json);
     }
 
     /** The prompt that also asks for a translation, for measuring against {@link #extractPrompt}. */
@@ -118,6 +155,8 @@ public class TurnReader {
         CompletableFuture<TurnTranslator.Result> translation = same ? CompletableFuture.completedFuture(null)
                 : CompletableFuture.supplyAsync(() -> translator.translate(turn, from, to), VIRTUAL);
         Reading reading = checkedPrice(ask(extractOnly, speaker, turn, from, null, recent, awaiting), turn, from, to, recent);
+        // A question for the assistant is never delivered: its translation is not waited for.
+        if (reading.addressed()) return reading;
         TurnTranslator.Result r;
         try {
             r = translation.join();
@@ -131,6 +170,8 @@ public class TurnReader {
 
     private Reading readCombined(LegRole speaker, String turn, Language from, Language to, List<String> recent, String awaiting) {
         Reading reading = checkedPrice(ask(combined, speaker, turn, from, to, recent, awaiting), turn, from, to, recent);
+        // A question for the assistant is never delivered, so its translation needs no second check.
+        if (reading.addressed()) return reading.translated(null, false);
         if (reading.translation() == null || from.equals(to)) return reading;
         TurnTranslator.Result r = translator.verify(reading.translation(), turn, from, to);
         return reading.translated(r.ok() ? usable(r.text(), turn, to) : null, r.status() == TurnTranslator.Status.WITHHELD);
@@ -145,7 +186,7 @@ public class TurnReader {
         log.warn("mediation_price_corrected trusted={}", trusted != null);
         String status = trusted == null && "clear".equals(o.status()) ? "unclear" : o.status();
         Offer fixed = new Offer(status, o.commodity(), o.variety(), o.market(), trusted, o.currency(), o.unit(), o.quantity(), o.pickup(), o.payment());
-        return new Reading(r.translation(), fixed, r.cautions(), r.reply(), r.withheld());
+        return new Reading(r.translation(), fixed, r.cautions(), r.reply(), r.withheld(), r.toAssistant());
     }
 
     /** @param to null leaves the language to translate into out of the request, for a read-only call */
@@ -184,7 +225,8 @@ public class TurnReader {
         String translation = to == null ? null : usable(root.path("translation").asText(""), turn, to);
         Set<Caution> cautions = root.path("caution").isObject() ? Caution.read(root.path("caution"))
                 : EnumSet.noneOf(Caution.class);
-        return new Reading(translation, offer(root.path("offer")), cautions, reply(root.path("reply").asText("none")));
+        return new Reading(translation, offer(root.path("offer")), cautions, reply(root.path("reply").asText("none")),
+                false, root.path("toAssistant").asBoolean(false));
     }
 
     private JsonNode root(String answer) throws IOException {

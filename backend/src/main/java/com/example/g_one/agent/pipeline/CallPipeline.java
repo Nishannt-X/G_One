@@ -189,6 +189,8 @@ public final class CallPipeline {
 
         private boolean ended;
         private boolean speaking;
+        /** Clears started by intake barge-ins but not yet completed. Guarded by {@link #lock}. */
+        private int clearing;
         /** The assistant's latest line and when it stopped being heard: its echo can still come back for a moment. */
         private String lastSaid = "";
         private long quietSinceMs;
@@ -355,7 +357,7 @@ public final class CallPipeline {
                 Runnable pending = whenFree;
                 whenFree = null;
                 Runnable both = chain(pending, then);
-                if (speaking) {
+                if (speaking || clearing != 0) {
                     // The reply already playing is heard to its end; the line that follows waits for it.
                     whenFree = both;
                 } else {
@@ -391,16 +393,29 @@ public final class CallPipeline {
             Runnable free;
             Turn held;
             long heldGeneration;
+            boolean defer;
             synchronized (lock) {
                 mediationSession = null;
                 intakeClosed = false;
                 // A hand-off still waiting was queued for a reply that never got to finish. Running it is what frees a
                 // voice it holds, so it is taken rather than dropped.
-                free = takeWhenFree();
                 held = heldTurn;
                 heldTurn = null;
                 // Bound here, not when the answer is prepared: a turn heard after this release supersedes the held one.
                 heldGeneration = generation.incrementAndGet();
+                defer = speaking || clearing != 0;
+                if (defer) {
+                    if (held != null) {
+                        Turn answer = held;
+                        whenFree = chain(whenFree, () -> answerHeldTurn(answer, heldGeneration));
+                    }
+                    free = null;
+                } else {
+                    free = takeWhenFree();
+                }
+            }
+            if (defer) {
+                return;
             }
             if (free == null && held == null) {
                 return;
@@ -448,28 +463,24 @@ public final class CallPipeline {
         @Override
         public void onSpeechStart() {
             MediationSession live = mediationSession;
-            if (live != null && live.live()) {
+            if (live != null) {
                 live.farmerSpeechStart();
-                // Not a return: while mediation is taking the leg over, the intake reply may still be playing, and the
-                // farmer's own speech still interrupts it. Whatever mediation queued goes once it has stopped.
+                // The farmer can interrupt an unprotected mediation line even after mediation's live phase ends.
+                // The intake reply may also still be playing, so its own playback must be cleared below.
             }
             Synthesis toCancel;
-            Runnable free;
             synchronized (lock) {
                 if (ended || !speaking) {
                     return;
                 }
                 generation.incrementAndGet();
+                clearing++;
                 quiet();
                 toCancel = synthesis;
                 synthesis = null;
-                free = takeWhenFree();
             }
             log.info("Speech detected on leg {} while the assistant is speaking: barge-in accepted", leg.id());
-            stopSpeaking(toCancel);
-            if (free != null) {
-                submit("take over", free);
-            }
+            clearIntakePlayback(toCancel);
         }
 
         @Override
@@ -508,10 +519,9 @@ public final class CallPipeline {
                 }
                 case KEEP -> { }
             }
-            if (mediating) {
+            if (mediating && live.farmerTurn(heard)) {
                 note(Speaker.FARMER, turn.text());
                 publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
-                live.farmerTurn(heard);
                 return;
             }
             Turn answerTo = turn;
@@ -521,7 +531,6 @@ public final class CallPipeline {
             boolean wasSpeaking;
             boolean closed;
             Synthesis toCancel;
-            Runnable free;
             synchronized (lock) {
                 if (ended || context == null) {
                     return;
@@ -534,12 +543,12 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, answerTo.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
+                if (wasSpeaking) clearing++;
                 quiet();
                 toCancel = synthesis;
                 synthesis = null;
                 ctx = context;
                 closed = intakeClosed;
-                free = takeWhenFree();
                 if (closed) {
                     // Held under the same lock that decided it: a release that runs afterwards sees this turn, and one
                     // that ran before it made closed false, so the turn cannot be written where nobody reads it.
@@ -548,12 +557,9 @@ public final class CallPipeline {
             }
             if (wasSpeaking) {
                 log.info("Turn heard on leg {} while the assistant is speaking: barge-in accepted", leg.id());
-                stopSpeaking(toCancel); // a turn with no speech start first still interrupts the assistant
+                clearIntakePlayback(toCancel); // a turn with no speech start first still interrupts the assistant
             }
             publish(ConsoleEvent.TurnHeard.of(callId, answerTo, now()));
-            if (free != null) {
-                submit("take over", free);
-            }
             if (closed) {
                 // Mediation has the leg: no brain call now, and no reply of ours over its lines. It is answered once
                 // the assistant has the farmer back.
@@ -693,12 +699,13 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, heardIn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
+                if (wasSpeaking) clearing++;
                 quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
             if (wasSpeaking) {
-                stopSpeaking(toCancel);
+                clearIntakePlayback(toCancel);
             }
             switchTo(outcome);
             publish(ConsoleEvent.TurnHeard.of(callId, heardIn, now()));
@@ -748,7 +755,6 @@ public final class CallPipeline {
             long turnGeneration;
             boolean wasSpeaking;
             Synthesis toCancel;
-            Runnable free;
             synchronized (lock) {
                 if (ended || context == null) {
                     return;
@@ -756,16 +762,13 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, turn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
+                if (wasSpeaking) clearing++;
                 quiet();
                 toCancel = synthesis;
                 synthesis = null;
-                free = takeWhenFree();
             }
             if (wasSpeaking) {
-                stopSpeaking(toCancel);
-                if (free != null) {
-                    submit("take over", free);
-                }
+                clearIntakePlayback(toCancel);
             }
             publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
             Language spoken = languages.find(REASK_LANGUAGE).orElse(leg.language());
@@ -791,6 +794,11 @@ public final class CallPipeline {
             synchronized (lock) {
                 if (ended || intakeClosed || generation.get() != replyGeneration) {
                     log.debug("Dropping a superseded reply on leg {}", leg.id());
+                    return;
+                }
+                if (clearing != 0) {
+                    // A delayed barge-in clear must finish before this newer answer queues audio on the same leg.
+                    whenFree = chain(whenFree, () -> deliver(replyGeneration, reply, next));
                     return;
                 }
                 lines.add(new Line(Speaker.ASSISTANT, spoken));
@@ -894,6 +902,22 @@ public final class CallPipeline {
                     leg.clearPlayback();
                 } catch (RuntimeException e) {
                     log.warn("Clearing playback failed on leg {}", leg.id(), e);
+                }
+            }
+        }
+
+        /** The hand-off cannot start on this leg until every older clear has finished. */
+        private void clearIntakePlayback(Synthesis toCancel) {
+            Runnable free;
+            try {
+                stopSpeaking(toCancel);
+            } finally {
+                synchronized (lock) {
+                    clearing--;
+                    free = clearing == 0 && !speaking && !ended ? takeWhenFree() : null;
+                }
+                if (free != null) {
+                    submit("take over", free);
                 }
             }
         }

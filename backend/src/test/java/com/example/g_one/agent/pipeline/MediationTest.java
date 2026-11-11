@@ -39,6 +39,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -515,37 +516,70 @@ class MediationTest {
     }
 
     @Test
-    void aTurnHeardWhileTheDeclineLinePlaysIsAnsweredAfterIt() {
+    void buyerHangupBeforeTheQueuedYesCannotRestartMediation() {
+        aBuyerJoinsAndHearsTheIntro();
+        int heard = spokenTo(farmer).size();
+
+        session(LegRole.BUYER).say("Yes");
+        buyer.remoteHangup();
+        executor.runAll();
+
+        assertThat(buyer.isEnded()).isTrue();
+        assertThat(spokenTo(farmer)).as("only the departure line plays; the joined line was never queued")
+                .hasSize(heard + 1);
+        farmer.finishPlayback();
+        executor.runAll();
+        session(LegRole.FARMER).say("ab kya");
+        executor.runAll();
+        assertThat(brain.responds).as("the farmer's assistant resumes after the departure").isNotEmpty();
+    }
+
+    @Test
+    void aFarmerTurnDuringBuyerDepartureIsAnsweredAfterTheHandoff() {
+        aBuyerJoinsAndHearsTheIntro();
+        AtomicBoolean interrupted = new AtomicBoolean();
+        bus.subscribe(event -> {
+            if (event instanceof ConsoleEvent.AssistantSaid said && said.role() == LegRole.FARMER
+                    && interrupted.compareAndSet(false, true)) {
+                buyer.remoteHangup();
+                session(LegRole.FARMER).emitTurn("crop update");
+            }
+        });
+
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+        finishAll();
+
+        assertThat(interrupted).isTrue();
+        assertThat(brain.responds).as("the turn survives the acceptance and departure race").singleElement()
+                .extracting(call -> call.latest().text()).isEqualTo("crop update");
+    }
+
+    @Test
+    void farmerSpeechInterruptsTheDeclineLineAndIsAnswered() {
         aBuyerJoinsAndHearsTheIntro();
         session(LegRole.BUYER).say("No");
         executor.runAll();
+        assertThat(farmer.unheardFrames()).as("the decline line is playing").isPositive();
 
         session(LegRole.FARMER).say("aur kya");
         executor.runAll();
 
-        assertThat(brain.responds).as("no answer over the decline line").isEmpty();
-
-        farmer.finishPlayback();
-        executor.runAll();
-
-        assertThat(brain.responds).as("answered once the assistant has the farmer back").singleElement()
+        assertThat(farmer.clearCount()).as("the farmer interrupts their own playback").isEqualTo(1);
+        assertThat(brain.responds).as("the interrupted line releases the leg").singleElement()
                 .extracting(call -> call.latest().text()).isEqualTo("aur kya");
     }
 
     @Test
-    void aNewFarmerTurnSupersedesTheHeldTurnBeforeItRuns() {
+    void aNewFarmerTurnSupersedesTheQueuedReplyAfterDecline() {
         aBuyerJoinsAndHearsTheIntro();
         session(LegRole.BUYER).say("No");
         executor.runAll();
-        session(LegRole.FARMER).say("first");
-        executor.runAll();
-        assertThat(brain.responds).isEmpty();
-
-        farmer.finishPlayback(); // release queues the held turn without running it yet
+        session(LegRole.FARMER).say("first"); // interrupts the decline line and queues a reply
         session(LegRole.FARMER).say("second");
         executor.runAll();
 
-        assertThat(brain.responds).as("the stale held turn must not answer after the newer one")
+        assertThat(brain.responds).as("the stale turn must not answer after the newer one")
                 .singleElement().extracting(call -> call.latest().text()).isEqualTo("second");
     }
 

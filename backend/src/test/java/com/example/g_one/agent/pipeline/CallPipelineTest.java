@@ -17,21 +17,33 @@ import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.FarmerMemory;
 import com.example.g_one.core.InMemoryMemoryStore;
+import com.example.g_one.core.Language;
+import com.example.g_one.core.Leg;
+import com.example.g_one.core.LegId;
 import com.example.g_one.core.LegRegistry;
 import com.example.g_one.core.LegRole;
 import com.example.g_one.core.LegSource;
 import com.example.g_one.core.MemoryStore;
+import com.example.g_one.core.PlaybackOutcome;
 import com.example.g_one.core.ProfileFact;
 import com.example.g_one.core.SpeechToText;
+import com.example.g_one.core.SttListener;
+import com.example.g_one.core.SttSession;
 import com.example.g_one.core.TextToSpeech;
+import com.example.g_one.core.Turn;
 import com.example.g_one.fakes.FakeLeg;
 import com.example.g_one.fakes.FakeSpeechToText;
 import com.example.g_one.fakes.FakeTextToSpeech;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -234,6 +246,75 @@ class CallPipelineTest {
         leg.finishPlayback();
         session().emitSpeechStart();
         assertThat(leg.clearCount()).isEqualTo(1);
+    }
+
+    @Test
+    void aNewReplyWaitsForAnOlderPlaybackClear() throws InterruptedException {
+        FakeLeg backing = FakeLeg.farmer(callId);
+        CountDownLatch clearing = new CountDownLatch(1);
+        CountDownLatch allowClear = new CountDownLatch(1);
+        AtomicReference<SttListener> listener = new AtomicReference<>();
+        SpeechToText concurrentHearing = (id, role, language, events) -> {
+            listener.set(events);
+            return new SttSession() {
+                @Override public void feed(AudioFrame frame) {}
+                @Override public void close() {}
+            };
+        };
+        Leg slowClear = new Leg() {
+            @Override public LegId id() { return backing.id(); }
+            @Override public CallId callId() { return backing.callId(); }
+            @Override public LegRole role() { return backing.role(); }
+            @Override public LegSource source() { return backing.source(); }
+            @Override public Language language() { return backing.language(); }
+            @Override public Optional<CallerKey> callerKey() { return backing.callerKey(); }
+            @Override public void play(AudioFrame frame) { backing.play(frame); }
+            @Override public void clearPlayback() {
+                clearing.countDown();
+                try {
+                    if (!allowClear.await(5, TimeUnit.SECONDS)) throw new AssertionError("clear was not released");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError(e);
+                }
+                backing.clearPlayback();
+            }
+            @Override public CompletableFuture<PlaybackOutcome> playbackDone() { return backing.playbackDone(); }
+            @Override public void hangup() { backing.hangup(); }
+            @Override public void onAudio(Consumer<AudioFrame> listener) { backing.onAudio(listener); }
+            @Override public void onEnded(Runnable listener) { backing.onEnded(listener); }
+        };
+        LegRegistry r = pipelineWith(store, tts, concurrentHearing, List.of(endedCalls::add));
+        r.register(slowClear);
+        executor.runAll();
+        assertThat(backing.unheardFrames()).isPositive();
+
+        Thread interruptedReply = Thread.ofVirtual().start(() -> listener.get().onSpeechStart());
+        try {
+            assertThat(clearing.await(2, TimeUnit.SECONDS)).isTrue();
+            long now = clock.get();
+            listener.get().onFinalTurn(new Turn(backing.id(), LegRole.FARMER, backing.language(),
+                    "new request", now, now));
+            CountDownLatch brainFinished = new CountDownLatch(1);
+            Thread brainTurn = Thread.ofVirtual().start(() -> {
+                try {
+                    executor.runAll();
+                } finally {
+                    brainFinished.countDown();
+                }
+            });
+            boolean finishedBeforeClear = brainFinished.await(2, TimeUnit.SECONDS);
+            assertThat(finishedBeforeClear).as("the newer answer queues behind the clear without blocking the brain")
+                    .isTrue();
+            assertThat(spoken()).containsExactly(GREETING);
+            brainTurn.join();
+        } finally {
+            allowClear.countDown();
+            interruptedReply.join();
+        }
+        executor.runAll();
+        assertThat(spoken()).containsExactly(GREETING, replyTo("new request"));
+        assertThat(backing.unheardFrames()).isPositive();
     }
 
     @Test

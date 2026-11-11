@@ -1,6 +1,8 @@
 package com.example.g_one.agent.brain;
 
 import com.example.g_one.agent.AgentBrain;
+import com.example.g_one.agent.deal.ReplyGuard;
+import com.example.g_one.agent.deal.YesNoReader;
 import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.llm.ChatException;
 import com.example.g_one.agent.llm.ChatMessage;
@@ -116,6 +118,7 @@ public class LlmAgentBrain implements AgentBrain {
     private final PromptTemplate system = PromptTemplate.load(PromptTemplate.ASSISTANT_SYSTEM);
     private final LocalReplies local;
     private final WelcomeBack welcomeBack;
+    private final YesNoReader yesNo;
     /** The offline demo scripts every reply, including what follows a price. */
     private final boolean scripted;
     /** Bounded, so a missed hang-up cannot grow it for ever. */
@@ -143,6 +146,7 @@ public class LlmAgentBrain implements AgentBrain {
         this.consent = consent;
         this.local = new LocalReplies(json);
         this.welcomeBack = new WelcomeBack(json);
+        this.yesNo = new YesNoReader(chat);
         this.scripted = chat.isScripted();
         this.chat = chat;
         Map<String, Tool> byName = new LinkedHashMap<>();
@@ -202,7 +206,7 @@ public class LlmAgentBrain implements AgentBrain {
         CallMemo memo = memo(ctx.callId());
         Reply reply;
         try {
-            if (latest != null && !latest.text().isBlank()) consent.heard(ctx.callId(), latest.text());
+            if (latest != null && !latest.text().isBlank()) consentHeard(ctx, past, latest);
             reply = direct(ctx, past, latest, memo);
             if (reply != null) {
                 turn.handler = "local";
@@ -228,6 +232,34 @@ public class LlmAgentBrain implements AgentBrain {
         bus.publish(new ConsoleEvent.TurnMeasured(ctx.callId(), clock.millis(), turn.handler, turn.model, turn.prompt,
                 turn.completion, turn.calls, latencyMs, turn.failure));
         return reply;
+    }
+
+    @Override
+    public ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
+        return yesNo.read(question, reply);
+    }
+
+    /**
+     * Records whether this turn is the farmer's yes to calling a suggested buyer. Words decide first; only when buyers
+     * were suggested and the last line asked something does an unclear reply get the layered reading.
+     */
+    private void consentHeard(CallContext ctx, List<Line> past, Turn latest) {
+        String text = latest.text();
+        boolean yes = ReplyGuard.isConsent(text);
+        if (!yes && !consent.suggested(ctx.callId()).isEmpty()) {
+            String asked = lastAssistantLine(past);
+            if (asked.strip().endsWith("?")) yes = yesNo.read(asked, text) == ReplyGuard.Reading.YES;
+        }
+        consent.heard(ctx.callId(), text, yes);
+    }
+
+    /** What the assistant said last on this call, or empty. */
+    private static String lastAssistantLine(List<Line> past) {
+        for (int i = past.size() - 1; i >= 0; i--) {
+            Line l = past.get(i);
+            if (l != null && l.speaker() == Speaker.ASSISTANT && !l.text().isBlank()) return l.text();
+        }
+        return "";
     }
 
     private static String failureOf(ChatException e) {

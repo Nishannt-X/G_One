@@ -428,6 +428,51 @@ class CallPipelineTest {
     }
 
     @Test
+    void rakhSakteHainToTheSaveQuestionIsAYes() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        for (String said : List.of("बस इतना ही", "हाँ", "रख सकते हैं")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=YES", "BUYER=NONE");
+        assertThat(brain.yesNoQuestions).containsExactly(
+                com.example.g_one.agent.closing.ClosingLines.ask(com.example.g_one.agent.closing.CallClosing.Question.END,
+                        leg.language().code()),
+                com.example.g_one.agent.closing.ClosingLines.ask(com.example.g_one.agent.closing.CallClosing.Question.SAVE,
+                        leg.language().code()));
+    }
+
+    @Test
+    void anAnswerTheWordsDoNotSettleIsReadByTheLayeredReaderAndAConditionNeverSaves() {
+        brain.modelReads = reply -> com.example.g_one.agent.deal.ReplyGuard.Reading.YES;
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        for (String said : List.of("that's all", "haan", "आप याद रखिएगा भाई साहब")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        assertThat(consents()).containsExactly("FARMER=YES", "BUYER=NONE");
+    }
+
+    @Test
+    void aConditionalAnswerToTheSaveQuestionIsReaskedThenNone() {
+        brain.modelReads = reply -> com.example.g_one.agent.deal.ReplyGuard.Reading.YES;
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        for (String said : List.of("that's all", "haan", "haan agar paisa mile", "शायद")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
+    }
+
+    @Test
     void aNoToEndingCarriesOnAndTheNextByeWithinThreeTurnsGoesToTheBrain() {
         FakeLeg leg = join(FakeLeg.farmer(callId));
         leg.finishPlayback();

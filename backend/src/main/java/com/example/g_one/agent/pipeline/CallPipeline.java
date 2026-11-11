@@ -6,6 +6,7 @@ import com.example.g_one.agent.AgentBrain.Reply;
 import com.example.g_one.agent.AgentBrain.Speaker;
 import com.example.g_one.agent.closing.CallClosing;
 import com.example.g_one.agent.closing.ClosingLines;
+import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.language.LanguageFlow;
 import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.llm.ReasoningText;
@@ -536,6 +537,8 @@ public final class CallPipeline {
         private boolean closingTurn(Turn turn) {
             boolean identityOpen = brain.awaitingIdentity(callId);
             CallClosing.Step step;
+            CallClosing.Question answering = null;
+            Language answerLanguage = null;
             long turnGeneration;
             boolean wasSpeaking;
             Synthesis toCancel;
@@ -547,7 +550,10 @@ public final class CallPipeline {
                     return true; // the goodbye is on its way
                 }
                 if (closing.active()) {
-                    step = closing.heard(LegRole.FARMER, turn.text());
+                    // Read on the executor: a reply the words do not settle may take one small model call.
+                    step = null;
+                    answering = closing.pending().orElse(null);
+                    answerLanguage = context.language();
                 } else if (!identityOpen && heldRequest == null && closing.mayAsk(LegRole.FARMER)
                         && CallClosing.saysDone(turn.text())) {
                     step = closing.start();
@@ -566,8 +572,31 @@ public final class CallPipeline {
                 stopSpeaking(toCancel);
             }
             publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
-            submit("closing", () -> closingStep(turnGeneration, step));
+            if (step != null) {
+                submit("closing", () -> closingStep(turnGeneration, step));
+                return true;
+            }
+            CallClosing.Question question = answering;
+            String asked = question == null ? "" : ClosingLines.ask(question, answerLanguage.code());
+            submit("closing", () -> {
+                ReplyGuard.Reading reading = readYesNo(asked, turn.text());
+                if (generation.get() != turnGeneration) {
+                    return; // a newer turn arrived while the answer was read; it is the one that counts
+                }
+                closingStep(turnGeneration, closing.heard(LegRole.FARMER, reading));
+            });
             return true;
+        }
+
+        /** The layered yes/no reading; on any failure, the words alone. */
+        private ReplyGuard.Reading readYesNo(String question, String reply) {
+            try {
+                ReplyGuard.Reading reading = brain.readYesNo(callId, question, reply);
+                return reading == null ? ReplyGuard.Reading.UNCLEAR : reading;
+            } catch (RuntimeException e) {
+                log.warn("Reading a yes or no failed on call {}; using the words alone", callId, e);
+                return ReplyGuard.read(reply);
+            }
         }
 
         private void closingStep(long stepGeneration, CallClosing.Step step) {

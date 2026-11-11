@@ -100,8 +100,17 @@ public final class CallClosing {
         return phase == Phase.END || phase == Phase.SAVE;
     }
 
-    public boolean finished() {
+    public synchronized boolean finished() {
         return phase == Phase.DONE;
+    }
+
+    /** The question waiting for answers, or empty when neither is being asked. */
+    public synchronized java.util.Optional<Question> pending() {
+        return switch (phase) {
+            case END -> java.util.Optional.of(Question.END);
+            case SAVE -> java.util.Optional.of(Question.SAVE);
+            default -> java.util.Optional.empty();
+        };
     }
 
     /** A party joined the call (the buyer said yes to being connected). */
@@ -131,10 +140,17 @@ public final class CallClosing {
         return new Step(asks, false, null);
     }
 
-    /** A turn of {@code role} while {@link #active}. */
+    /** A turn of {@code role} while {@link #active}, read by words alone ({@link ReplyGuard}). */
     public synchronized Step heard(LegRole role, String text) {
+        return heard(role, ReplyGuard.read(text));
+    }
+
+    /**
+     * A turn of {@code role} while {@link #active}, already read as {@code reading} (by {@link ReplyGuard}, or by the
+     * layered reader that may ask a model about a reply the words did not settle). Only {@code YES} saves.
+     */
+    public synchronized Step heard(LegRole role, ReplyGuard.Reading reading) {
         if (!active() || !present.contains(role)) return Step.NOTHING;
-        ReplyGuard.Reading reading = ReplyGuard.read(text);
         if (phase == Phase.END) {
             if (endAnswers.containsKey(role)) return Step.NOTHING;
             return switch (reading) {

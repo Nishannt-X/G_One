@@ -43,6 +43,24 @@ final class ScriptedBrain implements AgentBrain {
         return identityOpen;
     }
 
+    /** What the layered reader would say about an answer the words do not settle; null reads words only. */
+    volatile java.util.function.Function<String, com.example.g_one.agent.deal.ReplyGuard.Reading> modelReads;
+    /** The questions the pipeline asked to read an answer to, in order. */
+    final List<String> yesNoQuestions = new CopyOnWriteArrayList<>();
+
+    @Override
+    public com.example.g_one.agent.deal.ReplyGuard.Reading readYesNo(com.example.g_one.core.CallId callId,
+                                                                     String question, String reply) {
+        yesNoQuestions.add(question);
+        // The contract of the real reader: words first, and a vetoed reply never reaches a model.
+        com.example.g_one.agent.deal.ReplyGuard.Verdict words = com.example.g_one.agent.deal.ReplyGuard.verdict(reply);
+        if (words.reading() != com.example.g_one.agent.deal.ReplyGuard.Reading.UNCLEAR || words.vetoed()
+                || modelReads == null) {
+            return words.reading();
+        }
+        return modelReads.apply(reply);
+    }
+
     static String replyTo(String turn) {
         return "reply to " + turn;
     }

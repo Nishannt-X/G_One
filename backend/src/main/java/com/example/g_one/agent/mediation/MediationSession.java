@@ -17,7 +17,6 @@ import com.example.g_one.agent.tools.mandi.MandiAnswer;
 import com.example.g_one.agent.tools.mandi.MandiCatalog;
 import com.example.g_one.agent.tools.mandi.MandiQuote;
 import com.example.g_one.agent.tools.mandi.MandiSnapshot;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.example.g_one.core.AudioFrame;
 import com.example.g_one.core.CallContext;
 import com.example.g_one.core.CallId;
@@ -64,6 +63,8 @@ public final class MediationSession {
     private static final Language ENGLISH = new Language("en-IN", "English", "n/a");
     private static final Logger log = LoggerFactory.getLogger(MediationSession.class);
     private static final int RECENT_LINES = 4;
+    /** A yes or no to a pending question is at most this many words, the assistant's name included. */
+    private static final int SHORT_REPLY_WORDS = 5;
     /** An offer this far below the dated reference gets the stronger wording. */
     private static final BigDecimal FAR_BELOW = new BigDecimal("0.15");
 
@@ -135,6 +136,16 @@ public final class MediationSession {
         this.desk = new DealDesk(callId, clock, bus, new DeskOutput(), request == null ? null : request.quantity());
         this.farmerLanguage = farmer.language();
         this.buyerLanguage = languages != null && buyer.languagePending() ? new LanguageFlow(languages::find) : null;
+        ledger.introduced(LegRole.FARMER, requestCrop(), requestQuantity()); // the farmer gave these at intake
+    }
+
+    private String requestCrop() {
+        return request == null || request.commodity() == null ? null
+                : catalog.commodity(request.commodity()).orElse(request.commodity());
+    }
+
+    private String requestQuantity() {
+        return request == null ? null : request.quantity();
     }
 
     /** The farmer's language changed; turns from now on are read and translated with it. */
@@ -239,7 +250,10 @@ public final class MediationSession {
         sayAssistant(LegRole.BUYER, lines.get("buyerIntro", code, Map.of(
                 "farmer", farmerDescription(code),
                 "produce", produce(code),
-                "language", language(LegRole.FARMER).label())), false, null);
+                "language", language(LegRole.FARMER).label())), false, outcome -> {
+                    // The crop and amount in the introduction count as heard once it played to the end.
+                    if (outcome == PlaybackOutcome.PLAYED) ledger.introduced(LegRole.BUYER, requestCrop(), requestQuantity());
+                });
     }
 
     private String farmerDescription(String code) {
@@ -428,8 +442,10 @@ public final class MediationSession {
             return; // never sent to the model, and never translated for the buyer
         }
 
-        // A yes or no to a pending question is an answer to the deal, never a question for the assistant.
-        boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
+        // A short yes or no to a pending question ("G-One, haan") is an answer to the deal, never a question for the
+        // assistant. A longer turn that happens to hold a "no" word ("G-One, my floor is X, mat batana") is not a reply.
+        boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR
+                && turn.text().strip().split("[\\s,.!?।]+").length <= SHORT_REPLY_WORDS;
         if (!replying && AddressDetector.addressed(turn.text(), speaker)) {
             aside(turn, "name");
             return; // called by name: answered without reading or translating the turn, so one model call in all
@@ -479,8 +495,9 @@ public final class MediationSession {
         } else if (spoken == null) {
             sayAssistant(speaker, lines.get("repeat", language(speaker).code()), false, null);
         } else {
-            translate(turn, listener, to, spoken);
+            translate(turn, listener, to, spoken, read.offer());
         }
+        ledger.learned(speaker, read.offer(), speaker == LegRole.BUYER); // the speaker knows what they said
 
         if (speaker == LegRole.BUYER && read.offer() != null && "clear".equals(read.offer().status())) {
             priceWhisper(read.offer());
@@ -504,10 +521,15 @@ public final class MediationSession {
         return model;
     }
 
-    private void translate(Turn turn, LegRole listener, Language to, String spoken) {
+    /** The listener learns the turn and its terms only once it played to the end on their leg. */
+    private void translate(Turn turn, LegRole listener, Language to, String spoken, Offer offer) {
         Leg target = listener == LegRole.FARMER ? farmer.farmerLeg() : buyer;
-        voice(listener).say(new LegVoice.Line(spoken, to, false, null));
-        ledger.relayed(turn.role(), ScamPatterns.masked(turn.text()), spoken);
+        voice(listener).say(new LegVoice.Line(spoken, to, false, outcome -> {
+            if (outcome != PlaybackOutcome.PLAYED) return;
+            ledger.heard(listener, spoken);
+            ledger.learned(listener, offer, turn.role() == LegRole.BUYER);
+        }));
+        ledger.said(turn.role(), ScamPatterns.masked(turn.text()));
         bus.publish(new ConsoleEvent.TurnTranslated(callId, clock.millis(), turn.legId(), turn.role(), listener,
                 turn.language().code(), to.code(), spoken, turn.startedMs()));
         side.note(Speaker.ASSISTANT, spoken);
@@ -525,34 +547,32 @@ public final class MediationSession {
         LegRole asker = turn.role();
         Language lang = language(asker);
         long started = clock.millis();
-        DealDesk.Card card = desk.card();
-        AskGone.Answer answer = ask.answer(asker, turn.text(), lang, digest(asker, card), card);
-        String text = withoutThinking(answer.text());
-        if (text == null) text = AskLines.fromCard(card, lang.code());
+        AskGone.Answer answer = ask.answer(asker, turn.text(), ledger.askedBefore(asker));
+        String text = withoutThinking(AskLines.render(answer.intent(), asker, facts(asker), lang.code(),
+                phrase -> localized(phrase, lang)));
+        if (text == null) text = AskLines.line("askOnlyCall", lang.code());
         ledger.aside(asker, ScamPatterns.masked(turn.text()), text);
-        Leg leg = asker == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(asker).say(new LegVoice.Line(text, lang, false, null));
-        log.info("ask_gone call={} asker={} detected={} source={} ms={}", callId, asker.wire(), detectedBy,
-                answer.source(), clock.millis() - started);
+        log.info("ask_gone call={} asker={} detected={} intent={} source={} ms={}", callId, asker.wire(), detectedBy,
+                answer.intent(), answer.source(), clock.millis() - started);
     }
 
-    /** The asker's whitelisted view of the call: the buyer's never holds a whisper, the market reference or memory. */
-    private ObjectNode digest(LegRole asker, DealDesk.Card card) {
-        String crop = request == null || request.commodity() == null ? null
-                : catalog.commodity(request.commodity()).orElse(request.commodity());
-        if (asker == LegRole.BUYER) return AskDigest.buyerView(card, crop, farmerName, ledger.lines(LegRole.BUYER));
-        AskDigest.Buyer who = request == null ? null
-                : new AskDigest.Buyer(request.buyer().name(), request.buyer().type(), request.buyer().district());
-        return AskDigest.farmerView(card, crop, who, reference(card, crop), ledger.lines(LegRole.FARMER),
-                language(LegRole.FARMER).code());
+    /** The asker's typed facts, from their own leg only: the buyer's never hold a whisper, the reference or memory. */
+    private AskDigest.Facts facts(LegRole asker) {
+        DealDesk.Card card = desk.card();
+        if (asker == LegRole.BUYER) {
+            return AskDigest.forBuyer(ledger.known(LegRole.BUYER), card, farmerName, ledger.lastHeard(LegRole.BUYER));
+        }
+        CallLedger.Known known = ledger.known(LegRole.FARMER);
+        return AskDigest.forFarmer(known, card, request == null ? null : request.buyer().name(),
+                ledger.lastHeard(LegRole.FARMER), reference(known.commodity(), known.market()));
     }
 
     /** The dated market reference for the crop in play, or null. A local lookup: no network, no model. */
-    private AskDigest.Reference reference(DealDesk.Card card, String crop) {
-        String commodity = card.commodity() != null ? card.commodity() : crop;
+    private AskDigest.Reference reference(String commodity, String market) {
         if (commodity == null) return null;
         try {
-            if (mandi.quote(commodity, card.market()) instanceof MandiAnswer.Found found
+            if (mandi.quote(commodity, market) instanceof MandiAnswer.Found found
                     && "INR".equals(found.snapshot().currency())) {
                 MandiSnapshot s = found.snapshot();
                 return new AskDigest.Reference(s.sourceName(), s.market(), s.commodity(), s.variety(), s.price(), s.unit(),
@@ -651,7 +671,10 @@ public final class MediationSession {
         public void readback(LegRole role, Terms terms, Consumer<Boolean> played) {
             Language lang = language(role);
             String text = readbackText(terms, lang);
-            voice(role).say(new LegVoice.Line(text, lang, true, outcome -> played.accept(outcome == PlaybackOutcome.PLAYED)));
+            voice(role).say(new LegVoice.Line(text, lang, true, outcome -> {
+                if (outcome == PlaybackOutcome.PLAYED) ledger.learned(role, terms);
+                played.accept(outcome == PlaybackOutcome.PLAYED);
+            }));
             ledger.assistant(role, text);
         }
 

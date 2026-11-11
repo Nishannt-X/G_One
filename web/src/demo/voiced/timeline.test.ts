@@ -40,9 +40,31 @@ describe('voiced sample timeline', () => {
         }
       }
     }
-    const scam = sample.beats.find((b) => b.notPassedOn)!
+    const scam = sample.beats.find((b) => b.id === 'qr-ask')!
     expect(scam.clips.some((c) => c.kind === 'heard')).toBe(false)
     expect(scam.clips[0].hearing.farmer).toBe('silent')
+  })
+
+  it('answers a question put to G-One only to the one who asked', () => {
+    const asks = sample.beats.filter((b) => b.speakerRole === 'buyer' && b.clips[0].text.startsWith('জি-ওয়ান'))
+    expect(asks.length).toBe(2)
+    for (const ask of asks) {
+      const answer = sample.beats[sample.beats.indexOf(ask) + 1]
+      expect(ask.notPassedOn && answer.notPassedOn).toBe(true)
+      expect(answer.speakerRole).toBe('ai')
+      for (const clip of [...ask.clips, ...answer.clips]) expect(clip.hearing.farmer).toBe('silent')
+      expect(answer.clips.every((c) => c.to === 'buyer' && c.language === 'bn-IN')).toBe(true)
+    }
+  })
+
+  it('checks the name first, and asks to end and to remember before saying goodbye', () => {
+    const at = (id: string) => sample.beats.findIndex((b) => b.id === id)
+    expect(at('name-check')).toBe(0)
+    expect(at('name-check')).toBeLessThan(at('greet'))
+    expect(at('sent-buyer')).toBeLessThan(at('ask-end'))
+    expect(at('ask-end')).toBeLessThan(at('ask-save'))
+    expect(at('ask-save')).toBeLessThan(at('goodbye'))
+    expect(sample.beats.filter((b) => b.endsCall).map((b) => b.id)).toEqual(['goodbye'])
   })
 
   it('builds the deal up beat by beat, and saves the memory note only at the end', () => {
@@ -51,7 +73,7 @@ describe('voiced sample timeline', () => {
     expect(final.deal).toMatchObject({ state: 'agreed', quantity: '40 quintal', price: 1900, unit: 'quintal', farmerYes: true, buyerYes: true })
     expect(final.memory?.gists).toHaveLength(2)
     expect(final.ended).not.toBeNull()
-    const early = callViewAt(sample, 1, 1_000, false)
+    const early = callViewAt(sample, sample.beats.findIndex((b) => b.id === 'sell'), 1_000, false)
     expect(early.deal).toMatchObject({ state: 'draft', price: null, farmerYes: false })
     expect(early.memory?.gists).toHaveLength(1)
     expect(callViewAt(sample, -1, 1_000, false).memory).toBeNull()
@@ -81,7 +103,8 @@ describe('voiced sample timeline', () => {
     const farmerBeat = sample.beats.findIndex((b) => b.deliver === 'farmer')
     const buyerBeat = sample.beats.findIndex((b) => b.deliver === 'buyer')
     expect(farmerBeat).toBeLessThan(buyerBeat)
-    expect(sample.beats[buyerBeat].endsCall).toBe(true)
+    expect(buyerBeat).toBeLessThan(sample.beats.length - 1)
+    expect(sample.beats.at(-1)!.endsCall).toBe(true)
     expect(phoneLit(sample, { beat: farmerBeat - 1, clip: 0, voicing: true }, 'farmer', false)).toBe(false)
     expect(phoneLit(sample, { beat: farmerBeat, clip: 0, voicing: true }, 'farmer', false)).toBe(true)
     expect(phoneLit(sample, { beat: farmerBeat, clip: 0, voicing: true }, 'buyer', false)).toBe(false)

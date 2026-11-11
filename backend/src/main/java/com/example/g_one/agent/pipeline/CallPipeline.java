@@ -484,6 +484,9 @@ public final class CallPipeline {
                     return; // a newer turn already arrived; skip the brain call
                 }
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, answerTo), ctx.language());
+                if (endCheckInstead(turnGeneration, reply)) {
+                    return;
+                }
                 Turn held = takeHeldRequest();
                 if (held == null) {
                     deliver(turnGeneration, reply);
@@ -525,7 +528,35 @@ public final class CallPipeline {
             }
             Turn request = withLanguage(held, ctx.language());
             Reply reply = askBrain("respond", () -> brain.respond(ctx, history, request), ctx.language());
-            deliver(turnGeneration, reply);
+            if (!endCheckInstead(turnGeneration, reply)) {
+                deliver(turnGeneration, reply);
+            }
+        }
+
+        /**
+         * A brain reply that would hang up (a goodbye) starts the end-of-call check instead, so the farmer is always asked
+         * whether to end the call and whether it may be remembered before G-One hangs up. True when the check was started
+         * and the reply must not be spoken. Once the check has finished, a hang-up goes ahead as it is.
+         */
+        private boolean endCheckInstead(long turnGeneration, Reply reply) {
+            if (!reply.endCall() || closing.finished()) {
+                return false;
+            }
+            CallClosing.Step step;
+            synchronized (lock) {
+                if (ended || generation.get() != turnGeneration) {
+                    return true; // superseded: nothing to say
+                }
+                step = closing.start();
+            }
+            if (step.asks().isEmpty()) {
+                // Already asking: the reply is said without hanging up.
+                deliver(turnGeneration, new Reply(reply.text(), reply.language(), false));
+                return true;
+            }
+            log.info("The brain's goodbye on call {} starts the end-of-call check", callId);
+            closingStep(turnGeneration, step);
+            return true;
         }
 
         // ---- the end of the call: "end the call?", then "may we remember?" (decided by code) ----
@@ -747,7 +778,9 @@ public final class CallPipeline {
                 history.add(new Line(Speaker.ASSISTANT,
                         ReasoningText.speakable(greeting.text(), greeting.language().code())));
                 Reply reply = askBrain("respond", () -> brain.respond(ctx, history, turn), ctx.language());
-                deliver(turnGeneration, reply);
+                if (!endCheckInstead(turnGeneration, reply)) {
+                    deliver(turnGeneration, reply);
+                }
             });
         }
 

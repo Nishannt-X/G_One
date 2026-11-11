@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 
 /**
  * An {@link AgentBrain} for pipeline tests. It greets with {@link #GREETING} and answers a turn "x" with "reply to x",
- * ending the call when the turn is "end now" (as the end_call tool would; a short "bye" goes to the end-of-call check instead) and switching to English for {@link #SWITCH_TO_ENGLISH}. It records every
+ * asking to end the call when the turn is "end now" (as a model goodbye would; the pipeline then starts the end-of-call check) and switching to English for {@link #SWITCH_TO_ENGLISH}. It records every
  * call, can throw on purpose, and can run a hook while "thinking" so a test can make another turn arrive mid-reply.
  */
 final class ScriptedBrain implements AgentBrain {

@@ -98,6 +98,8 @@ public final class MediationSession {
     private final Set<Caution> cautioned = EnumSet.noneOf(Caution.class);
     private boolean laneBusy;
     private Phase phase = Phase.ASKING;
+    /** Set on the transport callback before its terminal step reaches the mediation lane. Guarded by {@link #lock}. */
+    private boolean buyerLegEnded;
     private boolean askedTwice;
     private String buyerEndReason = "hangup";
     private BigDecimal lastWhispered;
@@ -144,20 +146,27 @@ public final class MediationSession {
     /** True once the buyer said yes and until mediation is over: farmer turns go here, not to the brain. */
     public boolean live() {
         synchronized (lock) {
-            return phase == Phase.LIVE;
+            return phase == Phase.LIVE && !buyerLegEnded;
         }
     }
 
     /** The farmer started speaking. Barge-in stops playback on their own leg only. */
     public void farmerSpeechStart() {
-        if (live()) farmerVoice.bargeIn();
+        farmerVoice.bargeIn();
     }
 
-    /** A finished farmer turn, already published and in the transcript. */
-    public void farmerTurn(Turn turn) {
-        if (!live()) return;
-        long n = seq.incrementAndGet();
-        enqueue(() -> process(turn, n));
+    /** Accepts a finished farmer turn only while mediation owns it. False lets the caller answer it after release. */
+    public boolean farmerTurn(Turn turn) {
+        boolean start;
+        synchronized (lock) {
+            if (phase != Phase.LIVE || buyerLegEnded) return false;
+            long n = seq.incrementAndGet();
+            lane.addLast(() -> process(turn, n));
+            start = !laneBusy;
+            if (start) laneBusy = true;
+        }
+        if (start) submit(this::drain);
+        return true;
     }
 
     /** The farmer's leg ended, for any reason. */
@@ -202,7 +211,7 @@ public final class MediationSession {
         }
         boolean over;
         synchronized (lock) {
-            over = phase == Phase.OVER;
+            over = phase == Phase.OVER || buyerLegEnded;
             if (!over) buyerSession = opened;
         }
         if (over) {
@@ -320,7 +329,7 @@ public final class MediationSession {
 
     private boolean askingBuyer() {
         synchronized (lock) {
-            return phase == Phase.ASKING;
+            return phase == Phase.ASKING && !buyerLegEnded;
         }
     }
 
@@ -328,18 +337,32 @@ public final class MediationSession {
         ReplyGuard.Reading reading = ReplyGuard.read(turn.text());
         String buyerCode = buyer.language().code();
         if (reading == ReplyGuard.Reading.YES) {
+            Language farmerCode = language(LegRole.FARMER);
+            String joined = rendered(lines.get("farmerBuyerJoined", farmerCode.code(),
+                    Map.of("buyer", buyerName())), farmerCode);
             synchronized (lock) {
+                // The buyer or farmer can end while the answer is being prepared. Never reopen an ended session.
+                if (phase != Phase.ASKING || buyerLegEnded) return;
+                // From here on the buyer is asked the end-of-call questions too, before any turn can reach mediation.
+                side.closing().joined(LegRole.BUYER);
+                // Queue under the same lock that admits buyerEnded. The voice is held before LIVE becomes visible, and
+                // its joined line is queued before a departure or the resume callback can run.
+                farmerVoice.hold();
+                farmerVoice.say(new LegVoice.Line(joined, farmerCode, false, null));
                 phase = Phase.LIVE;
+                // Keep the farmer-side close atomic with LIVE visibility. A concurrent buyer hangup or farmer turn
+                // cannot observe LIVE while intake is still free to start a reply that takeover would discard.
+                side.takeOver(farmerVoice::resume);
             }
-            side.takeOver();
-            side.closing().joined(LegRole.BUYER);
-            sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerJoined", language(LegRole.FARMER).code(),
-                    Map.of("buyer", buyerName())), false, null);
+            bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), farmer.farmerLeg().id(),
+                    LegRole.FARMER, farmerCode.code(), joined));
+            side.note(Speaker.ASSISTANT, joined);
+            if (live()) sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
             return;
         }
         boolean retry;
         synchronized (lock) {
+            if (phase != Phase.ASKING || buyerLegEnded) return;
             retry = reading == ReplyGuard.Reading.UNCLEAR && !askedTwice;
             if (retry) askedTwice = true;
         }
@@ -352,14 +375,14 @@ public final class MediationSession {
 
     private void endBuyerDeclined() {
         synchronized (lock) {
+            if (phase != Phase.ASKING || buyerLegEnded) return;
             phase = Phase.OVER;
             buyerEndReason = "buyer_declined";
         }
         side.outcome("buyer_declined", null);
         sayAssistant(LegRole.BUYER, lines.get("buyerDeclined", buyer.language().code()), true, o -> hangUpBuyer());
-        sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", language(LegRole.FARMER).code(),
-                Map.of("buyer", buyerName())), false, null);
-        side.release();
+        side.takeOver(() -> sayAssistant(LegRole.FARMER, lines.get("farmerBuyerDeclined", language(LegRole.FARMER).code(),
+                Map.of("buyer", buyerName())), false, o -> side.release()));
     }
 
     private String buyerName() {
@@ -753,30 +776,57 @@ public final class MediationSession {
     }
 
     private void buyerEnded() {
-        Phase before;
         String reason;
         SttSession toClose;
         synchronized (lock) {
-            before = phase;
+            if (buyerLegEnded) return;
+            buyerLegEnded = true;
             reason = buyerEndReason;
-            phase = Phase.OVER;
             toClose = buyerSession;
             buyerSession = null;
         }
         buyerVoice.close();
         closeQuietly(toClose);
         bus.publish(new ConsoleEvent.LegEnded(callId, clock.millis(), buyer.id(), LegRole.BUYER, reason));
-        // A buyer who leaves mid-check counts as no answer; the farmer may still be asked.
+        // Acceptance and departure must queue their farmer lines in one order. The transport cleanup above stays prompt.
+        enqueue(this::buyerDeparted);
+    }
+
+    /**
+     * The buyer's leg ended: the mediation lane's last step for it. A buyer who leaves mid-check counts as no answer
+     * ({@link CallClosing#left}); the farmer may still be asked, or, when every answer is in, hears the goodbye instead
+     * of the buyer-left line. Farmer lines wait for any intake reply still playing, and the assistant gets the farmer
+     * back only after the last of them.
+     */
+    private void buyerDeparted() {
+        Phase before;
+        synchronized (lock) {
+            before = phase;
+            phase = Phase.OVER;
+        }
         CallClosing.Step left = side.closing().left(LegRole.BUYER);
+        if (before == Phase.OVER) return; // a decline, the farmer's hang-up or the goodbye already said the last line
+        String farmerCode = language(LegRole.FARMER).code();
         if (left.finished()) {
-            sayClosing(LegRole.FARMER, ClosingLines.goodbye(language(LegRole.FARMER).code()), x -> side.hangUp());
+            side.takeOver(() -> sayClosing(LegRole.FARMER, ClosingLines.goodbye(farmerCode), x -> side.hangUp()));
             return;
         }
-        if (!left.asks().isEmpty()) enqueue(() -> closingStep(left));
-        if (before != Phase.OVER) {
-            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", language(LegRole.FARMER).code()), false, null);
-            side.release();
-        }
+        List<CallClosing.Ask> asks = left.asks();
+        side.takeOver(() -> {
+            if (asks.isEmpty()) {
+                sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", farmerCode), false, o -> side.release());
+                return;
+            }
+            sayAssistant(LegRole.FARMER, lines.get("farmerBuyerLeft", farmerCode), false, null);
+            for (int k = 0; k < asks.size(); k++) {
+                CallClosing.Ask ask = asks.get(k);
+                boolean last = k == asks.size() - 1;
+                sayClosing(ask.role(), ClosingLines.ask(ask.question(), language(ask.role()).code()), o -> {
+                    waitForAnswer(ask.role(), ask.token());
+                    if (last) side.release();
+                });
+            }
+        });
     }
 
     private void closeQuietly(SttSession s) {

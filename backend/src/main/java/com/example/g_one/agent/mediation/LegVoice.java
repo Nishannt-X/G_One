@@ -33,6 +33,7 @@ final class LegVoice {
     private Synthesis synthesis;
     private long token;
     private boolean closed;
+    private boolean held;
 
     LegVoice(Leg leg, TextToSpeech tts) {
         this.leg = leg;
@@ -48,6 +49,24 @@ final class LegVoice {
         if (reject) {
             notify(line, PlaybackOutcome.ENDED);
             return;
+        }
+        pump();
+    }
+
+    /**
+     * Nothing starts until {@link #resume()}: lines said meanwhile wait in order. The intake reply and mediation lines
+     * share one leg, so mediation holds this while the reply the farmer is hearing is still playing.
+     */
+    void hold() {
+        synchronized (lock) {
+            held = true;
+        }
+    }
+
+    /** Starts the oldest waiting line, if any. */
+    void resume() {
+        synchronized (lock) {
+            held = false;
         }
         pump();
     }
@@ -114,7 +133,7 @@ final class LegVoice {
         Line next;
         long mine;
         synchronized (lock) {
-            if (closed || current != null || queue.isEmpty()) return;
+            if (closed || held || current != null || queue.isEmpty()) return;
             next = queue.pollFirst();
             current = next;
             mine = ++token;

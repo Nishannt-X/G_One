@@ -1021,4 +1021,166 @@ class MediationTest {
         finishAll();
         assertThat(lastDeal().state()).isEqualTo(DealState.CONFIRMING);
     }
+
+    // ---- the end-of-call check with the independent leg playback (dev consent flow + PR #10) ----
+
+    private static final String BUYER_LEFT = "ख़रीदार ने कॉल छोड़ दी है। अब आप मुझसे बात कर सकते हैं।";
+
+    private static String farmerAsk(com.example.g_one.agent.closing.CallClosing.Question q) {
+        return com.example.g_one.agent.closing.ClosingLines.ask(q, FakeLeg.HINDI.code());
+    }
+
+    private static String buyerAsk(com.example.g_one.agent.closing.CallClosing.Question q) {
+        return com.example.g_one.agent.closing.ClosingLines.ask(q, FakeLeg.ENGLISH.code());
+    }
+
+    private static final String FARMER_GOODBYE = com.example.g_one.agent.closing.ClosingLines.goodbye(FakeLeg.HINDI.code());
+
+    /** Live mediation, then the farmer says bye: both parties are asked whether to end the call. */
+    private void farmerSaysByeInMediation() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+    }
+
+    private java.util.Map<LegRole, String> consents() {
+        java.util.Map<LegRole, String> out = new java.util.EnumMap<>(LegRole.class);
+        eventsOf(ConsoleEvent.ConsentRecorded.class).forEach(c -> out.put(c.role(), c.consent()));
+        return out;
+    }
+
+    @Test
+    void aBuyerWhoSaidYesIsAskedTheEndQuestionToo() {
+        farmerSaysByeInMediation();
+
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.END));
+        assertThat(spokenTo(buyer)).last().isEqualTo(buyerAsk(com.example.g_one.agent.closing.CallClosing.Question.END));
+    }
+
+    @Test
+    void buyerSpeechNeverCutsTheFarmersEndQuestion() {
+        farmerSaysByeInMediation();
+        assertThat(farmer.unheardFrames()).as("the farmer's question is playing").isPositive();
+        int clears = farmer.clearCount();
+
+        session(LegRole.BUYER).say("hold on a second please");
+        executor.runAll();
+
+        assertThat(farmer.clearCount()).as("the buyer's words touch only the buyer's leg").isEqualTo(clears);
+        assertThat(farmer.unheardFrames()).isPositive();
+    }
+
+    @Test
+    void aBuyerLeavingMidCheckCountsAsNoAnswerAndTheFarmerIsStillAsked() {
+        farmerSaysByeInMediation();
+        finishAll();
+        session(LegRole.FARMER).say("हाँ"); // yes to ending; the buyer has not answered
+        executor.runAll();
+        finishAll();
+
+        buyer.remoteHangup();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).last().as("the buyer-left line comes first").isEqualTo(BUYER_LEFT);
+        farmer.finishPlayback();
+        executor.runAll();
+        assertThat(spokenTo(farmer)).last().as("then the farmer alone is asked the save question")
+                .isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.SAVE));
+        farmer.finishPlayback();
+        executor.runAll();
+
+        session(LegRole.FARMER).say("हाँ जी");
+        executor.runAll();
+        farmer.finishPlayback();
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).filteredOn(BUYER_LEFT::equals).hasSize(1);
+        assertThat(spokenTo(farmer)).last().isEqualTo(FARMER_GOODBYE);
+        assertThat(farmer.isEnded()).isTrue();
+        assertThat(consents()).containsEntry(LegRole.FARMER, "YES").containsEntry(LegRole.BUYER, "NONE");
+        assertThat(brain.responds).as("closing answers never reach the brain").isEmpty();
+    }
+
+    @Test
+    void aBuyerLeavingOnceEveryOtherAnswerIsInEndsWithOneGoodbyeAndNoBuyerLeftLine() {
+        farmerSaysByeInMediation();
+        finishAll();
+        session(LegRole.FARMER).say("हाँ");
+        executor.runAll();
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.SAVE));
+        session(LegRole.FARMER).say("हाँ जी");
+        executor.runAll();
+        finishAll();
+
+        buyer.remoteHangup(); // before answering the save question
+        executor.runAll();
+        farmer.finishPlayback();
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).doesNotContain(BUYER_LEFT);
+        assertThat(spokenTo(farmer)).filteredOn(FARMER_GOODBYE::equals).hasSize(1);
+        assertThat(farmer.isEnded()).isTrue();
+        assertThat(consents()).containsEntry(LegRole.FARMER, "YES").containsEntry(LegRole.BUYER, "NONE");
+    }
+
+    @Test
+    void aFarmerAnswerHeardWhileMediationStillHasTheLegReachesTheEndCheck() {
+        farmerSaysByeInMediation();
+        finishAll();
+        session(LegRole.FARMER).say("हाँ");
+        executor.runAll();
+        finishAll();
+        buyer.remoteHangup();
+        executor.runAll();
+        farmer.finishPlayback(); // the buyer-left line ends; the save question is playing
+        executor.runAll();
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.SAVE));
+
+        session(LegRole.FARMER).emitTurn("हाँ जी"); // a final turn with no speech start, while mediation has the leg
+        executor.runAll();
+        farmer.finishPlayback(); // the question ends and the assistant takes the leg back
+        executor.runAll();
+        farmer.finishPlayback();
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).last().as("the held answer settles the check").isEqualTo(FARMER_GOODBYE);
+        assertThat(farmer.isEnded()).isTrue();
+        assertThat(consents()).containsEntry(LegRole.FARMER, "YES");
+        assertThat(brain.responds).isEmpty();
+    }
+
+    @Test
+    void afterTheBuyerLeftOnlyTheFarmerIsAskedToEndTheCall() {
+        buyerJoinsAndAgrees();
+        buyer.remoteHangup();
+        executor.runAll();
+        finishAll();
+        int toBuyer = spokenTo(buyer).size();
+
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.END));
+        assertThat(spokenTo(buyer)).as("the buyer is gone and is not asked").hasSize(toBuyer);
+    }
+
+    @Test
+    void aHeldByeAfterADeclineStillAsksBeforeHangingUp() {
+        aBuyerJoinsAndHearsTheIntro();
+        session(LegRole.BUYER).say("No");
+        executor.runAll();
+        assertThat(farmer.unheardFrames()).as("the decline line is playing").isPositive();
+
+        // "end now" makes the scripted brain answer with a hang-up, as its end_call tool would.
+        session(LegRole.FARMER).emitTurn("end now"); // heard while mediation still has the leg
+        executor.runAll();
+        farmer.finishPlayback();
+        buyer.finishPlayback();
+        executor.runAll();
+
+        assertThat(farmer.isEnded()).as("a held goodbye never hangs up without asking").isFalse();
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.END));
+    }
 }

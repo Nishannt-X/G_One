@@ -625,16 +625,33 @@ public final class CallPipeline {
         private void answerHeldTurn(Turn turn, long replyGeneration) {
             CallContext ctx;
             List<Line> history;
+            CallClosing.Question answering;
             synchronized (lock) {
                 if (ended || context == null || intakeClosed || generation.get() != replyGeneration) {
                     return;
                 }
+                if (closing.finished()) {
+                    return; // the goodbye is on its way
+                }
                 ctx = context;
                 history = List.copyOf(lines);
+                answering = closing.pending().orElse(null);
+            }
+            if (answering != null) {
+                // The farmer was answering the end-of-call question mediation asked them.
+                ReplyGuard.Reading reading = readYesNo(ClosingLines.ask(answering, ctx.language().code()), turn.text());
+                if (generation.get() != replyGeneration) {
+                    return;
+                }
+                closingStep(replyGeneration, closing.heard(LegRole.FARMER, reading));
+                return;
             }
             Turn heard = withLanguage(turn, ctx.language());
             Reply reply = askBrain("respond", () -> brain.respond(ctx, history, heard), ctx.language());
-            deliver(replyGeneration, reply);
+            // A goodbye asks first here too: a held "bye" never hangs up without the end-of-call check.
+            if (!endCheckInstead(replyGeneration, reply)) {
+                deliver(replyGeneration, reply);
+            }
         }
 
         /**
@@ -705,6 +722,10 @@ public final class CallPipeline {
                 if (ended || context == null) {
                     return false;
                 }
+                if (intakeClosed) {
+                    // Mediation still has the leg: the turn is held and read once the assistant has the farmer back.
+                    return false;
+                }
                 if (closing.finished()) {
                     return true; // the goodbye is on its way
                 }
@@ -723,12 +744,13 @@ public final class CallPipeline {
                 lines.add(new Line(Speaker.FARMER, turn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
+                if (wasSpeaking) clearing++;
                 quiet();
                 toCancel = synthesis;
                 synthesis = null;
             }
             if (wasSpeaking) {
-                stopSpeaking(toCancel);
+                clearIntakePlayback(toCancel);
             }
             publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
             if (step != null) {

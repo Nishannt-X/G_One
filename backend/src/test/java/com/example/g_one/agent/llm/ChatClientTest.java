@@ -312,6 +312,79 @@ class ChatClientTest {
         assertThat(requests).hasSize(1);
     }
 
+    // ---- the live call that failed twice: gpt-oss spent its budget, then a refused tool call ----
+
+    private static final String TOOL_REFUSED = "{\"error\":{\"message\":\"tool call validation failed: attempted to "
+            + "call tool 'save_profile_fact' which was not in request.tools\",\"type\":\"invalid_request_error\","
+            + "\"code\":\"tool_use_failed\"}}";
+    private static final String SPOKEN = "{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":"
+            + "\"नमस्ते अनिकेत जी।\"}}]}";
+    private static final String ONLY_REASONING = "{\"choices\":[{\"finish_reason\":\"length\",\"message\":"
+            + "{\"content\":\"\",\"reasoning\":\"The user says a name. I should save it...\"}}],"
+            + "\"usage\":{\"prompt_tokens\":1800,\"completion_tokens\":300}}";
+
+    private ChatRequest withTools() {
+        return ChatRequest.of(List.of(ChatMessage.system("You are G-One."), ChatMessage.user("अनिकेत")),
+                List.of(new ToolSpec("end_call", "Hang up.", null)));
+    }
+
+    @Test
+    void aRefusedToolCallIsRetriedOnceWithoutToolsSoTheModelAnswersInWords() {
+        script.add(new Scripted(400, TOOL_REFUSED, 0));
+        answer(SPOKEN);
+        ChatReply reply = client(5).complete(withTools());
+        assertThat(reply.content()).isEqualTo("नमस्ते अनिकेत जी।");
+        assertThat(requests).hasSize(2);
+        assertThat(requests.get(0).has("tools")).isTrue();
+        assertThat(requests.get(1).has("tools")).as("the same tools would be refused the same way").isFalse();
+        assertThat(requests.get(1).has("tool_choice")).isFalse();
+        assertThat(requests.get(1).path("messages")).isEqualTo(requests.get(0).path("messages"));
+    }
+
+    @Test
+    void anAnswerSpentOnReasoningIsRetriedWithABiggerBudgetThatStaysCapped() {
+        answer(ONLY_REASONING);
+        answer(SPOKEN);
+        assertThat(client(5).complete(withTools()).content()).isEqualTo("नमस्ते अनिकेत जी।");
+        assertThat(requests).extracting(r -> r.path("max_tokens").asInt()).containsExactly(300, 900);
+        assertThat(requests.get(1).has("tools")).as("an empty answer keeps its tools").isTrue();
+
+        requests.clear();
+        answer(ONLY_REASONING);
+        answer(SPOKEN);
+        client(5).complete(ChatRequest.of(List.of(ChatMessage.user("x")), List.of()).withMaxTokens(800));
+        assertThat(requests).extracting(r -> r.path("max_tokens").asInt()).containsExactly(800, 900);
+    }
+
+    @Test
+    void aRetryThatIsRateLimitedReportsTheRateLimit() {
+        script.add(new Scripted(400, TOOL_REFUSED, 0));
+        script.add(new Scripted(429, "{\"error\":{\"code\":\"rate_limit_exceeded\"}}", 0));
+        assertThatThrownBy(() -> client(5).complete(withTools())).isInstanceOfSatisfying(ChatException.class,
+                e -> assertThat(e.kind()).isEqualTo(ChatException.Kind.RATE_LIMITED));
+        assertThat(requests).hasSize(2);
+    }
+
+    @Test
+    void aOnceRequestIsNeverRetried() {
+        answer(ONLY_REASONING);
+        answer(SPOKEN);
+        assertThatThrownBy(() -> client(5).complete(SMALL.once())).isInstanceOfSatisfying(ChatException.class,
+                e -> assertThat(e.kind()).isEqualTo(ChatException.Kind.BAD_RESPONSE));
+        assertThat(requests).hasSize(1);
+        script.clear();
+    }
+
+    @Test
+    void gptOssOnGroqGetsLowEffortOnTheWireForEveryCall() {
+        JsonNode body = bodyFor(GROQ, "openai/gpt-oss-120b", null);
+        assertThat(body.path("reasoning_effort").asText()).isEqualTo("low");
+        assertThat(bodyFor(GROQ, "openai/gpt-oss-120b", "medium").path("reasoning_effort").asText())
+                .as("a configured effort wins").isEqualTo("medium");
+        assertThat(bodyFor("https://api.example.test/v1", "openai/gpt-oss-120b", "").has("reasoning_effort"))
+                .as("off Groq nothing is sent").isFalse();
+    }
+
     // ---- model thinking (issue #5) ----
 
     private static final String GROQ = "https://api.groq.com/openai/v1";
@@ -338,7 +411,8 @@ class ChatClientTest {
         assertThat(body.path("include_reasoning").isBoolean()).isTrue();
         assertThat(body.path("include_reasoning").asBoolean()).isFalse();
         assertThat(body.has("reasoning_format")).isFalse();
-        assertThat(body.has("reasoning_effort")).isFalse();
+        assertThat(body.path("reasoning_effort").asText())
+                .as("Groq's default (medium) spends the whole answer budget on hidden reasoning").isEqualTo("low");
 
         JsonNode low = bodyFor(GROQ, "openai/gpt-oss-120b", "low");
         assertThat(low.path("reasoning_effort").asText()).isEqualTo("low");

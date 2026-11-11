@@ -497,7 +497,8 @@ public final class MediationSession {
         } else {
             translate(turn, listener, to, spoken, read.offer());
         }
-        ledger.learned(speaker, read.offer(), speaker == LegRole.BUYER); // the speaker knows what they said
+        // The speaker knows what they said, which is what their words carry, not what the model read into them.
+        ledger.learned(speaker, HeardTerms.in(read.offer(), turn.text(), language(speaker).code()), speaker == LegRole.BUYER);
 
         if (speaker == LegRole.BUYER && read.offer() != null && "clear".equals(read.offer().status())) {
             priceWhisper(read.offer());
@@ -527,7 +528,9 @@ public final class MediationSession {
         voice(listener).say(new LegVoice.Line(spoken, to, false, outcome -> {
             if (outcome != PlaybackOutcome.PLAYED) return;
             ledger.heard(listener, spoken);
-            ledger.learned(listener, offer, turn.role() == LegRole.BUYER);
+            // Played to the end proves the line was heard, not that the model's reading of it was: keep only the
+            // terms the heard words carry.
+            ledger.learned(listener, HeardTerms.in(offer, spoken, to.code()), turn.role() == LegRole.BUYER);
         }));
         ledger.said(turn.role(), ScamPatterns.masked(turn.text()));
         bus.publish(new ConsoleEvent.TurnTranslated(callId, clock.millis(), turn.legId(), turn.role(), listener,

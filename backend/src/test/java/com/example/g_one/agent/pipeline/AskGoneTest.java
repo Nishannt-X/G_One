@@ -440,6 +440,56 @@ class AskGoneTest {
         assertThat(spokenTo(buyer)).last().isEqualTo("The quantity said on this call so far is fifty quintal.");
     }
 
+    @Test
+    void anExtractedQuantityTheDeliveredTranslationNeverSaidIsNotKnown() {
+        buyerJoinsAndAgrees(null);
+        // The reader extracts fifty quintal, but neither the turn nor the translation the buyer heard says it.
+        llm.replyText(reading("I have as much as I told you", "{\"status\":\"none\",\"quantity\":\"50 quintal\"}", "none", false));
+        session(LegRole.FARMER).say("utna hi hai jitna bataya");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).contains("I have as much as I told you");
+        llm.replyText(intent("quantity"));
+        session(LegRole.BUYER).say("G-One, how much?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).last().isEqualTo(EN_NO_QUANTITY);
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("जी-वन, मैंने कितना बताया?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().as("nor did the farmer say it").isEqualTo("इस कॉल पर अभी तक मात्रा नहीं बताई गई है।");
+    }
+
+    @Test
+    void anExtractedUnitTheDeliveredTranslationNeverSaidLeavesThePriceUnknown() {
+        buyerJoinsAndAgrees();
+        // A clear offer per quintal is read, but nobody said "quintal": the farmer heard a bare figure.
+        llm.replyText(reading("मैं चार हज़ार दे सकता हूँ", clearOffer(4000), "none", false));
+        session(LegRole.BUYER).say("I can pay 4000");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("price"));
+        session(LegRole.FARMER).say("जी-वन, उसने क्या भाव दिया?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().isEqualTo("इस कॉल पर अभी तक कोई भाव नहीं दिया गया है।");
+    }
+
+    @Test
+    void aQuantityAndPriceTheTranslationReallySaysAreKnown() {
+        buyerJoinsAndAgrees(null);
+        llm.replyText(reading("I have fifty quintals", "{\"status\":\"none\",\"quantity\":\"50 quintal\"}", "none", false));
+        session(LegRole.FARMER).say("pachaas quintal hai");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("quantity"));
+        session(LegRole.BUYER).say("G-One, how much?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).last().isEqualTo("The quantity said on this call so far is fifty quintal.");
+    }
+
     // ---- P2-5 / P2-6: honest prices, figures only from typed facts ----
 
     @Test

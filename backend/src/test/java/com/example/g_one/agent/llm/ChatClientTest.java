@@ -147,6 +147,29 @@ class ChatClientTest {
     }
 
     @Test
+    void providerDataOnAToolCallIsEchoedBackUnchanged() {
+        // Gemini 3 refuses the follow-up request unless the call's thought signature comes back with it.
+        answer("""
+                {"choices":[{"index":0,"finish_reason":"tool_calls","message":{"role":"assistant",
+                  "tool_calls":[{"id":"call_g","type":"function",
+                    "extra_content":{"google":{"thought_signature":"sig-123"}},
+                    "function":{"name":"get_mandi_price","arguments":"{\\"commodity\\":\\"pyaz\\"}"}}]}}]}""");
+        answer("""
+                {"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"ठीक है।"}}]}""");
+        ChatClient chat = client(5);
+        List<ToolSpec> tools = List.of(new ToolSpec("get_mandi_price", "Dated mandi reference.", MANDI_PARAMS));
+        List<ChatMessage> messages = new ArrayList<>(List.of(ChatMessage.system("You are G-One."), ChatMessage.user("भाव?")));
+
+        ChatReply first = chat.complete(ChatRequest.of(messages, tools));
+        messages.add(ChatMessage.assistant(first));
+        messages.add(ChatMessage.tool(first.toolCalls().get(0).id(), "ok"));
+        chat.complete(ChatRequest.of(messages, tools));
+
+        JsonNode replayed = requests.get(1).path("messages").get(2).path("tool_calls").get(0);
+        assertThat(replayed.path("extra_content").path("google").path("thought_signature").asText()).isEqualTo("sig-123");
+    }
+
+    @Test
     void plainChatSendsNoToolsAndStripsInlineThinking() {
         answer("""
                 {"choices":[{"finish_reason":"stop","message":{"role":"assistant",

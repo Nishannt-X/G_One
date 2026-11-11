@@ -4,8 +4,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 
-/** A function call the model asked for. {@code argumentsJson} is the raw JSON text exactly as the model wrote it. */
-public record ToolCall(String id, String name, String argumentsJson) {
+/**
+ * A function call the model asked for. {@code argumentsJson} is the raw JSON text exactly as the model wrote it.
+ * {@code extraContentJson} is provider data attached to the call (Gemini 3 puts its thought signature there) that must
+ * be sent back unchanged with the call; null for providers that send none.
+ */
+public record ToolCall(String id, String name, String argumentsJson, String extraContentJson) {
+
+    public ToolCall(String id, String name, String argumentsJson) {
+        this(id, name, argumentsJson, null);
+    }
 
     /**
      * @return the arguments as a JSON object; a blank argument string counts as no arguments

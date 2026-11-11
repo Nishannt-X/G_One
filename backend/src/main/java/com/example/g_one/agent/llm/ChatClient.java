@@ -244,6 +244,13 @@ public class ChatClient {
                     call.put("type", "function");
                     String args = c.argumentsJson() == null || c.argumentsJson().isBlank() ? "{}" : c.argumentsJson();
                     call.putObject("function").put("name", c.name()).put("arguments", args);
+                    if (c.extraContentJson() != null && !c.extraContentJson().isBlank()) {
+                        try {
+                            call.set("extra_content", json.readTree(c.extraContentJson()));
+                        } catch (IOException ignored) {
+                            // Provider data we cannot read back is simply not echoed.
+                        }
+                    }
                 }
             }
             if (m.toolCallId() != null) node.put("tool_call_id", m.toolCallId());
@@ -303,7 +310,9 @@ public class ChatClient {
             // The spec says a JSON string; a few compatible servers send the object itself.
             String argsJson = args.isTextual() ? args.asText() : args.isMissingNode() || args.isNull() ? "" : args.toString();
             String id = c.path("id").asText("");
-            calls.add(new ToolCall(id.isBlank() ? "call_" + calls.size() : id, name, argsJson));
+            JsonNode extra = c.path("extra_content");
+            calls.add(new ToolCall(id.isBlank() ? "call_" + calls.size() : id, name, argsJson,
+                    extra.isMissingNode() || extra.isNull() ? null : extra.toString()));
         }
         if (content.isEmpty() && calls.isEmpty()) throw new Unfinished(0, "", "The language model returned an empty answer.");
         JsonNode usage = root.path("usage");

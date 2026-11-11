@@ -46,6 +46,22 @@ class CallClosingTest {
     }
 
     @Test
+    void aRepeatAsksAgainOnAFreshTokenWithoutUsingUpTheReask() {
+        CallClosing c = both();
+        long first = c.start().asks().get(1).token();
+        Ask again = c.repeat(B).orElseThrow();
+        assertThat(again.question()).isEqualTo(Question.END);
+        assertThat(again.again()).isFalse();
+        assertThat(c.timeout(B, first).asks()).as("the earlier timer is stale").isEmpty();
+        assertThat(c.heard(B, "hmm").asks()).as("the one re-ask is still there").singleElement()
+                .satisfies(a -> assertThat(a.again()).isTrue());
+        assertThat(c.repeat(B)).isPresent();
+        c.heard(B, "yes");
+        assertThat(c.repeat(B)).as("answered: nothing to repeat").isEmpty();
+        assertThat(both().repeat(B)).as("no check running").isEmpty();
+    }
+
+    @Test
     void oneYesWaitsForTheOther() {
         CallClosing c = both();
         c.start();

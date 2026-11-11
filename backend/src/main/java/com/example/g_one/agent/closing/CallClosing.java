@@ -184,6 +184,16 @@ public final class CallClosing {
         };
     }
 
+    /**
+     * Asks {@code role}'s pending question again after a turn that was not an answer (a question to G-One), on a fresh
+     * token so the earlier answer timer is stale. It neither records an answer nor uses up the one re-ask. Empty when
+     * {@code role} is not waiting to answer.
+     */
+    public synchronized java.util.Optional<Ask> repeat(LegRole role) {
+        if (!active() || !tokens.containsKey(role)) return java.util.Optional.empty();
+        return java.util.Optional.of(ask(role, phase == Phase.END ? Question.END : Question.SAVE, false));
+    }
+
     /** The question asked with {@code token} got no answer in {@link #ANSWER_WAIT_MS}. Stale tokens do nothing. */
     public synchronized Step timeout(LegRole role, long token) {
         Long current = tokens.get(role);

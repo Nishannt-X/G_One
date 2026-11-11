@@ -144,8 +144,80 @@
   "memoryAfter": {
     "summary": "Sold 40 quintals of onion at ₹1,900 to Mondal Traders, pay on delivery. Refused a UPI PIN request."
   },
-  "totalMs": 170624,
+  "totalMs": 231507,
   "beats": [
+    {
+      "id": "name-check",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": "The remembered name is confirmed before memory is used.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "name-check-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು ಬಸವರಾಜ್ ಅವರೇ?",
+          "spoken": null,
+          "gloss": "Namaskara, this is G-One speaking. Are you Basavaraj?",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "name-check-1-1d242d83.wav",
+          "durationMs": 3422,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "name-yes",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "name-yes-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಹೌದು, ನಾನೇ.",
+          "spoken": null,
+          "gloss": "Yes, it is me.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "name-yes-1-ba46b771.wav",
+          "durationMs": 1234,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
     {
       "id": "greet",
       "speakerRole": "ai",
@@ -510,6 +582,150 @@
           "voice": "Kirra",
           "file": "ask-rate-2-accd7181.wav",
           "durationMs": 5344,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "ask-quantity",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": true,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "ask-quantity-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "জি-ওয়ান, উনি কত কুইন্টাল পেঁয়াজ বেচছেন?",
+          "spoken": null,
+          "gloss": "G-One, how many quintals of onion is he selling?",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "ask-quantity-1-ffd9ff4f.wav",
+          "durationMs": 2592,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "answer-quantity",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": true,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": "Asked of G-One, answered only to the buyer from what was said on this call.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "answer-quantity-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "এই কলে এখন পর্যন্ত পরিমাণ বলা হয়েছে চল্লিশ কুইন্টাল।",
+          "spoken": null,
+          "gloss": "So far on this call, the quantity said is forty quintals.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "answer-quantity-1-7f6d1f93.wav",
+          "durationMs": 4294,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "ask-lowest",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": true,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "ask-lowest-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "জি-ওয়ান, উনি সবচেয়ে কম কত নেবেন?",
+          "spoken": null,
+          "gloss": "G-One, what is the lowest he will take?",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "ask-lowest-1-c38f9c78.wav",
+          "durationMs": 2394,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "answer-lowest",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": true,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": "G-One never shares either side's limits.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "answer-lowest-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "দুঃখিত, কৃষক কী মেনে নেবেন তা আমি বলতে পারি না, আর আমি কোনো পক্ষের সীমা জানাই না। কোনো দাম দিতে চাইলে সরাসরি কৃষককে বলুন, আমি অনুবাদ করে দেব।",
+          "spoken": null,
+          "gloss": "Sorry, I cannot say what the farmer will accept, and I do not share either side's limits. If you want to offer a price, say it to the farmer directly and I will translate.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "answer-lowest-1-f18a216c.wav",
+          "durationMs": 11855,
           "pan": 0.75,
           "hearing": {
             "farmer": "silent",
@@ -1167,13 +1383,13 @@
             "Kannada",
             "English"
           ],
-          "text": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. Deal summary ನಿಮ್ಮ ಫೋನಿಗೆ message ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಈ deal ನೆನಪಿಟ್ಟುಕೊಳ್ತೀನಿ.",
-          "spoken": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. ಡೀಲ್ ಸಮ್ಮರಿ ನಿಮ್ಮ ಫೋನಿಗೆ ಮೆಸೇಜ್ ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಈ ಡೀಲ್ ನೆನಪಿಟ್ಟುಕೊಳ್ತೀನಿ.",
-          "gloss": "Thank you, Basavaraj. I have messaged the deal summary to your phone. It is a record of what was said on the call. I will remember this deal.",
+          "text": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. Deal summary ನಿಮ್ಮ ಫೋನಿಗೆ message ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ.",
+          "spoken": "ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. ಡೀಲ್ ಸಮ್ಮರಿ ನಿಮ್ಮ ಫೋನಿಗೆ ಮೆಸೇಜ್ ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ.",
+          "gloss": "Thank you, Basavaraj. I have messaged the deal summary to your phone. It is a record of what was said on the call.",
           "to": "farmer",
           "voice": "Saanvi",
-          "file": "sent-farmer-1-11bc36e5.wav",
-          "durationMs": 6674,
+          "file": "sent-farmer-1-1576b7e9.wav",
+          "durationMs": 5811,
           "pan": -0.75,
           "hearing": {
             "farmer": "hears",
@@ -1190,7 +1406,7 @@
       "whisperKind": null,
       "notPassedOn": false,
       "buyerJoins": false,
-      "endsCall": true,
+      "endsCall": false,
       "deliver": "buyer",
       "tool": null,
       "note": "Deal summary arrives on the buyer's phone. Simulated, nothing is sent.",
@@ -1215,22 +1431,316 @@
             "farmer": "silent",
             "buyer": "hears"
           },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "ask-end",
+      "speakerRole": "ai",
+      "audience": "both",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "ask-end-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಕರೆಯನ್ನು ಮುಗಿಸಲು ಬಯಸುತ್ತೀರಾ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
+          "spoken": null,
+          "gloss": "Would you like to end the call? Please say yes or no.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "ask-end-1-7437cd9f.wav",
+          "durationMs": 3753,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
           "pauseAfterMs": 340
         },
         {
-          "id": "sent-buyer-2",
+          "id": "ask-end-2",
           "kind": "said",
-          "language": "hi-IN",
+          "language": "bn-IN",
           "languages": [
-            "Hindi"
+            "Bengali"
           ],
-          "text": "धन्यवाद, फिर बात करेंगे।",
+          "text": "আপনি কি কলটা শেষ করতে চান? দয়া করে হ্যাঁ বা না বলুন।",
           "spoken": null,
-          "gloss": "Thank you, we will talk again.",
+          "gloss": "Would you like to end the call? Please say yes or no.",
           "to": "buyer",
-          "voice": "Bhavna",
-          "file": "sent-buyer-2-5d243542.wav",
-          "durationMs": 2141,
+          "voice": "Kirra",
+          "file": "ask-end-2-f6174b44.wav",
+          "durationMs": 4266,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "end-yes-farmer",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "end-yes-farmer-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಹೌದು, ಮುಗಿಸೋಣ.",
+          "spoken": null,
+          "gloss": "Yes, let us finish.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "end-yes-farmer-1-0e9ca539.wav",
+          "durationMs": 1365,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "end-yes-buyer",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "end-yes-buyer-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "হ্যাঁ, শেষ করুন।",
+          "spoken": null,
+          "gloss": "Yes, end it.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "end-yes-buyer-1-9cb553cc.wav",
+          "durationMs": 1214,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "ask-save",
+      "speakerRole": "ai",
+      "audience": "both",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "ask-save-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಮುಂದಿನ ಉಪಯೋಗಕ್ಕಾಗಿ ಈ ಮಾತುಕತೆಯ ಮುಖ್ಯ ಅಂಶಗಳನ್ನು ನಾವು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
+          "spoken": null,
+          "gloss": "May we remember the main points of this conversation for next time? Please say yes or no.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "ask-save-1-f9687e93.wav",
+          "durationMs": 6661,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "ask-save-2",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "ভবিষ্যতের জন্য আমরা কি এই কথাবার্তার মূল কথাগুলো মনে রাখতে পারি? দয়া করে হ্যাঁ বা না বলুন।",
+          "spoken": null,
+          "gloss": "May we remember the main points of this conversation for the future? Please say yes or no.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "ask-save-2-a1c0fc58.wav",
+          "durationMs": 7473,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "save-yes-farmer",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "save-yes-farmer-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಹೌದು, ಇಟ್ಕೊಳ್ಳಿ.",
+          "spoken": null,
+          "gloss": "Yes, keep it.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "save-yes-farmer-1-c80b619c.wav",
+          "durationMs": 1324,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "save-yes-buyer",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": "Both sides said yes to remembering the main points.",
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "save-yes-buyer-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "হ্যাঁ, রাখতে পারেন।",
+          "spoken": null,
+          "gloss": "Yes, you may keep them.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "save-yes-buyer-1-d95004da.wav",
+          "durationMs": 1304,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "goodbye",
+      "speakerRole": "ai",
+      "audience": "both",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": true,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "goodbye-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.",
+          "spoken": null,
+          "gloss": "Thank you. Namaskara.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "goodbye-1-f2429f7f.wav",
+          "durationMs": 1915,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 340
+        },
+        {
+          "id": "goodbye-2",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "ধন্যবাদ। নমস্কার।",
+          "spoken": null,
+          "gloss": "Thank you. Namaskar.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "goodbye-2-8f041989.wav",
+          "durationMs": 1901,
           "pan": 0.75,
           "hearing": {
             "farmer": "silent",

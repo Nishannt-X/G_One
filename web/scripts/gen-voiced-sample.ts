@@ -58,7 +58,18 @@ const KN_SPOKEN: Record<string, string> = {
   qr: 'ಕ್ಯೂ ಆರ್', scan: 'ಸ್ಕ್ಯಾನ್', upi: 'ಯು ಪಿ ಐ', pin: 'ಪಿನ್', last: 'ಲಾಸ್ಟ್', deal: 'ಡೀಲ್', summary: 'ಸಮ್ಮರಿ', message: 'ಮೆಸೇಜ್',
 }
 
+// G-One's own fixed lines below are copied word for word from backend/src/main/resources/prompts/fixed-lines.json
+// (nameCheck, askQuantity, askNoLimits, askEnd, askSave, goodbye), so the sample says what the product says.
 const BEATS: Beat[] = [
+  {
+    id: 'name-check', speaker: 'ai', audience: 'farmer',
+    note: 'The remembered name is confirmed before memory is used.',
+    lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು ಬಸವರಾಜ್ ಅವರೇ?', gloss: 'Namaskara, this is G-One speaking. Are you Basavaraj?' }],
+  },
+  {
+    id: 'name-yes', speaker: 'farmer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'kn-IN', text: 'ಹೌದು, ನಾನೇ.', gloss: 'Yes, it is me.' }],
+  },
   {
     id: 'greet', speaker: 'ai', audience: 'farmer',
     lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ನಮಸ್ಕಾರ ಬಸವರಾಜ್ ಅವರೇ! ಹೋದ ಸಲ ಈರುಳ್ಳಿ rate ಕೇಳಿದ್ರಿ, ನೆನಪಿದೆ. ಇವತ್ತು ಏನು ಮಾಡೋಣ?', gloss: 'Namaskara, Basavaraj! Last time you asked about the onion rate, I remember. What shall we do today?' }],
@@ -102,6 +113,24 @@ const BEATS: Beat[] = [
       { kind: 'own', lang: 'kn-IN', text: 'ನಮ್ಮ ಈರುಳ್ಳಿ quality ಚೆನ್ನಾಗಿದೆ, good size ಇದೆ. ಕ್ವಿಂಟಾಲಿಗೆ ಎಷ್ಟು ಕೊಡ್ತೀರಿ?', gloss: 'Our onion quality is good, a good size. How much will you give a quintal?' },
       { kind: 'heard', lang: 'bn-IN', to: 'buyer', text: 'কৃষক বলছেন, ওঁর পেঁয়াজ ভালো। আপনি কুইন্টাল প্রতি কত দেবেন?', gloss: 'The farmer says his onions are good. How much will you give a quintal?' },
     ],
+  },
+  {
+    id: 'ask-quantity', speaker: 'buyer', audience: 'none', notPassedOn: true,
+    lines: [{ kind: 'own', lang: 'bn-IN', text: 'জি-ওয়ান, উনি কত কুইন্টাল পেঁয়াজ বেচছেন?', gloss: 'G-One, how many quintals of onion is he selling?' }],
+  },
+  {
+    id: 'answer-quantity', speaker: 'ai', audience: 'buyer', notPassedOn: true,
+    note: 'Asked of G-One, answered only to the buyer from what was said on this call.',
+    lines: [{ kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'এই কলে এখন পর্যন্ত পরিমাণ বলা হয়েছে চল্লিশ কুইন্টাল।', gloss: 'So far on this call, the quantity said is forty quintals.' }],
+  },
+  {
+    id: 'ask-lowest', speaker: 'buyer', audience: 'none', notPassedOn: true,
+    lines: [{ kind: 'own', lang: 'bn-IN', text: 'জি-ওয়ান, উনি সবচেয়ে কম কত নেবেন?', gloss: 'G-One, what is the lowest he will take?' }],
+  },
+  {
+    id: 'answer-lowest', speaker: 'ai', audience: 'buyer', notPassedOn: true,
+    note: "G-One never shares either side's limits.",
+    lines: [{ kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'দুঃখিত, কৃষক কী মেনে নেবেন তা আমি বলতে পারি না, আর আমি কোনো পক্ষের সীমা জানাই না। কোনো দাম দিতে চাইলে সরাসরি কৃষককে বলুন, আমি অনুবাদ করে দেব।', gloss: 'Sorry, I cannot say what the farmer will accept, and I do not share either side\'s limits. If you want to offer a price, say it to the farmer directly and I will translate.' }],
   },
   {
     id: 'low-offer', speaker: 'buyer', audience: 'farmer',
@@ -182,14 +211,51 @@ const BEATS: Beat[] = [
   {
     id: 'sent-farmer', speaker: 'ai', audience: 'farmer', deliver: 'farmer',
     note: "Deal summary arrives on the farmer's phone. Simulated, nothing is sent.",
-    lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. Deal summary ನಿಮ್ಮ ಫೋನಿಗೆ message ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ. ಈ deal ನೆನಪಿಟ್ಟುಕೊಳ್ತೀನಿ.', gloss: 'Thank you, Basavaraj. I have messaged the deal summary to your phone. It is a record of what was said on the call. I will remember this deal.' }],
+    lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಧನ್ಯವಾದ ಬಸವರಾಜ್ ಅವರೇ. Deal summary ನಿಮ್ಮ ಫೋನಿಗೆ message ಮಾಡಿದ್ದೀನಿ. ಇದು ಕರೆಯಲ್ಲಿ ಹೇಳಿದ್ದರ ದಾಖಲೆ.', gloss: 'Thank you, Basavaraj. I have messaged the deal summary to your phone. It is a record of what was said on the call.' }],
   },
   {
-    id: 'sent-buyer', speaker: 'ai', audience: 'buyer', deliver: 'buyer', endsCall: true,
+    id: 'sent-buyer', speaker: 'ai', audience: 'buyer', deliver: 'buyer',
     note: "Deal summary arrives on the buyer's phone. Simulated, nothing is sent.",
     lines: [
       { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'ধন্যবাদ। চুক্তির সারাংশ আপনার ফোনে মেসেজ করে দিয়েছি। এই কলে যা কথা হয়েছে, সেটাই লেখা আছে।', gloss: 'Thank you. I have messaged the deal summary to your phone. It records what was said on this call.' },
-      { kind: 'own', lang: 'hi-IN', to: 'buyer', text: 'धन्यवाद, फिर बात करेंगे।', gloss: 'Thank you, we will talk again.' },
+    ],
+  },
+  {
+    id: 'ask-end', speaker: 'ai', audience: 'both',
+    lines: [
+      { kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಕರೆಯನ್ನು ಮುಗಿಸಲು ಬಯಸುತ್ತೀರಾ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.', gloss: 'Would you like to end the call? Please say yes or no.' },
+      { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'আপনি কি কলটা শেষ করতে চান? দয়া করে হ্যাঁ বা না বলুন।', gloss: 'Would you like to end the call? Please say yes or no.' },
+    ],
+  },
+  {
+    id: 'end-yes-farmer', speaker: 'farmer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'kn-IN', text: 'ಹೌದು, ಮುಗಿಸೋಣ.', gloss: 'Yes, let us finish.' }],
+  },
+  {
+    id: 'end-yes-buyer', speaker: 'buyer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'bn-IN', text: 'হ্যাঁ, শেষ করুন।', gloss: 'Yes, end it.' }],
+  },
+  {
+    id: 'ask-save', speaker: 'ai', audience: 'both',
+    lines: [
+      { kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಮುಂದಿನ ಉಪಯೋಗಕ್ಕಾಗಿ ಈ ಮಾತುಕತೆಯ ಮುಖ್ಯ ಅಂಶಗಳನ್ನು ನಾವು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.', gloss: 'May we remember the main points of this conversation for next time? Please say yes or no.' },
+      { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'ভবিষ্যতের জন্য আমরা কি এই কথাবার্তার মূল কথাগুলো মনে রাখতে পারি? দয়া করে হ্যাঁ বা না বলুন।', gloss: 'May we remember the main points of this conversation for the future? Please say yes or no.' },
+    ],
+  },
+  {
+    id: 'save-yes-farmer', speaker: 'farmer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'kn-IN', text: 'ಹೌದು, ಇಟ್ಕೊಳ್ಳಿ.', gloss: 'Yes, keep it.' }],
+  },
+  {
+    id: 'save-yes-buyer', speaker: 'buyer', audience: 'none',
+    note: 'Both sides said yes to remembering the main points.',
+    lines: [{ kind: 'own', lang: 'bn-IN', text: 'হ্যাঁ, রাখতে পারেন।', gloss: 'Yes, you may keep them.' }],
+  },
+  {
+    id: 'goodbye', speaker: 'ai', audience: 'both', endsCall: true,
+    lines: [
+      { kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.', gloss: 'Thank you. Namaskara.' },
+      { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'ধন্যবাদ। নমস্কার।', gloss: 'Thank you. Namaskar.' },
     ],
   },
 ]
@@ -399,10 +465,17 @@ for (const beat of BEATS) {
     kept.add(file)
     let durationMs = 0
     if (!DRY_OUT) {
-      const raw = pcmOf(await synthesize(spoken, voice, line.lang, hash))
-      const samples = master(raw.samples, raw.rate)
-      await Bun.write(join(OUT, file), wavOf(samples, raw.rate))
-      durationMs = Math.round((samples.length / raw.rate) * 1000)
+      const target = join(OUT, file)
+      // A committed clip with this name is already mastered for the same text and voice: reuse it as it is.
+      if (existsSync(target)) {
+        const done = pcmOf(new Uint8Array(await Bun.file(target).arrayBuffer()))
+        durationMs = Math.round((done.samples.length / done.rate) * 1000)
+      } else {
+        const raw = pcmOf(await synthesize(spoken, voice, line.lang, hash))
+        const samples = master(raw.samples, raw.rate)
+        await Bun.write(target, wavOf(samples, raw.rate))
+        durationMs = Math.round((samples.length / raw.rate) * 1000)
+      }
     }
     totalMs += durationMs
     clips.push({

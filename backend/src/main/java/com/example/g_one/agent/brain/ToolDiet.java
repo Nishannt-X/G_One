@@ -30,7 +30,7 @@ final class ToolDiet {
     private static final Map<String, String> SHORT = Map.of(
             MANDI, "Dated price reference for a crop. Use for any price question.",
             WEATHER, "Forecast for a district.",
-            FIND, "Find buyers when the farmer wants to sell. quantity in quintals.",
+            FIND, "Find buyers when the farmer wants to sell or to be connected to someone. quantity in quintals.",
             CONNECT, "Phone a suggested buyer, only after a clear yes.",
             SAVE, "Save a stable fact the farmer stated. crops is comma separated.",
             FORGET, "Delete everything remembered, when asked.",
@@ -42,13 +42,15 @@ final class ToolDiet {
     /** The names worth offering for a turn with these intents. */
     static Set<String> relevant(Set<TurnIntent.Kind> intents, boolean cropNamed, boolean unreadable,
                                 MemoryGate.State state, boolean buyersSuggested) {
-        Set<String> out = new java.util.HashSet<>(Set.of(END));
+        // end_call is never offered: a goodbye leads into the end-of-call questions, which code asks.
+        Set<String> out = new java.util.HashSet<>();
         if (state.maySave()) out.add(SAVE);
         if (state == MemoryGate.State.NAME_CHECK) out.add(CONFIRM);
         if (intents.contains(TurnIntent.Kind.FORGET)) out.add(FORGET);
         if (unreadable || cropNamed || intents.contains(TurnIntent.Kind.PRICE)) out.add(MANDI);
         if (unreadable || intents.contains(TurnIntent.Kind.WEATHER)) out.add(WEATHER);
-        if (unreadable || cropNamed || intents.contains(TurnIntent.Kind.SELL) || buyersSuggested) out.add(FIND);
+        boolean sale = intents.contains(TurnIntent.Kind.SELL) || intents.contains(TurnIntent.Kind.CONNECT);
+        if (unreadable || cropNamed || sale || buyersSuggested) out.add(FIND);
         if (buyersSuggested) out.add(CONNECT);
         return out;
     }

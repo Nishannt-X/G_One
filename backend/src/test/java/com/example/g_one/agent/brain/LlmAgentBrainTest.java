@@ -100,7 +100,8 @@ class LlmAgentBrainTest {
         assertThat(r.text()).contains("आपका नाम क्या है?");
 
         JsonNode first = f.llm.requests().get(0);
-        assertThat(toolNames(first)).containsExactly("end_call", "get_mandi_price", "save_profile_fact");
+        assertThat(toolNames(first)).as("end_call is never offered: code asks before hanging up")
+                .containsExactly("get_mandi_price", "save_profile_fact");
         String result = f.toolEvents.get(0).result();
         assertThat(result).isEqualTo("AGMARKNET listed four thousand five hundred rupees per quintal for Red onion at "
                 + "Lasalgaon on the fourth of November, twenty twenty-six, a dated reference.");
@@ -235,30 +236,43 @@ class LlmAgentBrainTest {
     void returningMemoryIsHiddenUntilTheNameCheckIsAnsweredYes() {
         CallContext ctx = BrainFixture.returning(HINDI, f.seedSuresh());
         f.brain.greet(ctx);
-        f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
         f.llm.replyText("आपने कहा था कि कटाई के बाद प्याज़ के लिए ख़रीदार ढूँढूँ।");
 
-        // Not a bare yes (it asks something), so the model goes on after confirm_name.
+        // A yes that goes on with a request: code records the yes, the model takes the request with memory.
         f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "क्या मैं Suresh जी से बात कर रही हूँ?")),
                 said(ctx, "हाँ, मैं सुरेश हूँ। प्याज़ के ख़रीदार का क्या हुआ?"));
 
-        assertThat(systemPrompt(0)).doesNotContain("Lasalgaon APMC").doesNotContain("Nashik").doesNotContain("Suresh")
-                .contains("call confirm_name");
-        assertThat(dataMessage(0)).contains("\"nameToCheck\":\"Suresh\"").doesNotContain("Lasalgaon").doesNotContain("Nashik");
-        assertThat(toolNames(f.llm.requests().get(0))).contains("confirm_name");
-        String toolResult = last(f.llm.requests().get(1).path("messages")).path("content").asText();
-        assertThat(toolResult).doesNotContain("Lasalgaon APMC").contains("data message");
-        // Right after the yes, the same turn's next request carries the memory, in the data message only.
-        assertThat(systemPrompt(1)).doesNotContain("Lasalgaon APMC").contains("Name check passed");
-        assertThat(dataMessage(1)).contains("\"usualMandi\":\"Lasalgaon APMC\"").contains("NOT verified identity")
+        assertThat(f.toolEvents).first().satisfies(e -> {
+            assertThat(e.tool()).isEqualTo("confirm_name");
+            assertThat(e.args().path("confirmed").asBoolean()).isTrue();
+        });
+        assertThat(toolNames(f.llm.requests().get(0))).doesNotContain("confirm_name");
+        assertThat(systemPrompt(0)).doesNotContain("Lasalgaon APMC").contains("Name check passed");
+        assertThat(dataMessage(0)).contains("\"usualMandi\":\"Lasalgaon APMC\"").contains("NOT verified identity")
                 .contains("Find a buyer for about twenty quintal red onion");
         assertThat(f.brain.memoryState(ctx.callId())).contains(MemoryGate.State.CONFIRMED);
 
         f.llm.replyText("ठीक है।");
         f.brain.respond(ctx, List.of(), said(ctx, "हाँ, बीस क्विंटल"));
-        assertThat(systemPrompt(2)).doesNotContain("Lasalgaon APMC");
-        assertThat(dataMessage(2)).contains("\"usualMandi\":\"Lasalgaon APMC\"");
-        assertThat(toolNames(f.llm.requests().get(2))).doesNotContain("confirm_name");
+        assertThat(systemPrompt(1)).doesNotContain("Lasalgaon APMC");
+        assertThat(dataMessage(1)).contains("\"usualMandi\":\"Lasalgaon APMC\"");
+    }
+
+    @Test
+    void anUnclearNameCheckAnswerStillGoesToTheModelWithMemoryHidden() {
+        CallContext ctx = BrainFixture.returning(HINDI, f.seedSuresh());
+        f.brain.greet(ctx);
+        f.llm.replyText("UNCLEAR"); // the one small yes/no reading
+        f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}");
+        f.llm.replyText("ठीक है।");
+
+        f.brain.respond(ctx, List.of(new Line(Speaker.ASSISTANT, "क्या मैं Suresh जी से बात कर रही हूँ?")),
+                said(ctx, "सुरेश बोल रहा हूँ भाई, हम ही हैं"));
+
+        assertThat(f.llm.requests().get(0).has("tools")).isFalse();
+        assertThat(systemPrompt(1)).doesNotContain("Lasalgaon APMC").doesNotContain("Nashik").contains("call confirm_name");
+        assertThat(dataMessage(1)).contains("\"nameToCheck\":\"Suresh\"").doesNotContain("Lasalgaon");
+        assertThat(toolNames(f.llm.requests().get(1))).contains("confirm_name");
     }
 
     @Test
@@ -326,18 +340,24 @@ class LlmAgentBrainTest {
     void aNoToTheNameCheckKeepsMemoryHiddenAndWritesNothing() {
         CallContext ctx = BrainFixture.returning(HINDI, f.seedSuresh());
         f.brain.greet(ctx);
-        f.llm.replyToolCall("confirm_name", "{\"confirmed\":false}");
-        f.llm.replyToolCall("save_profile_fact", "{\"field\":\"name\",\"value\":\"Ramesh\"}");
-        f.llm.replyToolCall("forget_me", "{}");
-        f.llm.replyText("ठीक है, आप कौन सी फ़सल बेचना चाहते हैं?");
 
-        f.brain.respond(ctx, List.of(), said(ctx, "नहीं, मैं रमेश हूँ, मुझे भूल जाओ"));
+        Reply r = f.brain.respond(ctx, List.of(), said(ctx, "नहीं, मैं रमेश हूँ, मुझे भूल जाओ"));
 
         assertThat(f.brain.memoryState(ctx.callId())).contains(MemoryGate.State.OTHER_SPEAKER);
-        assertThat(f.toolEvents).extracting(e -> e.ok()).containsExactly(true, false, false);
+        assertThat(f.llm.requests()).as("a plain no needs no model").isEmpty();
+        assertThat(f.toolEvents).extracting(e -> e.tool()).containsExactly("confirm_name");
+        assertThat(r.text()).contains("रमेश").doesNotContain("Suresh");
         assertThat(f.store.calls).hasValue(0);
         assertThat(f.store.load(FakeLeg.FARMER_KEY).orElseThrow().fact("name").orElseThrow().value()).isEqualTo("Suresh");
         assertThat(String.join("\n", f.toolEvents.stream().map(e -> e.result()).toList())).doesNotContain("Lasalgaon");
+
+        // A model that tries to save or forget anyway is refused by the tools.
+        f.llm.replyToolCall("save_profile_fact", "{\"field\":\"name\",\"value\":\"Ramesh\"}");
+        f.llm.replyToolCall("forget_me", "{}");
+        f.llm.replyText("ठीक है, आप कौन सी फ़सल बेचना चाहते हैं?");
+        f.brain.respond(ctx, List.of(), said(ctx, "मुझे भूल जाओ"));
+        assertThat(f.toolEvents).extracting(e -> e.ok()).containsExactly(true, false, false);
+        assertThat(f.store.calls).hasValue(0);
     }
 
     @Test

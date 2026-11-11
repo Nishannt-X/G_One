@@ -96,7 +96,8 @@ public final class MemoryBlock {
             case CONFIRMED -> "Name check passed. The farmer's memory is in the data message; never read it aloud. Right "
                     + "after the yes, welcome them back in one short sentence that mentions their last crop or the "
                     + "newest open item, then ask how to help.";
-            case OTHER_SPEAKER -> "Not the remembered farmer: treat as new, mention nothing remembered, save nothing.";
+            case OTHER_SPEAKER -> "Not the remembered farmer, they said so: treat as a new caller, never ask again who they "
+                    + "are or use an earlier name, mention nothing remembered, save nothing.";
             case FORGOTTEN -> "Farmer asked to be forgotten; everything was deleted. Memory off: save nothing.";
         };
     }

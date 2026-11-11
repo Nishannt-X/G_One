@@ -80,6 +80,19 @@ public class FallbackLines {
         return Map.copyOf(out);
     }
 
+    /** True for any of these lines in any language: re-asking one would only repeat the apology. */
+    public boolean isFallbackLine(String text) {
+        if (text == null || text.isBlank()) return false;
+        String t = text.strip();
+        if (apology.values().stream().anyMatch(l -> l.contains(t) || t.contains(l))) return true;
+        for (Map<String, List<String>> lists : List.of(busy, busyAgain)) {
+            for (List<String> lines : lists.values()) {
+                if (lines.stream().anyMatch(l -> l.contains(t) || t.contains(l))) return true;
+            }
+        }
+        return false;
+    }
+
     public Map<String, String> apologies() {
         return apology;
     }

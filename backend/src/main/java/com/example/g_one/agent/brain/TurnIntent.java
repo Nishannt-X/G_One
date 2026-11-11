@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
  * means the model answers instead.
  */
 public final class TurnIntent {
-    enum Kind { NAME_SOURCE, IDENTITY, REPEAT, GREETING, THANKS, BYE, YES, NO, PRICE, WEATHER, SELL, FORGET }
+    enum Kind { NAME_SOURCE, IDENTITY, REPEAT, GREETING, THANKS, BYE, YES, NO, PRICE, WEATHER, SELL, CONNECT, FORGET }
 
     private static final int SHORT_TURN_WORDS = 7;
 
@@ -55,12 +55,43 @@ public final class TurnIntent {
     private static final Pattern SELL = Pattern.compile(
             "बेच|बिक|खरीदार|ग्राहक|व्यापारी|कितने में|bech|bik|kharidar|grahak|vyapari|kitne me|\\bsell|buyer"
             + "|বিক্রি|ক্রেতা|bikri|kreta");
+    /** "Connect me to someone", "किसी से बात कराइए": the farmer wants a buyer on the line. */
+    private static final Pattern CONNECT = Pattern.compile(
+            "कनेक्ट|जोड़ दीजिए|जोड़ दो|जोड़िए|जोड दीजिए|जोड दो|जोडिए|बात करा|बात करवा|मिला दीजिए|मिला दो|मिलवा|फ़ोन लगा|फोन लगा"
+            + "|connect|jod do|jod dijiye|jodiye|baat kara|baat karwa|milwa|mila do|mila dijiye|phone laga|call kara"
+            + "|put me through|talk to (a|the|some) ?(buyer|trader|one|body)|speak to (a|the|some) ?(buyer|trader|one|body)"
+            + "|জুড়ে দিন|জুড়ে দাও|কথা বলিয়ে|কানেক্ট|jure din|kotha boliye");
+    /** "मैं वो नहीं हूँ", "wrong number", "someone else": the caller is not the person the name check asked about. */
+    private static final Pattern DENIAL = Pattern.compile(
+            "(मैं|मै|हम) (वो|वह|वे|उनमें से कोई) नहीं|मैं .{1,24} नहीं हूँ|मैं .{1,24} नहीं हूं|वो नहीं हूँ|वह नहीं हूँ|वो नहीं हूं|वह नहीं हूं|कोई और"
+            + "|दूसरा (आदमी|व्यक्ति|बोल)|ग़लत नंबर|गलत नंबर|रॉन्ग नंबर|उनका (बेटा|भाई|पोता)|उनकी (बेटी|पत्नी|बहन)|उनके (पति|पिता|बेटे)"
+            + "|(main|mai|hum) (wo|woh|vo|voh|ve) nahi|wo nahi hu|woh nahi hu|vo nahi hu|koi aur|galat number|wrong number"
+            + "|unka (beta|bhai)|unki (beti|patni)|someone else|somebody else|not (him|her|them)\\b|i('m| am) not (him|her|that|the one|the person)"
+            + "|আমি (উনি|সে|ও) নই|অন্য কেউ|ভুল নম্বর|ami (uni|se) noi|onno keu|vul number"
+            + "|நான் அவர் இல்லை|வேறு ஆள்|தவறான எண்|ನಾನು ಅವರಲ್ಲ|ಬೇರೆ ವ್ಯಕ್ತಿ|ತಪ್ಪು ನಂಬರ್");
     private static final Pattern FORGET = Pattern.compile(
             "भूल जा|मिटा|forget me|delete my|bhool ja|bhul ja|mita do|ভুলে যা|মুছে|bhule ja|muche"
             + "|மறந்துவிடு|மறந்து விடு|ಮರೆತುಬಿಡ|ಮರೆತು ಬಿಡ");
     private static final Pattern STATED_NAME = Pattern.compile(
-            "(?iu)(?:मेरा नाम|my name is|mera naam|mera nam|আমার নাম|amar naam|amar nam)\\s+([\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+){0,3})");
+            "(?iu)(?:मेरा नाम|my name is|my name's|mera naam|mera nam|आमार नाम|আমার নাম|amar naam|amar nam|என் பெயர்|ನನ್ನ ಹೆಸರು)"
+            + "\\s+([\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+){0,5})");
+    /** "मैं अनिकेत हूँ", "main Aniket hoon", "I am Aniket", "this is Aniket", "আমি অনিকেত". */
+    private static final Pattern INTRODUCED = Pattern.compile(
+            "(?iu)(?:^|[,.।!\\s])(?:मैं|मै|main|mai|i am|i'm|im|this is|it's|its|আমি|ami|நான்|ನಾನು)\\s+"
+            + "([\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+){0,2})\\s*(?:हूँ|हूं|हू|hoon|hun|hu|here|speaking|बोल रहा|बोल रही|bol raha|bol rahi)?");
     private static final Set<String> NOT_A_NAME = Set.of("है", "हैं", "hai", "hain", "जी", "ji", "বলে", "হল");
+    /** A name ends at these words: "मेरा नाम अनिकेत है और मैं..." is अनिकेत. */
+    private static final Set<String> NAME_ENDS = Set.of("है", "हैं", "हूँ", "हूं", "और", "पर", "तो", "से", "hai", "hain", "hoon",
+            "hun", "hu", "aur", "and", "but", "is", "i", "here", "मैं", "मै", "main", "mai", "बोल", "bol", "speaking",
+            "এবং", "আর", "বলছি", "হল", "আমি");
+    /** Words that follow "मैं" or "I am" but are not a name. */
+    private static final Set<String> NOT_INTRODUCED = Set.of("ठीक", "किसान", "वो", "वह", "वे", "यहाँ", "यहां", "बोल", "नहीं",
+            "नही", "भी", "तो", "आपको", "आपसे", "उनका", "उनकी", "उनके", "बेचना", "बेच", "जानना", "पूछ", "कुछ", "एक", "अपना",
+            "अपनी", "मंडी", "खेत", "गाँव", "गांव", "सुन", "समझ", "चाहता", "चाहती", "कह", "theek", "thik", "kisan", "wo", "woh",
+            "vo", "yahan", "nahi", "bhi", "to", "unka", "unki", "bechna", "jaanna", "kuch", "ek", "fine", "good", "ok", "okay",
+            "not", "a", "an", "the", "from", "here", "calling", "farmer", "well", "also", "his", "her", "their", "just",
+            "looking", "trying", "want", "wanted", "going", "selling", "interested", "sorry", "speaking", "সে", "উনি", "ও", "ঠিক",
+            "কৃষক", "নই", "চাই", "বিক্রি");
     private static final Set<String> QUESTION_WORDS = Set.of("क्या", "क्यों", "kya", "kyun", "what", "কী", "কি", "ki", "kaise", "कैसे");
     private static final Pattern NAME_QUESTION = Pattern.compile("(?iu)(नाम|\\bname\\b|নাম|\\bnaam\\b)[^.।!]*\\?");
     private static final Pattern NAME_REQUEST = Pattern.compile(
@@ -97,6 +128,7 @@ public final class TurnIntent {
         if (PRICE.matcher(t).find()) out.add(Kind.PRICE);
         if (WEATHER.matcher(t).find()) out.add(Kind.WEATHER);
         if (SELL.matcher(t).find()) out.add(Kind.SELL);
+        if (CONNECT.matcher(t).find()) out.add(Kind.CONNECT);
         if (FORGET.matcher(t).find()) out.add(Kind.FORGET);
         return out;
     }
@@ -105,12 +137,50 @@ public final class TurnIntent {
     public static Optional<String> statedName(String text) {
         Matcher m = STATED_NAME.matcher(SPACES.matcher(text == null ? "" : text.strip()).replaceAll(" "));
         if (!m.find()) return Optional.empty();
-        List<String> words = new ArrayList<>(List.of(m.group(1).split(" ")));
-        words.removeIf(w -> NOT_A_NAME.contains(w.toLowerCase(Locale.ROOT)));
-        if (words.isEmpty() || words.size() > 3 || words.stream().anyMatch(w -> QUESTION_WORDS.contains(w.toLowerCase(Locale.ROOT)))) {
-            return Optional.empty();
+        return nameWords(m.group(1), Set.of());
+    }
+
+    /**
+     * The name in "मैं अनिकेत हूँ", "main Aniket hoon", "I am Aniket", "नहीं, मैं राम हूँ", or a stated name. Use it only where a
+     * name is expected (an answer to the name check or to a name question): "मैं किसान हूँ" and "I am fine" are not names.
+     */
+    public static Optional<String> introducedName(String text) {
+        Optional<String> stated = statedName(text);
+        if (stated.isPresent()) return stated;
+        Matcher m = INTRODUCED.matcher(SPACES.matcher(text == null ? "" : text.strip()).replaceAll(" "));
+        while (m.find()) {
+            Optional<String> name = nameWords(m.group(1), NOT_INTRODUCED);
+            if (name.isPresent()) return name;
+        }
+        return Optional.empty();
+    }
+
+    /** The words of a name up to the first word that ends it; empty for a question, a non-name or more than three words. */
+    private static Optional<String> nameWords(String raw, Set<String> notFirst) {
+        List<String> words = new ArrayList<>();
+        for (String w : raw.split(" ")) {
+            String lower = w.toLowerCase(Locale.ROOT);
+            if (NAME_ENDS.contains(lower)) break;
+            if (NOT_A_NAME.contains(lower)) continue;
+            words.add(w);
+        }
+        if (words.isEmpty() || words.size() > 3) return Optional.empty();
+        if (notFirst.contains(words.get(0).toLowerCase(Locale.ROOT))) return Optional.empty();
+        for (String w : words) {
+            String lower = w.toLowerCase(Locale.ROOT);
+            if (QUESTION_WORDS.contains(lower) || NOT_A_SHORT_NAME.contains(lower) || notFirst.contains(lower)) return Optional.empty();
         }
         return Optional.of(String.join(" ", words));
+    }
+
+    /** True when the turn says the caller is not the person asked about ("मैं वो नहीं हूँ", "wrong number"). */
+    public static boolean deniesIdentity(String text) {
+        return DENIAL.matcher(normalized(text)).find();
+    }
+
+    /** True for "connect me to someone" and the like. */
+    static boolean wantsConnection(String text) {
+        return CONNECT.matcher(normalized(text)).find();
     }
 
     /** True when an assistant line asks the farmer's name, such as "और आपका नाम क्या है?" or "May I know your name?". */

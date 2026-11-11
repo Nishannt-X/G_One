@@ -551,8 +551,12 @@ public final class MediationSession {
         String text = withoutThinking(AskLines.render(answer.intent(), asker, facts(asker), lang.code(),
                 phrase -> localized(phrase, lang)));
         if (text == null) text = AskLines.line("askOnlyCall", lang.code());
-        ledger.aside(asker, ScamPatterns.masked(turn.text()), text);
+        String question = ScamPatterns.masked(turn.text());
+        ledger.aside(asker, question, text);
         voice(asker).say(new LegVoice.Line(text, lang, false, null));
+        Leg leg = asker == LegRole.FARMER ? farmer.farmerLeg() : buyer;
+        bus.publish(new ConsoleEvent.AsideAnswered(callId, clock.millis(), leg.id(), asker, lang.code(), question, text,
+                turn.startedMs()));
         log.info("ask_gone call={} asker={} detected={} intent={} source={} ms={}", callId, asker.wire(), detectedBy,
                 answer.intent(), answer.source(), clock.millis() - started);
     }

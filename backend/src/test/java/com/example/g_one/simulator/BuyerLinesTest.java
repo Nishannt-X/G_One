@@ -18,7 +18,17 @@ class BuyerLinesTest {
     private static final LegId FARMER = LegId.of("leg-farmer");
 
     private static Optional<BuyerLines.Line> line(ConsoleEvent event) {
-        return BuyerLines.forBuyer(event, BUYER);
+        return BuyerLines.forBuyer(event, BUYER).stream().findFirst();
+    }
+
+    @Test
+    void theBuyersOwnQuestionToGOneAndItsAnswerPassButTheFarmersNeverDo() {
+        assertThat(BuyerLines.forBuyer(new ConsoleEvent.AsideAnswered(CALL, 1, BUYER.id(), LegRole.BUYER, "en-IN",
+                "G-One, how much?", "No quantity has been said on this call yet.", 0), BUYER)).containsExactly(
+                new BuyerLines.Line("you_said", "en-IN", "G-One, how much?"),
+                new BuyerLines.Line("g_one", "en-IN", "No quantity has been said on this call yet."));
+        assertThat(BuyerLines.forBuyer(new ConsoleEvent.AsideAnswered(CALL, 1, FARMER, LegRole.FARMER, "hi-IN",
+                "जी-वन, मेरा कम से कम भाव 3900 है", "ठीक है", 0), BUYER)).isEmpty();
     }
 
     @Test

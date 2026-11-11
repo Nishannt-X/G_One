@@ -191,6 +191,8 @@ final class CallAccumulator {
             case ConsoleEvent.CallEnded e -> ended = e;
             case ConsoleEvent.CallStarted e -> farmerLanguage = e.language();
             case ConsoleEvent.TurnMeasured e -> { }
+            // A party's private question to G-One: nothing of it is stored, not even a timing.
+            case ConsoleEvent.AsideAnswered e -> { }
         }
     }
 

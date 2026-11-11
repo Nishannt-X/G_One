@@ -3,7 +3,7 @@ package com.example.g_one.simulator;
 import com.example.g_one.core.ConsoleEvent;
 import com.example.g_one.core.Leg;
 import com.example.g_one.core.LegRole;
-import java.util.Optional;
+import java.util.List;
 
 /**
  * What a buyer's own screen may show of the call. This is an allow-list: only the buyer's words, their translation for
@@ -16,9 +16,14 @@ final class BuyerLines {
 
     private BuyerLines() {}
 
-    /** The line this event gives the buyer on {@code buyer}, if it gives one. */
-    static Optional<Line> forBuyer(ConsoleEvent event, Leg buyer) {
-        if (!buyer.callId().equals(event.callId())) return Optional.empty();
+    /** The lines this event gives the buyer on {@code buyer}: none, or one, or a question to G-One and its answer. */
+    static List<Line> forBuyer(ConsoleEvent event, Leg buyer) {
+        if (!buyer.callId().equals(event.callId())) return List.of();
+        if (event instanceof ConsoleEvent.AsideAnswered e) {
+            // Only the buyer's own private exchange with G-One; the farmer's never leaves the farmer's leg.
+            if (e.role() != LegRole.BUYER || !e.legId().equals(buyer.id())) return List.of();
+            return List.of(new Line("you_said", e.language(), e.question()), new Line("g_one", e.language(), e.answer()));
+        }
         Line line = switch (event) {
             case ConsoleEvent.TurnHeard e when e.role() == LegRole.BUYER && e.legId().equals(buyer.id()) ->
                     new Line("you_said", e.language(), e.text());
@@ -30,6 +35,6 @@ final class BuyerLines {
                     new Line("g_one", e.language(), e.text());
             default -> null;
         };
-        return Optional.ofNullable(line);
+        return line == null ? List.of() : List.of(line);
     }
 }

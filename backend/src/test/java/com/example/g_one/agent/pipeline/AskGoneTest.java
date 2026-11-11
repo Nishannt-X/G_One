@@ -226,6 +226,14 @@ class AskGoneTest {
         assertThat(farmer.clearCount()).isEqualTo(farmerClears);
         assertThat(spokenTo(buyer)).last().isEqualTo(EN_QUANTITY_20);
         assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).noneMatch(t -> t.text().contains("G-One, how much crop"));
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).noneMatch(a -> a.text().equals(EN_QUANTITY_20));
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).as("one private, leg-scoped event for the console")
+                .singleElement().satisfies(e -> {
+                    assertThat(e.legId()).isEqualTo(buyer.id());
+                    assertThat(e.role()).isEqualTo(LegRole.BUYER);
+                    assertThat(e.question()).isEqualTo("G-One, how much crop is that farmer trying to sell?");
+                    assertThat(e.answer()).isEqualTo(EN_QUANTITY_20);
+                });
     }
 
     @Test
@@ -570,6 +578,10 @@ class AskGoneTest {
         List<ConsoleEvent.DealUpdated> deals = eventsOf(ConsoleEvent.DealUpdated.class);
         assertThat(deals.get(deals.size() - 1).state()).as("the offer stays open").isEqualTo(DealState.DRAFT);
         assertThat(spokenTo(buyer)).noneMatch(t -> t.contains("not confirmed") || t.contains("nine hundred"));
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last().satisfies(e -> {
+            assertThat(e.legId()).isEqualTo(farmer.id());
+            assertThat(e.question()).contains("तीन हज़ार नौ सौ");
+        });
     }
 
     @Test

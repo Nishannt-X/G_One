@@ -104,6 +104,22 @@ export interface AssistantSaid {
   text: string
 }
 
+/**
+ * During mediation, the party on legId spoke to G-One directly and G-One answered them alone, on that leg. Private: never
+ * relayed, never a deal term, never in the transcript or analytics.
+ */
+export interface AsideAnswered {
+  type: 'aside_answered'
+  callId: string
+  atMs: number
+  legId: string
+  role: LegRole
+  language: string
+  question: string
+  answer: string
+  startedMs: number
+}
+
 /** A private message spoken to the farmer only, on the farmer leg. The buyer never hears it. */
 export interface WhisperSent {
   type: 'whisper_sent'
@@ -217,6 +233,7 @@ export type ConsoleEvent =
   | TurnMeasured
   | LanguageChanged
   | ConsentRecorded
+  | AsideAnswered
 
 export type ConsoleEventType = ConsoleEvent['type']
 
@@ -236,6 +253,7 @@ const KNOWN_TYPES: Record<ConsoleEventType, true> = {
   turn_measured: true,
   language_changed: true,
   consent_recorded: true,
+  aside_answered: true,
 }
 
 export const CONSOLE_EVENT_TYPES = Object.keys(KNOWN_TYPES) as ConsoleEventType[]

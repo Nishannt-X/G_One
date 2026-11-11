@@ -33,6 +33,25 @@ describe('language changes', () => {
   })
 })
 
+describe('a private question to G-One', () => {
+  it('shows the question and the answer on the asker side, both marked private, with no timing', () => {
+    let state: FeedState = initialFeed
+    state = feedReducer(state, { type: 'event', event: { type: 'call_started', callId: 'c', atMs: 1, language: 'hi-IN' } })
+    state = feedReducer(state, { type: 'event', event: { type: 'aside_answered', callId: 'c', atMs: 9, legId: 'b', role: 'buyer', language: 'en-IN', question: 'G-One, how much?', answer: 'No quantity has been said on this call yet.', startedMs: 5 } })
+
+    const call = state.calls.c
+    expect(call.items.map((i) => [i.kind, 'aside' in i ? i.aside : undefined])).toEqual([['turn', true], ['assistant', true]])
+    expect(call.items[0]).toMatchObject({ role: 'buyer', text: 'G-One, how much?', startedMs: 5 })
+    expect(call.timings).toHaveLength(0)
+  })
+
+  it('drops a broken private event from the feed', () => {
+    const event = { type: 'aside_answered', callId: 'c', atMs: 9, legId: 'b', role: 'buyer', language: 'en-IN', question: 'q', answer: 'a', startedMs: 5 }
+    expect(normalizeEvent(event)?.type).toBe('aside_answered')
+    expect(normalizeEvent({ ...event, answer: 3 })).toBeNull()
+  })
+})
+
 describe('feedReducer', () => {
   it('handles call lifecycle and tracks deal updates', () => {
     let state: FeedState = initialFeed

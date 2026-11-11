@@ -249,7 +249,8 @@ class AskGoneTest {
         JsonNode request = llm.requests().get(requests);
         assertThat(system(request)).contains("The asker is the farmer");
         JsonNode view = input(request).path("call");
-        assertThat(view.path("deal").path("priceRupees").asInt()).isEqualTo(4000);
+        assertThat(view.path("deal").path("priceRupees").toString()).as("plain, never 4E+3").isEqualTo("4000");
+        assertThat(view.path("deal").path("pricePerKgRupees").toString()).isEqualTo("40");
         assertThat(view.path("deal").path("estimatedValueRupees").asInt()).isEqualTo(80000);
         assertThat(view.path("marketReference").path("source").asText()).contains("AGMARKNET");
         assertThat(view.path("otherParty").path("name").asText()).isEqualTo("Mehta Agro Traders");

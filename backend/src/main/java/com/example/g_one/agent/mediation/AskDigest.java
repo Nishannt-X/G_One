@@ -2,6 +2,7 @@ package com.example.g_one.agent.mediation;
 
 import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
+import com.example.g_one.agent.llm.SpokenNumbers;
 import com.example.g_one.core.LegRole;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -51,7 +52,7 @@ final class AskDigest {
 
     /** What the farmer may be told: also who the buyer is and the dated market reference. */
     static ObjectNode farmerView(DealDesk.Card card, String crop, Buyer buyer, Reference reference,
-                                 List<CallLedger.Line> farmerLeg) {
+                                 List<CallLedger.Line> farmerLeg, String code) {
         ObjectNode root = JsonNodeFactory.instance.objectNode();
         root.put("you", "farmer");
         ObjectNode other = root.putObject("otherParty");
@@ -68,10 +69,15 @@ final class AskDigest {
             r.put("market", reference.market());
             r.put("crop", reference.crop());
             if (reference.variety() != null) r.put("variety", reference.variety());
-            r.put("price", reference.price());
+            r.put("price", plain(reference.price()));
             r.put("unit", reference.unit());
             r.put("date", reference.date().toString());
+            r.put("dateSpoken", SpokenNumbers.date(reference.date(), code));
             r.put("note", "a dated public reference, not today's rate");
+            BigDecimal offer = perQuintal(card);
+            if (offer != null && "quintal".equals(Offer.unit(reference.unit()))) {
+                r.put("offerMinusReferenceRupeesPerQuintal", plain(offer.subtract(reference.price())));
+            }
         }
         lines(root, farmerLeg, LegRole.BUYER);
         return root;
@@ -85,14 +91,16 @@ final class AskDigest {
         if (card.variety() != null) d.put("variety", card.variety());
         if (card.market() != null) d.put("market", card.market());
         if (card.hasPrice()) {
-            d.put("priceRupees", card.price());
+            d.put("priceRupees", plain(card.price()));
             d.put("perUnit", card.unit());
+            BigDecimal kg = perKg(card);
+            if (kg != null && !"kg".equals(Offer.unit(card.unit()))) d.put("pricePerKgRupees", plain(kg));
         }
         if (card.quantity() != null) d.put("quantity", card.quantity());
         if (card.pickup() != null) d.put("pickup", card.pickup());
         if (card.payment() != null) d.put("payment", card.payment());
         BigDecimal value = estimatedValue(card);
-        if (value != null) d.put("estimatedValueRupees", value);
+        if (value != null) d.put("estimatedValueRupees", plain(value));
         d.put("farmerConfirmed", card.farmerYes());
         d.put("buyerConfirmed", card.buyerYes());
         ArrayNode missing = root.putArray("notYetAgreed");
@@ -131,6 +139,24 @@ final class AskDigest {
         BigDecimal amount = new BigDecimal(m.group(1));
         return amount.multiply(BigDecimal.valueOf(quantityKg)).multiply(card.price())
                 .divide(BigDecimal.valueOf(priceKg), 0, RoundingMode.HALF_UP);
+    }
+
+    /** The price per kilo, for a party who thinks in kilos; null when the unit does not convert. */
+    static BigDecimal perKg(DealDesk.Card card) {
+        Integer kg = card.unit() == null ? null : KG.get(Offer.unit(card.unit()));
+        if (!card.hasPrice() || kg == null) return null;
+        return card.price().divide(BigDecimal.valueOf(kg), 2, RoundingMode.HALF_UP).stripTrailingZeros();
+    }
+
+    /** "4000", never "4E+3": the model and the number check read the figure as written. */
+    static BigDecimal plain(BigDecimal v) {
+        BigDecimal t = v.stripTrailingZeros();
+        return t.scale() < 0 ? t.setScale(0) : t;
+    }
+
+    private static BigDecimal perQuintal(DealDesk.Card card) {
+        BigDecimal kg = perKg(card);
+        return kg == null ? null : kg.multiply(BigDecimal.valueOf(100)).stripTrailingZeros();
     }
 
     private static void lines(ObjectNode root, List<CallLedger.Line> leg, LegRole other) {

@@ -26,13 +26,15 @@ class AskGoneUnitTest {
         String buyer = AskDigest.buyerView(CARD, "Onion", null, ledger.lines(LegRole.BUYER)).toString();
         String farmer = AskDigest.farmerView(CARD, "Onion", new AskDigest.Buyer("Mehta Agro Traders", "trader", "Pune"),
                 new AskDigest.Reference("AGMARKNET", "Nashik", "Onion", "Red", new BigDecimal("3500"), "quintal",
-                        LocalDate.of(2026, 11, 4)), ledger.lines(LegRole.FARMER)).toString();
+                        LocalDate.of(2026, 11, 4)), ledger.lines(LegRole.FARMER), "hi-IN").toString();
 
         assertThat(buyer).contains("I have twenty quintals").doesNotContain("PRIVATE").doesNotContain("3900")
                 .doesNotContain("farmer-only").doesNotContain("bees quintal").doesNotContain("marketReference")
                 .doesNotContain("Pune");
         assertThat(farmer).contains("PRIVATE").contains("3900").contains("bees quintal").contains("marketReference")
-                .contains("Mehta Agro Traders").doesNotContain("I have twenty quintals");
+                .contains("Mehta Agro Traders").doesNotContain("I have twenty quintals")
+                .contains("\"dateSpoken\":\"चार नवंबर\"").contains("\"offerMinusReferenceRupeesPerQuintal\":500")
+                .contains("\"pricePerKgRupees\":40");
     }
 
     @Test

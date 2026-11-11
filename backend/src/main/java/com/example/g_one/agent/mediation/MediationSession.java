@@ -535,7 +535,8 @@ public final class MediationSession {
         if (asker == LegRole.BUYER) return AskDigest.buyerView(card, crop, farmerName, ledger.lines(LegRole.BUYER));
         AskDigest.Buyer who = request == null ? null
                 : new AskDigest.Buyer(request.buyer().name(), request.buyer().type(), request.buyer().district());
-        return AskDigest.farmerView(card, crop, who, reference(card, crop), ledger.lines(LegRole.FARMER));
+        return AskDigest.farmerView(card, crop, who, reference(card, crop), ledger.lines(LegRole.FARMER),
+                language(LegRole.FARMER).code());
     }
 
     /** The dated market reference for the crop in play, or null. A local lookup: no network, no model. */

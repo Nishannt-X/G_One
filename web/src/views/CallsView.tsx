@@ -20,7 +20,6 @@ import {
 } from '../lib/analytics'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
 import { duration, languageLabel, millis, rupees } from '../lib/format'
-import { useI18n } from '../lib/i18n'
 import { ArrowIcon, LockIcon, TrashIcon } from '../ui/icons'
 import { Card, Dialog, Empty, ErrorNote, Skeleton } from '../ui/parts'
 
@@ -206,7 +205,6 @@ export function KeyPointsCard({ record }: { record: CallRecordView }) {
 
 /** One stored call, on the same cards as the live call, without the conversation. */
 export function CallDetail({ record, onDelete, receipt = false }: { record: CallRecordView; onDelete?: () => void; receipt?: boolean }) {
-  const { t } = useI18n()
   const call = toCallView(record, { receipt })
   const [confirm, setConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -215,7 +213,7 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <a href="#/analytics/calls" className="btn-quiet btn-sm"><ArrowIcon className="rotate-180" /> All stored calls</a>
-        <h2 className="text-xl font-bold"><span className="font-mono">{callCode(record.callId)}</span> <span className="text-base font-semibold text-muted">{t('call_stored')}</span></h2>
+        <h2 className="text-xl font-bold"><span className="font-mono">{callCode(record.callId)}</span></h2>
         <button type="button" className="min-w-0 font-mono text-sm break-all text-faint underline-offset-4 hover:underline" title="Copy the full call id" onClick={() => { void navigator.clipboard?.writeText(record.callId).then(() => setCopied(true)) }}>
           {record.callId}{copied ? ' (copied)' : ''}
         </button>

@@ -5,6 +5,7 @@ import { duration, languageLabel } from '../lib/format'
 import { useStickToBottom } from '../lib/useStickToBottom'
 import { CheckIcon, ChevronIcon, CrossIcon, LanguageIcon, LockIcon, MemoryIcon, SearchIcon, StoreIcon } from '../ui/icons'
 import { sampleGloss } from './gloss'
+import { notPassedOn } from './notPassedOn'
 import { savedGistText, type SavedGist } from './savedGist'
 import { toolNote } from './toolNote'
 import { Avatar } from './parts'
@@ -57,6 +58,7 @@ function Turn({ call, item }: { call: CallView; item: Extract<TimelineItem, { ki
   const other = item.role === 'farmer' ? 'buyer' : 'farmer'
   const listening = call.legs.some((l) => l.role === other && !l.ended)
   const gloss = call.origin !== 'feed' && !translation ? sampleGloss(item.text) : null
+  const kept = notPassedOn(call.items, item.key, translation !== undefined)
   const right = item.role === 'buyer'
   return (
     <div className={`animate-rise flex gap-3 ${right ? 'flex-row-reverse pl-8 lg:ml-auto lg:w-1/2 lg:pl-8' : 'pr-8 lg:w-1/2 lg:pr-8'}`}>
@@ -70,6 +72,8 @@ function Turn({ call, item }: { call: CallView; item: Extract<TimelineItem, { ki
           </p>
         ) : gloss ? (
           <p lang={gloss.lang} className="mt-1.5 border-t border-ink/10 pt-1.5 text-[1.0625rem] leading-snug text-muted">{gloss.text}</p>
+        ) : kept ? (
+          <p className="mt-1.5 border-t border-ink/10 pt-1.5 text-sm font-semibold text-muted">Not passed on to the {other}</p>
         ) : listening && isOther(item.language, item.text) && !call.ended ? (
           <p className="animate-shimmer mt-1.5 border-t border-ink/10 pt-1.5 text-[1.0625rem] leading-snug text-muted">Translating…</p>
         ) : null}

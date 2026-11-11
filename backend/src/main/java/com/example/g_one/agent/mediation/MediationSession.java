@@ -17,6 +17,7 @@ import com.example.g_one.agent.tools.mandi.MandiAnswer;
 import com.example.g_one.agent.tools.mandi.MandiCatalog;
 import com.example.g_one.agent.tools.mandi.MandiQuote;
 import com.example.g_one.agent.tools.mandi.MandiSnapshot;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.example.g_one.core.AudioFrame;
 import com.example.g_one.core.CallContext;
 import com.example.g_one.core.CallId;
@@ -104,10 +105,15 @@ public final class MediationSession {
     private String buyerEndReason = "hangup";
     private BigDecimal lastWhispered;
     private SttSession buyerSession;
+    /** Answers a party who speaks to G-One directly. */
+    private final AskGone ask;
+    /** What each leg said and heard, for those answers. Each party's view reads only their own leg. */
+    private final CallLedger ledger = new CallLedger();
 
     MediationSession(CallContext farmer, MediationEngine.FarmerSide side, Leg buyer, SpeechToText stt, TextToSpeech tts,
                      Executor executor, TurnReader reader, MediationLines lines, MandiQuote mandi, MandiCatalog catalog,
-                     ConnectRequest request, String farmerName, ConsoleBus bus, Language.Registry languages, Clock clock) {
+                     ConnectRequest request, String farmerName, ConsoleBus bus, Language.Registry languages, Clock clock,
+                     AskGone ask) {
         this.farmer = farmer;
         this.callId = farmer.callId();
         this.side = side;
@@ -123,6 +129,7 @@ public final class MediationSession {
         this.bus = bus;
         this.languages = languages;
         this.clock = clock;
+        this.ask = ask;
         this.farmerVoice = new LegVoice(farmer.farmerLeg(), tts);
         this.buyerVoice = new LegVoice(buyer, tts);
         this.desk = new DealDesk(callId, clock, bus, new DeskOutput(), request == null ? null : request.quantity());
@@ -412,12 +419,23 @@ public final class MediationSession {
             return; // never sent to the model, and never translated for the buyer
         }
 
+        // A yes or no to a pending question is an answer to the deal, never a question for the assistant.
+        boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
+        if (!replying && AddressDetector.addressed(turn.text())) {
+            aside(turn, "name");
+            return; // called by name: answered without reading or translating the turn, so one model call in all
+        }
+
         TurnReader.Reading read = reader.read(speaker, turn.text(), language(speaker), to, recent(),
                 awaiting.map(a -> a.name().toLowerCase(Locale.ROOT)).orElse("none"));
 
         Set<Caution> cautions = EnumSet.noneOf(Caution.class);
         cautions.addAll(ScamPatterns.supported(read.cautions(), turn.text()));
         if (speaker == LegRole.BUYER) cautions.addAll(ScamPatterns.buyer(turn.text()));
+        if (!replying && cautions.isEmpty() && read.addressed()) {
+            aside(turn, "model");
+            return; // spoken to the assistant without its name: never translated, remembered or read as deal terms
+        }
         // A line that earned a caution stays out of the context, so it cannot colour how the next turn is read.
         if (cautions.isEmpty()) remember(turn.text());
 
@@ -479,10 +497,63 @@ public final class MediationSession {
     private void translate(Turn turn, LegRole listener, Language to, String spoken) {
         Leg target = listener == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(listener).say(new LegVoice.Line(spoken, to, false, null));
+        ledger.relayed(turn.role(), ScamPatterns.masked(turn.text()), spoken);
         bus.publish(new ConsoleEvent.TurnTranslated(callId, clock.millis(), turn.legId(), turn.role(), listener,
                 turn.language().code(), to.code(), spoken, turn.startedMs()));
         side.note(Speaker.ASSISTANT, spoken);
         log.debug("Translated a turn for leg {}", target.id());
+    }
+
+    // ---- a question to G-One: answered on the asker's leg only ----
+
+    /**
+     * Answers a turn spoken to the assistant. Nothing of it reaches the other party: no translation, no line on their
+     * leg, no deal terms, no place in the turn context. The answer queues on the asker's own voice behind whatever that
+     * leg is hearing, unprotected so the asker can interrupt it; the other leg is never touched.
+     */
+    private void aside(Turn turn, String detectedBy) {
+        LegRole asker = turn.role();
+        Language lang = language(asker);
+        long started = clock.millis();
+        DealDesk.Card card = desk.card();
+        AskGone.Answer answer = ask.answer(asker, turn.text(), lang, digest(asker, card), card);
+        String text = withoutThinking(answer.text());
+        if (text == null) text = AskLines.fromCard(card, lang.code());
+        ledger.aside(asker, ScamPatterns.masked(turn.text()), text);
+        Leg leg = asker == LegRole.FARMER ? farmer.farmerLeg() : buyer;
+        voice(asker).say(new LegVoice.Line(text, lang, false, null));
+        bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), asker, lang.code(), text));
+        side.note(Speaker.ASSISTANT, text);
+        log.info("ask_gone call={} asker={} detected={} source={} ms={}", callId, asker.wire(), detectedBy,
+                answer.source(), clock.millis() - started);
+    }
+
+    /** The asker's whitelisted view of the call: the buyer's never holds a whisper, the market reference or memory. */
+    private ObjectNode digest(LegRole asker, DealDesk.Card card) {
+        String crop = request == null || request.commodity() == null ? null
+                : catalog.commodity(request.commodity()).orElse(request.commodity());
+        if (asker == LegRole.BUYER) return AskDigest.buyerView(card, crop, farmerName, ledger.lines(LegRole.BUYER));
+        AskDigest.Buyer who = request == null ? null
+                : new AskDigest.Buyer(request.buyer().name(), request.buyer().type(), request.buyer().district());
+        return AskDigest.farmerView(card, crop, who, reference(card, crop), ledger.lines(LegRole.FARMER),
+                language(LegRole.FARMER).code());
+    }
+
+    /** The dated market reference for the crop in play, or null. A local lookup: no network, no model. */
+    private AskDigest.Reference reference(DealDesk.Card card, String crop) {
+        String commodity = card.commodity() != null ? card.commodity() : crop;
+        if (commodity == null) return null;
+        try {
+            if (mandi.quote(commodity, card.market()) instanceof MandiAnswer.Found found
+                    && "INR".equals(found.snapshot().currency())) {
+                MandiSnapshot s = found.snapshot();
+                return new AskDigest.Reference(s.sourceName(), s.market(), s.commodity(), s.variety(), s.price(), s.unit(),
+                        s.priceDate());
+            }
+        } catch (RuntimeException e) {
+            log.warn("Mandi lookup failed on call {} ({})", callId, e.getClass().getSimpleName());
+        }
+        return null;
     }
 
     // ---- whispers: the farmer's voice only ----
@@ -507,6 +578,7 @@ public final class MediationSession {
         Language spoken = language(LegRole.FARMER);
         String text = rendered(line, spoken);
         farmerVoice.say(new LegVoice.Line(text, spoken, isProtected, null));
+        ledger.whisper(text);
         bus.publish(new ConsoleEvent.WhisperSent(callId, clock.millis(), farmer.farmerLeg().id(), kind, spoken.code(), text));
     }
 
@@ -570,8 +642,9 @@ public final class MediationSession {
         @Override
         public void readback(LegRole role, Terms terms, Consumer<Boolean> played) {
             Language lang = language(role);
-            voice(role).say(new LegVoice.Line(readbackText(terms, lang), lang, true,
-                    outcome -> played.accept(outcome == PlaybackOutcome.PLAYED)));
+            String text = readbackText(terms, lang);
+            voice(role).say(new LegVoice.Line(text, lang, true, outcome -> played.accept(outcome == PlaybackOutcome.PLAYED)));
+            ledger.assistant(role, text);
         }
 
         @Override
@@ -706,6 +779,7 @@ public final class MediationSession {
         Language lang = language(role);
         Leg leg = role == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(role).say(new LegVoice.Line(text, lang, false, done));
+        ledger.assistant(role, text);
         bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), role, lang.code(), text));
         side.note(Speaker.ASSISTANT, text);
     }
@@ -717,6 +791,7 @@ public final class MediationSession {
         Language lang = language(role);
         Leg leg = role == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(role).say(new LegVoice.Line(text, lang, isProtected, done));
+        ledger.assistant(role, text);
         bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), role, lang.code(), text));
         side.note(Speaker.ASSISTANT, text);
     }
@@ -725,6 +800,7 @@ public final class MediationSession {
     private void sayFixed(LegRole role, String text, Language language) {
         Leg leg = role == LegRole.FARMER ? farmer.farmerLeg() : buyer;
         voice(role).say(new LegVoice.Line(text, language, false, null));
+        ledger.assistant(role, text);
         bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), leg.id(), role, language.code(), text));
         side.note(Speaker.ASSISTANT, text);
     }

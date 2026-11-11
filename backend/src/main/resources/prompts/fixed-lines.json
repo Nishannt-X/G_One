@@ -1,6 +1,6 @@
 {
-  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). No line tells the caller about memory or forget me; whether to remember a call is asked at its end. howCanIHelp follows the language confirmation for a new or withheld caller so the line is never silent. Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words. askEnd, askSave and carryOn are the end-of-call check (agent/closing): asked of every party still on the call, each answered with yes or no; askSave says main points, never a recording.",
-  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack and howCanIHelp, askEnd, askSave and carryOn lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json.",
+  "_comment": "Fixed lines the assistant speaks without the language model, from docs/call-flow.md and docs/memory.md (variant B, dial-in). Keyed by Gnani locale code; a code with no entry uses the entry with the same language prefix, then en-IN (logged). No line tells the caller about memory or forget me; whether to remember a call is asked at its end. howCanIHelp follows the language confirmation for a new or withheld caller so the line is never silent. Every language in g-one.languages has an entry (FixedLinesCoverageTest). welcome is spoken only on a call that starts in a fixed language; after the English-first language question it is skipped, because the opener already introduced G-One. {name} is the name the farmer gave on an earlier call. The assistant voice is female, so Hindi lines use feminine verb forms. No digits: Timbre reads numbers better as words. askEnd, askSave and carryOn are the end-of-call check (agent/closing): asked of every party still on the call, each answered with yes or no; askSave says main points, never a recording. askQuantity, askNoQuantity, askPrice, askNoPrice and askNoLimits answer a party who speaks to G-One directly during mediation (agent/mediation/AskGone): the first four are the answer when the language model fails, read from the deal so far ({quantity}, {price} and {unit} filled in as words); askNoLimits is the buyer asking for the farmer's lowest price or limits, answered without the model.",
+  "_review": "The ta-IN, kn-IN, bn-IN and bn-en lines (and their welcomeBack and howCanIHelp, askEnd, askSave and carryOn lines) are machine-authored and have not been checked by a native speaker. They need native-speaker review before a demo. Hinglish and Benglish are written in the native script with English words, as in local-replies.json. The askQuantity, askNoQuantity, askPrice, askNoPrice and askNoLimits lines in ta-IN, kn-IN, bn-IN, bn-en and hi-en are machine-authored too and need the same review.",
   "lines": {
     "hi-IN": {
       "welcome": "नमस्ते, जी-वन में आपका स्वागत है। मैं एक AI सहायक हूँ।",
@@ -11,7 +11,12 @@
       "goodbye": "धन्यवाद। नमस्ते।",
       "askEnd": "क्या आप कॉल ख़त्म करना चाहेंगे? कृपया हाँ या ना कहिए।",
       "askSave": "क्या हम आगे के लिए इस बातचीत की मुख्य बातें याद रख सकते हैं? कृपया हाँ या ना कहिए।",
-      "carryOn": "ठीक है, बात जारी रखते हैं। और क्या मदद करूँ?"
+      "carryOn": "ठीक है, बात जारी रखते हैं। और क्या मदद करूँ?",
+      "askQuantity": "इस कॉल पर अब तक मात्रा {quantity} बताई गई है।",
+      "askNoQuantity": "इस कॉल पर अभी तक मात्रा नहीं बताई गई है।",
+      "askPrice": "अब तक {price} रुपये प्रति {unit} का भाव बोला गया है।",
+      "askNoPrice": "इस कॉल पर अभी तक कोई भाव तय नहीं बोला गया है।",
+      "askNoLimits": "माफ़ कीजिए, मैं किसी भी पक्ष की सीमा या निजी बात नहीं बताती। आप चाहें तो अपना भाव बोलिए, मैं उसे आगे पहुँचा दूँगी।"
     },
     "en-IN": {
       "welcome": "Welcome to G-One. I'm an AI assistant.",
@@ -22,7 +27,12 @@
       "goodbye": "Thank you. Goodbye.",
       "askEnd": "Would you like to end the call? Please say yes or no.",
       "askSave": "Is it okay for us to remember the main points of this conversation for future reference? Please say yes or no.",
-      "carryOn": "Okay, let's continue. How else can I help?"
+      "carryOn": "Okay, let's continue. How else can I help?",
+      "askQuantity": "The quantity said on this call so far is {quantity}.",
+      "askNoQuantity": "No quantity has been said on this call yet.",
+      "askPrice": "The price said so far is {price} rupees per {unit}.",
+      "askNoPrice": "No price has been offered on this call yet.",
+      "askNoLimits": "Sorry, I do not share either side's limits or private details. If you like, propose a price and I will pass it on."
     },
     "hi-en": {
       "welcome": "नमस्ते, जी-वन में आपका welcome है। मैं एक AI assistant हूँ।",
@@ -33,7 +43,12 @@
       "goodbye": "Thank you. नमस्ते।",
       "askEnd": "क्या आप call end करना चाहेंगे? Please हाँ या ना कहिए।",
       "askSave": "क्या हम future reference के लिए इस बातचीत की main बातें याद रख सकते हैं? Please हाँ या ना कहिए।",
-      "carryOn": "ठीक है, continue करते हैं। और क्या help करूँ?"
+      "carryOn": "ठीक है, continue करते हैं। और क्या help करूँ?",
+      "askQuantity": "इस call पर अब तक quantity {quantity} बताई गई है।",
+      "askNoQuantity": "इस call पर अभी तक quantity नहीं बताई गई है।",
+      "askPrice": "अब तक {price} रुपये per {unit} का rate बोला गया है।",
+      "askNoPrice": "इस call पर अभी तक कोई rate offer नहीं हुआ है।",
+      "askNoLimits": "Sorry, मैं किसी भी side की limit या private बात share नहीं करती। आप चाहें तो अपना rate बोलिए, मैं उसे आगे pass कर दूँगी।"
     },
     "bn-IN": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে স্বাগত। আমি একজন এআই সহায়ক।",
@@ -44,7 +59,12 @@
       "goodbye": "ধন্যবাদ। নমস্কার।",
       "askEnd": "আপনি কি কলটা শেষ করতে চান? দয়া করে হ্যাঁ বা না বলুন।",
       "askSave": "ভবিষ্যতের জন্য আমরা কি এই কথাবার্তার মূল কথাগুলো মনে রাখতে পারি? দয়া করে হ্যাঁ বা না বলুন।",
-      "carryOn": "ঠিক আছে, কথা চালিয়ে যাই। আর কী সাহায্য করব?"
+      "carryOn": "ঠিক আছে, কথা চালিয়ে যাই। আর কী সাহায্য করব?",
+      "askQuantity": "এই কলে এখন পর্যন্ত পরিমাণ বলা হয়েছে {quantity}।",
+      "askNoQuantity": "এই কলে এখনও পরিমাণ বলা হয়নি।",
+      "askPrice": "এখন পর্যন্ত দাম বলা হয়েছে প্রতি {unit} {price} টাকা।",
+      "askNoPrice": "এই কলে এখনও কোনো দাম বলা হয়নি।",
+      "askNoLimits": "দুঃখিত, আমি কোনো পক্ষের সীমা বা ব্যক্তিগত কথা জানাই না। চাইলে আপনার দাম বলুন, আমি সেটা পৌঁছে দেব।"
     },
     "bn-en": {
       "welcome": "নমস্কার, জি-ওয়ানে আপনাকে welcome। আমি একটা AI assistant।",
@@ -55,7 +75,12 @@
       "goodbye": "Thank you। নমস্কার।",
       "askEnd": "আপনি কি call-টা end করতে চান? Please হ্যাঁ বা না বলুন।",
       "askSave": "Future reference-এর জন্য আমরা কি এই কথাবার্তার main কথাগুলো মনে রাখতে পারি? Please হ্যাঁ বা না বলুন।",
-      "carryOn": "ঠিক আছে, continue করি। আর কী help করব?"
+      "carryOn": "ঠিক আছে, continue করি। আর কী help করব?",
+      "askQuantity": "এই call-এ এখন পর্যন্ত quantity বলা হয়েছে {quantity}।",
+      "askNoQuantity": "এই call-এ এখনও quantity বলা হয়নি।",
+      "askPrice": "এখন পর্যন্ত rate বলা হয়েছে per {unit} {price} টাকা।",
+      "askNoPrice": "এই call-এ এখনও কোনো rate offer হয়নি।",
+      "askNoLimits": "Sorry, আমি কোনো side-এর limit বা private কথা share করি না। চাইলে আপনার rate বলুন, আমি সেটা pass করে দেব।"
     },
     "ta-IN": {
       "welcome": "வணக்கம், ஜி-ஒன் உங்களை வரவேற்கிறது. நான் ஒரு AI உதவியாளர்.",
@@ -66,7 +91,12 @@
       "goodbye": "நன்றி. வணக்கம்.",
       "askEnd": "அழைப்பை முடிக்க விரும்புகிறீர்களா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்.",
       "askSave": "எதிர்காலத்துக்காக இந்த உரையாடலின் முக்கிய விஷயங்களை நாங்கள் நினைவில் வைத்துக்கொள்ளலாமா? ஆம் அல்லது இல்லை என்று சொல்லுங்கள்.",
-      "carryOn": "சரி, தொடரலாம். வேறு என்ன உதவி வேண்டும்?"
+      "carryOn": "சரி, தொடரலாம். வேறு என்ன உதவி வேண்டும்?",
+      "askQuantity": "இந்த அழைப்பில் இதுவரை சொல்லப்பட்ட அளவு {quantity}.",
+      "askNoQuantity": "இந்த அழைப்பில் இன்னும் அளவு சொல்லப்படவில்லை.",
+      "askPrice": "இதுவரை சொல்லப்பட்ட விலை ஒரு {unit}க்கு {price} ரூபாய்.",
+      "askNoPrice": "இந்த அழைப்பில் இன்னும் விலை எதுவும் சொல்லப்படவில்லை.",
+      "askNoLimits": "மன்னிக்கவும், எந்தப் பக்கத்தின் வரம்பையோ தனிப்பட்ட விஷயத்தையோ நான் பகிர்வதில்லை. விரும்பினால் உங்கள் விலையைச் சொல்லுங்கள், நான் அதைத் தெரிவிக்கிறேன்."
     },
     "kn-IN": {
       "welcome": "ನಮಸ್ಕಾರ, ಇದು ಜಿ-ಒನ್. ನಿಮಗೆ ಸ್ವಾಗತ. ನಾನು ಒಬ್ಬ AI ಸಹಾಯಕಿ.",
@@ -77,7 +107,12 @@
       "goodbye": "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.",
       "askEnd": "ಕರೆಯನ್ನು ಮುಗಿಸಲು ಬಯಸುತ್ತೀರಾ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
       "askSave": "ಮುಂದಿನ ಉಪಯೋಗಕ್ಕಾಗಿ ಈ ಮಾತುಕತೆಯ ಮುಖ್ಯ ಅಂಶಗಳನ್ನು ನಾವು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದೇ? ದಯವಿಟ್ಟು ಹೌದು ಅಥವಾ ಇಲ್ಲ ಎಂದು ಹೇಳಿ.",
-      "carryOn": "ಸರಿ, ಮುಂದುವರಿಯೋಣ. ಬೇರೆ ಏನು ಸಹಾಯ ಬೇಕು?"
+      "carryOn": "ಸರಿ, ಮುಂದುವರಿಯೋಣ. ಬೇರೆ ಏನು ಸಹಾಯ ಬೇಕು?",
+      "askQuantity": "ಈ ಕರೆಯಲ್ಲಿ ಇದುವರೆಗೆ ಹೇಳಿದ ಪ್ರಮಾಣ {quantity}.",
+      "askNoQuantity": "ಈ ಕರೆಯಲ್ಲಿ ಇನ್ನೂ ಪ್ರಮಾಣ ಹೇಳಿಲ್ಲ.",
+      "askPrice": "ಇದುವರೆಗೆ ಹೇಳಿದ ಬೆಲೆ ಪ್ರತಿ {unit}ಗೆ {price} ರೂಪಾಯಿ.",
+      "askNoPrice": "ಈ ಕರೆಯಲ್ಲಿ ಇನ್ನೂ ಯಾವುದೇ ಬೆಲೆ ಹೇಳಿಲ್ಲ.",
+      "askNoLimits": "ಕ್ಷಮಿಸಿ, ನಾನು ಯಾವುದೇ ಕಡೆಯ ಮಿತಿ ಅಥವಾ ಖಾಸಗಿ ವಿಷಯ ಹಂಚಿಕೊಳ್ಳುವುದಿಲ್ಲ. ಬೇಕಿದ್ದರೆ ನಿಮ್ಮ ಬೆಲೆ ಹೇಳಿ, ನಾನು ಅದನ್ನು ತಲುಪಿಸುತ್ತೇನೆ."
     }
   },
   "_welcomeBackComment": "Spoken right after a returning farmer says yes to the name check, with no model (agent/brain/WelcomeBack). {name} is the remembered name. open: the newest open follow-up, read back as {item} exactly as stored (English, as the summarizer writes it); it says earlier, never last time, and never claims a deal was agreed, because memory holds no confirmed-deal record. openLong: an open item too long to read back whole (WelcomeBack.MAX_ITEM_CHARS), mentioned without its words, never cut. crop: no open item but a remembered crop ({crop}; Hindi lines use the Hindi crop word when one is known). plain: nothing to mention.",

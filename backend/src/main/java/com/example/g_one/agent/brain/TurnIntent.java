@@ -41,7 +41,9 @@ public final class TurnIntent {
             + "|নমস্কার|হ্যালো|আদাব|nomoskar)( जी| ji)?( .{0,20})?$");
     private static final Pattern THANKS = Pattern.compile("धन्यवाद|शुक्रिया|thanks|thank you|dhanyavaad|dhanyavad|shukriya|ধন্যবাদ|dhonnobad");
     private static final Pattern BYE = Pattern.compile(
-            "अलविदा|बाय|फोन रख|रखता हूँ|रखती हूँ|बस इतना|bye|goodbye|phone rakh|rakhta hu|rakhti hu|bas itna|that'?s all|বিদায়|রাখছি|rakhchi");
+            "अलविदा|बाय|फोन रख|फ़ोन रख|रखता हूँ|रखती हूँ|बस इतना|बस हो गया|फिर बात करेंगे|चलता हूँ|चलती हूँ|और कुछ नहीं"
+            + "|bye|goodbye|phone rakh|rakhta hu|rakhti hu|bas itna|bas ho gaya|phir baat karenge|chalta hoon|that'?s all"
+            + "|that will be all|nothing else|talk later|বিদায়|রাখছি|rakhchi|পরে কথা হবে|போதும்|பிறகு பேசலாம்|ಸಾಕು|ಮತ್ತೆ ಮಾತಾಡೋಣ");
     private static final Pattern YES = Pattern.compile(
             "^(हाँ|हां|जी|जी हाँ|जी हां|ठीक है|बिल्कुल|yes|yeah|yep|haan|han|ha|ji|ji haan|theek hai|thik hai|ok|okay|sure"
             + "|হ্যাঁ|হাঁ|ঠিক আছে|hyan|thik ache)( जी| ji)?$");
@@ -70,7 +72,9 @@ public final class TurnIntent {
             + "|আমি (উনি|সে|ও) নই|অন্য কেউ|ভুল নম্বর|ami (uni|se) noi|onno keu|vul number"
             + "|நான் அவர் இல்லை|வேறு ஆள்|தவறான எண்|ನಾನು ಅವರಲ್ಲ|ಬೇರೆ ವ್ಯಕ್ತಿ|ತಪ್ಪು ನಂಬರ್");
     private static final Pattern FORGET = Pattern.compile(
-            "भूल जा|मिटा|forget me|delete my|bhool ja|bhul ja|mita do|ভুলে যা|মুছে|bhule ja|muche"
+            "भूल जा|मिटा|याद मत रख|मेरा डेटा हटा|मेरी जानकारी हटा|डेटा डिलीट|डिलीट कर|forget me|forget about me|forget everything"
+            + "|delete my|erase my|remove my (data|details|number|information)|don'?t remember me|bhool ja|bhul ja|mita do"
+            + "|yaad mat rakh|data delete|data hata|ভুলে যা|মুছে|মনে রাখবেন না|আমার তথ্য সরি|bhule ja|muche|mone rakhben na"
             + "|மறந்துவிடு|மறந்து விடு|ಮರೆತುಬಿಡ|ಮರೆತು ಬಿಡ");
     private static final Pattern STATED_NAME = Pattern.compile(
             "(?iu)(?:मेरा नाम|my name is|my name's|mera naam|mera nam|आमार नाम|আমার নাম|amar naam|amar nam|என் பெயர்|ನನ್ನ ಹೆಸರು)"

@@ -54,7 +54,15 @@ public final class LanguageDetector {
             Map.entry("tamil", "ta-IN"), Map.entry("tamizh", "ta-IN"), Map.entry("thamizh", "ta-IN"),
             Map.entry("தமிழ்", "ta-IN"), Map.entry("तमिल", "ta-IN"),
             Map.entry("kannada", "kn-IN"), Map.entry("kanada", "kn-IN"), Map.entry("ಕನ್ನಡ", "kn-IN"),
-            Map.entry("कन्नड़", "kn-IN"), Map.entry("कन्नड", "kn-IN")));
+            Map.entry("कन्नड़", "kn-IN"), Map.entry("कन्नड", "kn-IN"),
+            // Inflected and other spoken forms: "in Bengali", "in Tamil", "Hindustani".
+            Map.entry("hindustani", "hi-IN"), Map.entry("हिंदुस्तानी", "hi-IN"), Map.entry("हिन्दुस्तानी", "hi-IN"),
+            Map.entry("ইংরেজিতে", "en-IN"), Map.entry("বাংলায়", "bn-IN"), Map.entry("বাংলাতে", "bn-IN"),
+            Map.entry("হিন্দিতে", "hi-IN"), Map.entry("bengalee", "bn-IN"),
+            Map.entry("बंगला", "bn-IN"), Map.entry("bangala", "bn-IN"), Map.entry("তামিল", "ta-IN"),
+            Map.entry("தமிழில்", "ta-IN"), Map.entry("ஆங்கிலத்தில்", "en-IN"), Map.entry("ಕನ್ನಡದಲ್ಲಿ", "kn-IN"),
+            Map.entry("ಇಂಗ್ಲೀಷ್", "en-IN"), Map.entry("ಇಂಗ್ಲಿಷಿನಲ್ಲಿ", "en-IN"), Map.entry("ಕನ್ನಡದಲ್ಲೇ", "kn-IN"),
+            Map.entry("কন্নড়", "kn-IN"), Map.entry("inglis", "en-IN"), Map.entry("angrezee", "en-IN")));
 
     /** Words around a language's name that say nothing else ("I want to speak", "में बात करेंगे"). */
     private static final Set<String> REQUEST_WORDS = normalized(Set.of(
@@ -76,6 +84,7 @@ public final class LanguageDetector {
             "sell", "sale", "bechna", "bech", "buyer", "buyers", "khareedar", "kharidar", "weather", "mausam", "forecast",
             "wheat", "gehun", "gehu", "onion", "pyaz", "pyaaz", "tomato", "tamatar", "potato", "aloo", "rice", "paddy",
             "dhan", "cotton", "kapas", "soybean", "garlic", "lahsun", "chilli", "mirch", "maize", "makka", "mustard",
+            "bhutta", "corn", "भुट्टा", "भुट्टे", "connect", "कनेक्ट",
             "भाव", "दाम", "मंडी", "क्विंटल", "किलो", "बेचना", "बेचनी", "ख़रीदार", "खरीदार", "मौसम", "गेहूँ", "गेहूं", "प्याज़",
             "प्याज", "टमाटर", "आलू", "धान", "कपास", "सोयाबीन", "लहसुन", "मिर्च", "मक्का", "सरसों",
             "দাম", "দর", "বিক্রি", "আবহাওয়া", "পেঁয়াজ", "আলু", "ধান", "গম"));

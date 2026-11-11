@@ -8,6 +8,15 @@ export type MessageKey =
   | 'whisper'
   | 'on_the_line'
   | 'call_ended'
+  | 'call_stored'
+  | 'call_started_at'
+  | 'leg_not_stored'
+  | 'whisper_stored_note'
+  | 'whisper_stored_empty'
+  | 'memory_stored_note'
+  | 'memory_not_this_farmer'
+  | 'memory_not_stored'
+  | 'tools_result_not_kept'
   | 'ended'
   | 'calls'
   | 'deal_title'
@@ -151,6 +160,15 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     whisper: 'Private Whisper',
     on_the_line: 'Live Call',
     call_ended: 'Call Ended',
+    call_stored: 'Stored call',
+    call_started_at: 'Started {time}',
+    leg_not_stored: 'Not stored',
+    whisper_stored_note: 'Only the kind and time of each note were kept, never the words.',
+    whisper_stored_empty: 'No private advice was given on this call.',
+    memory_stored_note: 'What G-One remembered when this call began.',
+    memory_not_this_farmer: 'The caller said they were not the remembered farmer, so that memory is not attached to this call.',
+    memory_not_stored: 'Not stored: the farmer did not say yes to remembering this call.',
+    tools_result_not_kept: 'Not kept: only price lookups keep their result.',
     ended: 'Ended',
     calls: 'Calls',
     deal_title: 'Deal Card',
@@ -293,6 +311,15 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     whisper: 'निजी सलाह',
     on_the_line: 'कॉल चालू है',
     call_ended: 'कॉल समाप्त',
+    call_stored: 'सहेजी गई कॉल',
+    call_started_at: 'शुरू {time}',
+    leg_not_stored: 'सहेजा नहीं गया',
+    whisper_stored_note: 'हर सलाह का केवल प्रकार और समय रखा गया, शब्द कभी नहीं।',
+    whisper_stored_empty: 'इस कॉल में कोई निजी सलाह नहीं दी गई।',
+    memory_stored_note: 'कॉल शुरू होने पर G-One को जो याद था।',
+    memory_not_this_farmer: 'कॉल करने वाले ने कहा कि वे याद किए गए किसान नहीं हैं, इसलिए वह जानकारी इस कॉल से नहीं जोड़ी गई।',
+    memory_not_stored: 'सहेजा नहीं गया: किसान ने इस कॉल को याद रखने के लिए हाँ नहीं कहा।',
+    tools_result_not_kept: 'नहीं रखा गया: केवल भाव की जानकारी का नतीजा रखा जाता है।',
     ended: 'समाप्त',
     calls: 'कॉल्स',
     deal_title: 'सौदा पर्ची',

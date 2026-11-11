@@ -136,7 +136,8 @@ class CallRecordRulesTest {
             assertThat(r.outcome()).isEqualTo("agreed");
         } else {
             assertThat(data.get("deal").isNull()).isTrue();
-            assertThat(r.outcome()).isEqualTo("no_terms");
+            // A price lookup with no buyer is an information-only call.
+            assertThat(r.outcome()).isEqualTo("info_only");
         }
         assertThat(r.durationMs()).isEqualTo(7000);
         if (keepFarmer) {

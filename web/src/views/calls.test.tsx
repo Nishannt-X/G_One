@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { callCode, filterCalls, languagesOf, NO_FILTER, tabOf, toCallView, type CallRecordView, type CallSummary } from '../lib/analytics'
+import { callCode, filterCalls, keyPoints, languagesOf, NO_FILTER, tabOf, toCallView, type CallRecordView, type CallSummary } from '../lib/analytics'
 import { CallDetail, CallsTable, KpiStrip } from './CallsView'
 
 // Synthetic records only.
@@ -82,7 +82,7 @@ describe('the Calls list', () => {
     expect(html).toContain(callCode('call-synthetic-1'))
     expect(html).toContain('title="call-synthetic-1"')
     expect(html).toContain('href="#/analytics/calls?id=call-synthetic-1"')
-    expect(html).toContain('Terms agreed')
+    expect(html).toContain('Deal agreed')
     expect(html).toContain('Farmer: Yes')
     expect(html).toContain('Buyer: No')
     expect(html).toContain('onion')
@@ -96,28 +96,113 @@ describe('the Calls list', () => {
   })
 })
 
+/** A version 2 record: everything the stored view can show. */
+function fullRecord(over: Partial<CallRecordView['data']> = {}): CallRecordView {
+  const base = record()
+  const farmer = base.data.farmer!
+  return {
+    ...base,
+    endReason: 'deal_agreed',
+    schemaVersion: 2,
+    data: {
+      ...base.data,
+      deal: { ...base.data.deal!, variety: 'Red', pickup: 'Friday at the farm, cash on pickup', readback: true, stateTimes: { draft: T0 + 4000, readback: T0 + 5000, agreed: T0 + 7000 }, farmerYesMs: T0 + 6000, buyerYesMs: T0 + 7000 },
+      price: { reference: 'Agmarknet listed 2,150 rupees per quintal for onion at Lasalgaon on 2026-11-01.', atMs: T0 + 2000 },
+      farmer: {
+        ...farmer,
+        firstLanguage: 'auto',
+        endedMs: T0 + 60_000,
+        endReason: 'assistant_hangup',
+        languageChanges: [{ from: 'auto', to: 'hi-IN', reason: 'detected', atMs: T0 + 900 }],
+        latency: { turns: 1, transcript: 400, translation: 400 },
+        identity: 'confirmed',
+        memory: { ...farmer.memory!, gists: [{ callId: 'old', startedMs: T0 - 86_400_000, endedMs: T0 - 86_000_000, summary: 'Asked about onion prices.', followUps: ['Call back with a buyer'] }] },
+      },
+      buyer: { ...base.data.buyer!, firstLanguage: 'ta-IN', endedMs: T0 + 50_000, languageChanges: [{ from: 'ta-IN', to: 'en-IN', reason: 'named', atMs: T0 + 5500 }], match: { buyerId: 'buyer-synthetic-7', name: 'Sharma Traders' } },
+      ...over,
+    },
+  }
+}
+
 describe('a stored call', () => {
-  it('becomes a call view with no conversation', () => {
+  it('becomes a stored call view with no words anywhere', () => {
     const view = toCallView(record())
-    expect(view.items).toEqual([])
+    expect(view.origin).toBe('stored')
     expect(view.translations).toEqual({})
+    expect(view.items.every((item) => item.text === '')).toBe(true)
+    expect(view.items.map((item) => item.kind)).toEqual(['turn', 'whisper', 'turn'])
     expect(view.legs.map((l) => l.role)).toEqual(['farmer', 'buyer'])
     expect(view.timings).toHaveLength(2)
-    expect(view.tools[1].result).toBe('Not stored')
+    expect(view.tools[1].result).toBe('')
     expect(view.memory?.callerKey).toBe('')
+    expect(view.recorded?.receipt).toBe(false)
   })
 
-  it('shows the cards but never subtitles or advice text, and explains what is missing', () => {
+  it('uses the stored leg end times, and the price reference kept with any record', () => {
+    const view = toCallView(fullRecord({ farmer: null, notStored: { farmer: 'said_no' } }), { receipt: true })
+    expect(view.legs.map((l) => l.ended?.atMs)).toEqual([T0 + 50_000])
+    expect(view.recorded?.priceReference).toContain('2,150 rupees per quintal')
+    expect(view.recorded?.receipt).toBe(true)
+  })
+
+  it('shows every live card except the subtitles, as a stored call', () => {
+    const html = renderToStaticMarkup(<CallDetail record={fullRecord()} receipt onDelete={() => {}} />)
+    for (const section of ['Stored call', 'Started ', 'Deal Agreed: Both farmer and buyer', 'Private Whisper', 'Deal Card', 'Price Comparison', 'Turn Latency', 'Farmer Memory', 'AI Tools', 'Key points', 'Delete record']) {
+      expect(html).toContain(section)
+    }
+    expect(html).not.toContain('Live Subtitles')
+    expect(html).not.toContain('Live Call')
+    expect(html).not.toContain('Saving a summary')
+    expect(html).not.toContain('Waiting to join')
+    // Private advice: kind and time only.
+    expect(html).toContain('Only the kind and time of each note were kept, never the words.')
+    expect(html).toContain('Caution')
+    // Deal terms, price comparison and memory from the record.
+    expect(html).toContain('Red onion')
+    expect(html).toContain('Friday at the farm, cash on pickup')
+    expect(html).toContain('2.3% below')
+    expect(html).toContain('Suresh')
+    expect(html).toContain('Asked about onion prices.')
+    expect(html).toContain('get_mandi_price')
+    expect(html).toContain('Sharma Traders')
+    expect(html).toContain('Measured')
+    expect(html).toContain('receipt.html')
+  })
+
+  it('hides the receipt link when the receipt is not on the server', () => {
+    const html = renderToStaticMarkup(<CallDetail record={fullRecord()} />)
+    expect(html).not.toContain('receipt.html')
+  })
+
+  it('works the key points out of the stored fields only', () => {
+    const points = keyPoints(fullRecord())
+    const text = points.map((p) => p.text).join('\n')
+    expect(points[0]).toMatchObject({ id: 'outcome', tone: 'ok' })
+    expect(text).toContain('Deal agreed: Red onion, 10 quintal, at ₹')
+    expect(text).toContain('Buyer connected: Sharma Traders')
+    expect(text).toContain('2.3% below the dated mandi reference')
+    expect(text).toContain('Terms read back to both; farmer said yes at +0:06, buyer said yes at +0:07.')
+    expect(text).toContain('One caution given privately to the farmer (+0:03).')
+    expect(text).toContain('Buyer switched Tamil to English.')
+    expect(text).toContain('Returning farmer (Suresh), name confirmed on the call.')
+    expect(text).not.toMatch(/real.?time|instant|verified|binding/i)
+  })
+
+  it('says when a caller denied being the remembered farmer', () => {
+    const base = fullRecord()
+    const html = renderToStaticMarkup(<CallDetail record={fullRecord({ farmer: { ...base.data.farmer!, identity: 'denied', memory: null }, notStored: { memory: 'not_this_farmer' } })} />)
+    expect(html).toContain('not the remembered farmer')
+    expect(html).not.toContain('Suresh')
+  })
+
+  it('opens a version 1 record, which has none of the newer fields', () => {
     const html = renderToStaticMarkup(<CallDetail record={record({ buyer: null, notStored: { buyer: 'said_no' } }, { consentBuyer: 'NO' })} onDelete={() => {}} />)
-    expect(html).toContain('Deal')
+    expect(html).toContain('Stored before leg end times')
     expect(html).toContain('Suresh')
     expect(html).toContain('get_mandi_price')
     expect(html).toContain('Not stored: the buyer said no to remembering this call.')
-    expect(html).toContain('Only the kind and time are stored, never the words.')
-    expect(html).toContain('Delete record')
+    expect(html).toContain('Not stored')
     expect(html).not.toContain('Live Subtitles')
-    expect(html).toContain('Stored leg')
-    expect(html).not.toContain('Waiting to join')
   })
 
   it('explains a farmer side that was not stored', () => {
@@ -125,6 +210,17 @@ describe('a stored call', () => {
     expect(html).toContain('caller ID was withheld')
     expect(html).not.toContain('Suresh')
     expect(html).not.toContain('Delete record')
+  })
+})
+
+describe('a stored call in the list', () => {
+  it('shows the outcome, crop and price, buyer and cautions at a glance', () => {
+    const html = renderToStaticMarkup(<CallsTable calls={[summary('call-x', { buyerName: 'Sharma Traders', cautions: 2, deal: { ...summary('x').deal!, variety: 'Red' } }), summary('call-y', { outcome: 'info_only', deal: null })]} filter={NO_FILTER} onFilter={() => {}} />)
+    expect(html).toContain('Red onion · 10 quintal')
+    expect(html).toContain('Buyer: Sharma Traders · 2 cautions')
+    expect(html).toContain('Information only')
+    expect(html).toContain('1:00')
+    expect(html).toContain('Hindi ⇄ Tamil')
   })
 })
 

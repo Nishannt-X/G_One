@@ -200,6 +200,35 @@ A private message spoken to the farmer only. The buyer never hears it.
 }
 ```
 
+### aside_answered
+
+During mediation, one party spoke to G-One directly and G-One answered them alone, on their own leg. It is private to
+that leg: it is never relayed to the other party, never a deal term, and never in the shared transcript, the gist or
+analytics. A buyer's own screen shows only the buyer's own aside; a farmer's aside never reaches the buyer.
+
+| Field | JSON type | Meaning |
+| --- | --- | --- |
+| `legId` | string | The asker's leg, where the answer was spoken |
+| `role` | LegRole | The asker |
+| `language` | string | The language the answer was spoken in |
+| `question` | string | What the asker said to G-One, masked like `turn_heard` |
+| `answer` | string | G-One's answer, built from fixed lines and the asker's own facts |
+| `startedMs` | number | When the question began |
+
+```json
+{
+  "type": "aside_answered",
+  "callId": "call-0001",
+  "atMs": 1794132095000,
+  "legId": "leg-buyer-0001",
+  "role": "buyer",
+  "language": "en-IN",
+  "question": "G-One, how much onion does he have?",
+  "answer": "The quantity said on this call so far is twenty quintal.",
+  "startedMs": 1794132093000
+}
+```
+
 ### tool_called
 
 The assistant called a tool.

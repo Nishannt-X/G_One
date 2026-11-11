@@ -540,36 +540,62 @@ public final class CallPipeline {
             if (closingTurn(turn)) {
                 return;
             }
-            Turn answerTo = turn;
-            List<Line> history;
-            CallContext ctx;
-            long turnGeneration;
-            boolean wasSpeaking;
-            boolean closed;
-            Synthesis toCancel;
+            answerOrHold(heard, turn, false);
+        }
+
+        /**
+         * Answers {@code answerTo} with the brain, or holds it while mediation has the leg. The buyer's yes can land
+         * after this turn's live check, so once the intake is closed the turn is first offered to the session that now
+         * has the leg. That offer is made outside this leg's lock, which mediation's lock comes before; a turn it
+         * declines comes back here and is held under the lock that saw the intake closed. {@code heard} is the turn
+         * with its words unmasked, as mediation reads it.
+         */
+        private void answerOrHold(Turn heard, Turn answerTo, boolean offered) {
+            List<Line> history = null;
+            CallContext ctx = null;
+            long turnGeneration = 0;
+            boolean wasSpeaking = false;
+            boolean closed = false;
+            boolean offer = false;
+            Synthesis toCancel = null;
             synchronized (lock) {
                 if (ended || context == null) {
                     return;
                 }
-                if (speaking && Phrases.isBackchannel(answerTo.text())) {
-                    log.info("Barge-in ignored on leg {}: backchannel while the assistant is speaking", leg.id());
-                    return; // "haan" while the assistant talks is listening, not a reply: let it finish
+                if (intakeClosed && !offered) {
+                    offer = true;
+                } else {
+                    if (speaking && Phrases.isBackchannel(answerTo.text())) {
+                        log.info("Barge-in ignored on leg {}: backchannel while the assistant is speaking", leg.id());
+                        return; // "haan" while the assistant talks is listening, not a reply: let it finish
+                    }
+                    history = List.copyOf(lines);
+                    lines.add(new Line(Speaker.FARMER, answerTo.text()));
+                    turnGeneration = generation.incrementAndGet();
+                    wasSpeaking = speaking;
+                    if (wasSpeaking) clearing++;
+                    quiet();
+                    toCancel = synthesis;
+                    synthesis = null;
+                    ctx = context;
+                    closed = intakeClosed;
+                    if (closed) {
+                        // Held under the same lock that decided it: a release that runs afterwards sees this turn, and
+                        // one that ran before it made closed false, so the turn cannot be written where nobody reads it.
+                        heldTurn = answerTo;
+                    }
                 }
-                history = List.copyOf(lines);
-                lines.add(new Line(Speaker.FARMER, answerTo.text()));
-                turnGeneration = generation.incrementAndGet();
-                wasSpeaking = speaking;
-                if (wasSpeaking) clearing++;
-                quiet();
-                toCancel = synthesis;
-                synthesis = null;
-                ctx = context;
-                closed = intakeClosed;
-                if (closed) {
-                    // Held under the same lock that decided it: a release that runs afterwards sees this turn, and one
-                    // that ran before it made closed false, so the turn cannot be written where nobody reads it.
-                    heldTurn = answerTo;
+            }
+            if (offer) {
+                // The intake closed only after a take-over, so the session's phase is settled: live, or over for good.
+                MediationSession owner = mediationSession;
+                if (owner != null && owner.farmerTurn(heard)) {
+                    note(Speaker.FARMER, answerTo.text());
+                    publish(ConsoleEvent.TurnHeard.of(callId, answerTo, now()));
+                    return;
                 }
+                answerOrHold(heard, answerTo, true);
+                return;
             }
             if (wasSpeaking) {
                 log.info("Turn heard on leg {} while the assistant is speaking: barge-in accepted", leg.id());
@@ -581,26 +607,31 @@ public final class CallPipeline {
                 // the assistant has the farmer back.
                 return;
             }
-            submit("respond", () -> {
-                if (generation.get() != turnGeneration) {
-                    return; // a newer turn already arrived; skip the brain call
-                }
-                Reply reply = askBrain("respond", () -> brain.respond(ctx, history, answerTo), ctx.language());
-                if (endCheckInstead(turnGeneration, reply)) {
-                    return;
-                }
-                Turn held = takeHeldRequest();
-                if (held == null) {
-                    deliver(turnGeneration, reply);
-                } else if (brain.awaitingIdentity(callId)) {
-                    // The farmer moved on without settling who they are: their newer turn is the one answered.
-                    log.info("A request held from the language turn was dropped on leg {}: the name check is still open",
-                            leg.id());
-                    deliver(turnGeneration, reply);
-                } else {
-                    deliver(turnGeneration, reply, () -> answerHeld(turnGeneration, held));
-                }
-            });
+            long respondGeneration = turnGeneration;
+            CallContext respondCtx = ctx;
+            List<Line> respondHistory = history;
+            submit("respond", () -> respond(respondGeneration, respondCtx, respondHistory, answerTo));
+        }
+
+        private void respond(long turnGeneration, CallContext ctx, List<Line> history, Turn answerTo) {
+            if (generation.get() != turnGeneration) {
+                return; // a newer turn already arrived; skip the brain call
+            }
+            Reply reply = askBrain("respond", () -> brain.respond(ctx, history, answerTo), ctx.language());
+            if (endCheckInstead(turnGeneration, reply)) {
+                return;
+            }
+            Turn held = takeHeldRequest();
+            if (held == null) {
+                deliver(turnGeneration, reply);
+            } else if (brain.awaitingIdentity(callId)) {
+                // The farmer moved on without settling who they are: their newer turn is the one answered.
+                log.info("A request held from the language turn was dropped on leg {}: the name check is still open",
+                        leg.id());
+                deliver(turnGeneration, reply);
+            } else {
+                deliver(turnGeneration, reply, () -> answerHeld(turnGeneration, held));
+            }
         }
 
         private Turn takeHeldRequest() {

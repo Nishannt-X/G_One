@@ -1,39 +1,150 @@
 package com.example.g_one.agent.mediation;
 
-import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.llm.FixedLines;
 import com.example.g_one.agent.llm.SpokenNumbers;
+import com.example.g_one.core.LegRole;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 
 /**
- * The fixed lines for a question to the assistant, from {@code /prompts/fixed-lines.json}: the answer when the model
- * fails, read from the deal so far, and the buyer's question about the farmer's limits. A missing line fails at startup.
+ * Every answer to a direct question, built from the fixed lines in {@code /prompts/fixed-lines.json} with the asker's
+ * typed facts ({@link AskDigest.Facts}) filled in as words. Nothing here is model text, so an answer can only state a
+ * fact the asker already has, can never predict what the other side will accept, and says a figure it worked out itself
+ * is its own calculation. A missing line fails at startup.
  */
 final class AskLines {
-    static final List<String> KEYS = List.of("askQuantity", "askNoQuantity", "askPrice", "askNoPrice", "askNoLimits");
+    static final List<String> KEYS = List.of("askQuantity", "askNoQuantity", "askPrice", "askPriceClosed",
+            "askPriceAgreed", "askNoPrice", "askCrop", "askNoCrop", "askPickup", "askNoPickup", "askPayment",
+            "askNoPayment", "askStateNone", "askStateOpen", "askStateConfirming", "askStateAgreed", "askRepeatFarmer",
+            "askRepeatBuyer", "askNothingHeard", "askValue", "askPerKg", "askReference", "askNoReference",
+            "askOnlyCall", "askSayDirectly", "askWho", "askAFarmer", "askNoLimits");
     private static final Map<String, Map<String, String>> BY_CODE = load();
 
     private AskLines() {}
 
-    /** "No limits shared; propose a price and I will pass it on", in the asker's language. */
+    /** The buyer asking what the farmer would accept, their limits or for advice: refused, offering to translate a price. */
     static String noLimits(String code) {
         return line("askNoLimits", code);
     }
 
-    /** What the deal card says about quantity and price, with numbers as words. Never invents a figure. */
-    static String fromCard(DealDesk.Card card, String code) {
-        String quantity = card.quantity() == null ? line("askNoQuantity", code)
-                : line("askQuantity", code).replace("{quantity}", CropNames.quantity(card.quantity(), code));
-        String price = !card.hasPrice() ? line("askNoPrice", code)
-                : line("askPrice", code).replace("{price}", SpokenNumbers.words(card.price(), code))
-                        .replace("{unit}", CropNames.unit(card.unit(), code));
-        return quantity + " " + price;
+    /**
+     * The answer to {@code intent}, in the asker's language.
+     *
+     * @param localize puts a short English deal phrase (a pickup or payment term) into the asker's language
+     */
+    static String render(AskGone.Intent intent, LegRole asker, AskDigest.Facts f, String code,
+                         UnaryOperator<String> localize) {
+        List<String> out = new ArrayList<>();
+        switch (intent) {
+            case QUANTITY -> out.add(quantity(f, code));
+            case PRICE -> out.add(price(f, code));
+            case CROP -> out.add(f.crop() == null ? line("askNoCrop", code)
+                    : fill("askCrop", code, Map.of("crop", CropNames.spoken(f.crop(), f.variety(), code))));
+            case PICKUP -> out.add(f.pickup() == null ? line("askNoPickup", code)
+                    : fill("askPickup", code, Map.of("pickup", localize.apply(f.pickup()))));
+            case PAYMENT -> out.add(f.payment() == null ? line("askNoPayment", code)
+                    : fill("askPayment", code, Map.of("payment", localize.apply(f.payment()))));
+            case STATUS -> {
+                if (f.price() != null) out.add(price(f, code));
+                out.add(state(f, code));
+            }
+            case LEFT -> {
+                if (f.price() == null || f.priceState() == AskDigest.PriceState.CLOSED) out.add(price(f, code));
+                if (f.quantity() == null) out.add(line("askNoQuantity", code));
+                if (f.pickup() == null) out.add(line("askNoPickup", code));
+                if (f.payment() == null) out.add(line("askNoPayment", code));
+                out.add(state(f, code));
+            }
+            case REPEAT -> out.add(f.lastHeard() == null ? line("askNothingHeard", code)
+                    : fill(asker == LegRole.BUYER ? "askRepeatFarmer" : "askRepeatBuyer", code, Map.of("text", f.lastHeard())));
+            case WHO -> out.add(fill("askWho", code, Map.of("name",
+                    f.otherName() != null ? f.otherName() : line("askAFarmer", code))));
+            case VALUE -> {
+                BigDecimal value = f.value();
+                if (value == null) {
+                    out.add(f.price() == null ? price(f, code) : quantity(f, code));
+                } else {
+                    out.add(fill("askValue", code, Map.of("quantity", CropNames.quantity(f.quantity(), code),
+                            "price", SpokenNumbers.words(f.price(), code), "unit", CropNames.unit(f.unit(), code),
+                            "value", SpokenNumbers.words(value, code))));
+                }
+            }
+            case PER_KG -> {
+                BigDecimal kg = f.perKg();
+                out.add(kg == null ? price(f, code) : fill("askPerKg", code, Map.of("price",
+                        SpokenNumbers.words(f.price(), code), "unit", CropNames.unit(f.unit(), code),
+                        "perKg", SpokenNumbers.words(kg, code))));
+            }
+            case REFERENCE -> out.add(asker == LegRole.BUYER ? line("askOnlyCall", code) : reference(f, code));
+            case ADVICE -> {
+                if (asker == LegRole.BUYER) {
+                    out.add(noLimits(code));
+                } else {
+                    // The farmer gets the facts to decide with, never a prediction of what the buyer will do.
+                    out.add(price(f, code));
+                    out.add(reference(f, code));
+                }
+            }
+            case RELAY -> out.add(line("askSayDirectly", code));
+            case SUMMARY -> summary(f, code, out);
+            case OTHER -> {
+                out.add(line("askOnlyCall", code));
+                summary(f, code, out);
+            }
+        }
+        return String.join(" ", out);
+    }
+
+    private static void summary(AskDigest.Facts f, String code, List<String> out) {
+        out.add(quantity(f, code));
+        out.add(price(f, code));
+        out.add(state(f, code));
+    }
+
+    private static String quantity(AskDigest.Facts f, String code) {
+        return f.quantity() == null ? line("askNoQuantity", code)
+                : fill("askQuantity", code, Map.of("quantity", CropNames.quantity(f.quantity(), code)));
+    }
+
+    private static String price(AskDigest.Facts f, String code) {
+        if (f.price() == null) return line("askNoPrice", code);
+        String key = switch (f.priceState()) {
+            case AGREED -> "askPriceAgreed";
+            case CLOSED -> "askPriceClosed";
+            default -> "askPrice";
+        };
+        return fill(key, code, Map.of("price", SpokenNumbers.words(f.price(), code), "unit", CropNames.unit(f.unit(), code)));
+    }
+
+    private static String state(AskDigest.Facts f, String code) {
+        return switch (f.state()) {
+            case "offer_open" -> line("askStateOpen", code);
+            case "readback", "confirming" -> line("askStateConfirming", code);
+            case "agreed" -> line("askStateAgreed", code);
+            default -> line("askStateNone", code);
+        };
+    }
+
+    private static String reference(AskDigest.Facts f, String code) {
+        AskDigest.Reference r = f.reference();
+        if (r == null) return line("askNoReference", code);
+        return fill("askReference", code, Map.of("date", SpokenNumbers.date(r.date(), code), "source", r.source(),
+                "market", r.market(), "crop", CropNames.spoken(r.crop(), r.variety(), code),
+                "reference", SpokenNumbers.words(r.price(), code)));
+    }
+
+    private static String fill(String key, String code, Map<String, String> values) {
+        String out = line(key, code);
+        for (Map.Entry<String, String> v : values.entrySet()) out = out.replace("{" + v.getKey() + "}", v.getValue());
+        return out;
     }
 
     static String line(String name, String code) {

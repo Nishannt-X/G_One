@@ -2,34 +2,58 @@ package com.example.g_one.agent.mediation;
 
 import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
-import com.example.g_one.agent.llm.SpokenNumbers;
-import com.example.g_one.core.LegRole;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * The only facts the assistant may use to answer a party who speaks to it directly, built per asker from a whitelist. The
- * buyer's view has no parameter that could carry a whisper, the market reference, the farmer's memory, the intake
- * conversation, a caller key or a phone number, so none of those can reach the model on a buyer's question. Its lines
- * are the buyer's own leg ({@link CallLedger}): what the buyer said and heard.
+ * The typed facts an answer to a direct question may state, built per asker from a whitelist and read only by code: no
+ * model ever sees them, and an answer is a fixed line with these values filled in ({@link AskLines}). The buyer's facts
+ * have no field that could carry a whisper, the market reference, the farmer's memory, the intake conversation, a caller
+ * key or a phone number, and their terms are the buyer's own {@link CallLedger.Known}: what the buyer said or heard to the
+ * end. Figures worked out here (total value, price per kilo) are spoken as G-One's own calculation, never as said.
  */
 final class AskDigest {
-    /** The buyer as the farmer may hear about them: directory name, kind of business and district. Never a phone. */
-    record Buyer(String name, String type, String district) {}
+    /** Where the last price stands for this asker: none heard, still open, agreed, or heard but no longer open. */
+    enum PriceState { NONE, OPEN, AGREED, CLOSED }
 
-    /** The dated public market reference: the farmer's view only. */
+    /** The dated public market reference: the farmer's facts only. */
     record Reference(String source, String market, String crop, String variety, BigDecimal price, String unit,
                      LocalDate date) {}
+
+    /**
+     * @param otherName the other party as the asker may hear them named: the directory buyer name for the farmer, the
+     *                  farmer's name from the introduction (or null) for the buyer
+     * @param state the deal desk's state: "none", "offer_open", "readback", "confirming" or "agreed"
+     * @param lastHeard the last translation that played to the end on the asker's leg, or null
+     * @param reference null for the buyer, always
+     */
+    record Facts(String otherName, String crop, String variety, String quantity, BigDecimal price, String unit,
+                 PriceState priceState, String pickup, String payment, String state, String lastHeard,
+                 Reference reference) {
+
+        /** Price times quantity in rupees, when both are known in units that convert; otherwise null. */
+        BigDecimal value() {
+            if (price == null || unit == null || quantity == null) return null;
+            Matcher m = AMOUNT.matcher(quantity);
+            if (!m.find()) return null;
+            Integer quantityKg = KG.get(Offer.unit(m.group(2)));
+            Integer priceKg = KG.get(Offer.unit(unit));
+            if (quantityKg == null || priceKg == null) return null;
+            return new BigDecimal(m.group(1)).multiply(BigDecimal.valueOf(quantityKg)).multiply(price)
+                    .divide(BigDecimal.valueOf(priceKg), 0, RoundingMode.HALF_UP);
+        }
+
+        /** The price per kilo, or null when the unit does not convert or already is a kilo. */
+        BigDecimal perKg() {
+            Integer kg = unit == null ? null : KG.get(Offer.unit(unit));
+            if (price == null || kg == null || kg == 1) return null;
+            return price.divide(BigDecimal.valueOf(kg), 2, RoundingMode.HALF_UP).stripTrailingZeros();
+        }
+    }
 
     private static final Map<String, Integer> KG = Map.of("kg", 1, "kilo", 1, "kilogram", 1, "quintal", 100,
             "ton", 1000, "tonne", 1000);
@@ -37,142 +61,32 @@ final class AskDigest {
 
     private AskDigest() {}
 
-    /** What the buyer may be told: the deal so far and their own leg of the call. */
-    static ObjectNode buyerView(DealDesk.Card card, String crop, String farmerName,
-                                List<CallLedger.Line> buyerLeg) {
-        ObjectNode root = JsonNodeFactory.instance.objectNode();
-        root.put("you", "buyer");
-        ObjectNode other = root.putObject("otherParty");
-        other.put("role", "farmer");
-        if (farmerName != null) other.put("name", farmerName);
-        deal(root, card, crop);
-        lines(root, buyerLeg, LegRole.FARMER);
-        return root;
+    /** What the buyer may be told: the terms the buyer said or heard, the deal's state, and their own leg. */
+    static Facts forBuyer(CallLedger.Known buyerKnows, DealDesk.Card desk, String farmerName, String lastHeard) {
+        return facts(buyerKnows, desk, farmerName, lastHeard, null);
     }
 
-    /** What the farmer may be told: also who the buyer is and the dated market reference. */
-    static ObjectNode farmerView(DealDesk.Card card, String crop, Buyer buyer, Reference reference,
-                                 List<CallLedger.Line> farmerLeg, String code) {
-        ObjectNode root = JsonNodeFactory.instance.objectNode();
-        root.put("you", "farmer");
-        ObjectNode other = root.putObject("otherParty");
-        other.put("role", "buyer");
-        if (buyer != null) {
-            if (buyer.name() != null) other.put("name", buyer.name());
-            if (buyer.type() != null) other.put("type", buyer.type());
-            if (buyer.district() != null) other.put("district", buyer.district());
-        }
-        deal(root, card, crop);
-        if (reference != null) {
-            ObjectNode r = root.putObject("marketReference");
-            r.put("source", reference.source());
-            r.put("market", reference.market());
-            r.put("crop", reference.crop());
-            if (reference.variety() != null) r.put("variety", reference.variety());
-            r.put("price", plain(reference.price()));
-            r.put("unit", reference.unit());
-            r.put("date", reference.date().toString());
-            r.put("dateSpoken", SpokenNumbers.date(reference.date(), code));
-            r.put("note", "a dated public reference, not today's rate");
-            BigDecimal offer = perQuintal(card);
-            if (offer != null && "quintal".equals(Offer.unit(reference.unit()))) {
-                r.put("offerMinusReferenceRupeesPerQuintal", plain(offer.subtract(reference.price())));
-            }
-        }
-        lines(root, farmerLeg, LegRole.BUYER);
-        return root;
+    /** What the farmer may be told: also the buyer's directory name and the dated market reference. */
+    static Facts forFarmer(CallLedger.Known farmerKnows, DealDesk.Card desk, String buyerName, String lastHeard,
+                           Reference reference) {
+        return facts(farmerKnows, desk, buyerName, lastHeard, reference);
     }
 
-    private static void deal(ObjectNode root, DealDesk.Card card, String crop) {
-        ObjectNode d = root.putObject("deal");
-        d.put("state", card.state());
-        String commodity = card.commodity() != null ? card.commodity() : crop;
-        if (commodity != null) d.put("crop", commodity);
-        if (card.variety() != null) d.put("variety", card.variety());
-        if (card.market() != null) d.put("market", card.market());
-        if (card.hasPrice()) {
-            d.put("priceRupees", plain(card.price()));
-            d.put("perUnit", card.unit());
-            BigDecimal kg = perKg(card);
-            if (kg != null && !"kg".equals(Offer.unit(card.unit()))) d.put("pricePerKgRupees", plain(kg));
-        }
-        if (card.quantity() != null) d.put("quantity", card.quantity());
-        if (card.pickup() != null) d.put("pickup", card.pickup());
-        if (card.payment() != null) d.put("payment", card.payment());
-        BigDecimal value = estimatedValue(card);
-        if (value != null) d.put("estimatedValueRupees", plain(value));
-        d.put("farmerConfirmed", card.farmerYes());
-        d.put("buyerConfirmed", card.buyerYes());
-        ArrayNode missing = root.putArray("notYetAgreed");
-        missing(card).forEach(missing::add);
+    private static Facts facts(CallLedger.Known k, DealDesk.Card desk, String otherName, String lastHeard,
+                               Reference reference) {
+        return new Facts(otherName, k.commodity(), k.variety(), k.quantity(), k.price(), k.unit(), priceState(k, desk),
+                k.pickup(), k.payment(), desk.state(), lastHeard, reference);
     }
 
-    /** What the deal still lacks, in plain English words the model turns into the asker's language. */
-    static List<String> missing(DealDesk.Card card) {
-        List<String> out = new ArrayList<>();
-        if (!card.hasPrice()) out.add("price");
-        if (card.quantity() == null) out.add("quantity");
-        if (card.pickup() == null) out.add("pickup time and place");
-        if (card.payment() == null) out.add("payment terms");
-        if (card.hasPrice()) {
-            switch (card.state()) {
-                case "offer_open" -> out.add("the farmer accepting the buyer's price");
-                case "readback", "confirming" -> {
-                    if (!card.farmerYes()) out.add("the farmer's yes to the read-back summary");
-                    if (!card.buyerYes()) out.add("the buyer's yes to the read-back summary");
-                }
-                case "none" -> out.add("a fresh price: the last offer was closed");
-                default -> { }
-            }
-        }
-        return out;
-    }
-
-    /** Price times quantity in rupees, when both are stated in units that convert; otherwise null. */
-    static BigDecimal estimatedValue(DealDesk.Card card) {
-        if (!card.hasPrice() || card.unit() == null || card.quantity() == null) return null;
-        Matcher m = AMOUNT.matcher(card.quantity());
-        if (!m.find()) return null;
-        Integer quantityKg = KG.get(Offer.unit(m.group(2).toLowerCase(Locale.ROOT)));
-        Integer priceKg = KG.get(Offer.unit(card.unit()));
-        if (quantityKg == null || priceKg == null) return null;
-        BigDecimal amount = new BigDecimal(m.group(1));
-        return amount.multiply(BigDecimal.valueOf(quantityKg)).multiply(card.price())
-                .divide(BigDecimal.valueOf(priceKg), 0, RoundingMode.HALF_UP);
-    }
-
-    /** The price per kilo, for a party who thinks in kilos; null when the unit does not convert. */
-    static BigDecimal perKg(DealDesk.Card card) {
-        Integer kg = card.unit() == null ? null : KG.get(Offer.unit(card.unit()));
-        if (!card.hasPrice() || kg == null) return null;
-        return card.price().divide(BigDecimal.valueOf(kg), 2, RoundingMode.HALF_UP).stripTrailingZeros();
-    }
-
-    /** "4000", never "4E+3": the model and the number check read the figure as written. */
-    static BigDecimal plain(BigDecimal v) {
-        BigDecimal t = v.stripTrailingZeros();
-        return t.scale() < 0 ? t.setScale(0) : t;
-    }
-
-    private static BigDecimal perQuintal(DealDesk.Card card) {
-        BigDecimal kg = perKg(card);
-        return kg == null ? null : kg.multiply(BigDecimal.valueOf(100)).stripTrailingZeros();
-    }
-
-    private static void lines(ObjectNode root, List<CallLedger.Line> leg, LegRole other) {
-        ArrayNode out = root.putArray("lines");
-        String otherName = other.wire();
-        for (CallLedger.Line line : leg) {
-            ObjectNode n = out.addObject();
-            n.put("who", switch (line.kind()) {
-                case SAID -> "you";
-                case HEARD -> otherName + " (as translated for you)";
-                case ASSISTANT -> "G-One to you";
-                case WHISPER -> "G-One, privately to you";
-                case ASKED -> "you, to G-One only";
-                case ANSWERED -> "G-One's answer, to you only";
-            });
-            n.put("text", line.text());
-        }
+    /**
+     * The asker's last known price against the desk: open or agreed only when the desk holds that same price now, so an
+     * expired, declined or replaced offer reads as "no longer open", never as "no price offered".
+     */
+    static PriceState priceState(CallLedger.Known k, DealDesk.Card desk) {
+        if (k.price() == null) return PriceState.NONE;
+        boolean same = desk.hasPrice() && desk.price().compareTo(k.price()) == 0;
+        if (same && "agreed".equals(desk.state())) return PriceState.AGREED;
+        if (same && !"none".equals(desk.state())) return PriceState.OPEN;
+        return PriceState.CLOSED;
     }
 }

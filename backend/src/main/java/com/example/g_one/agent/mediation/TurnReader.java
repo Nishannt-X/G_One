@@ -96,13 +96,9 @@ public class TurnReader {
             return new Reading(text, offer, cautions, reply, held, toAssistant);
         }
 
-        /**
-         * A question for the assistant, by the model's reading, and nothing else: no price, no reply to a pending
-         * question and no caution. Anything more is a deal turn and is relayed as usual.
-         */
+        /** A turn identified as addressed to the assistant must not be relayed as a deal turn. */
         public boolean addressed() {
-            return toAssistant && reply == DealDesk.Heard.NONE && cautions.isEmpty()
-                    && (offer == null || (offer.price() == null && !"clear".equals(offer.status())));
+            return toAssistant;
         }
     }
 

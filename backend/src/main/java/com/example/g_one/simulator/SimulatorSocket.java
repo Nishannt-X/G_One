@@ -115,7 +115,7 @@ public class SimulatorSocket implements WebSocketConfigurer {
             send(safe, ready(leg));
             if (leg.role() == LegRole.BUYER) {
                 ConsoleBus.Subscription lines = bus.subscribe(
-                        event -> BuyerLines.forBuyer(event, leg).ifPresent(line -> send(safe, lineJson(line))));
+                        event -> BuyerLines.forBuyer(event, leg).forEach(line -> send(safe, lineJson(line))));
                 leg.onEnded(lines::close);
             }
             try {

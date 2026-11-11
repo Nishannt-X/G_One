@@ -76,6 +76,9 @@ class CallRecordRulesTest {
         events.add(new ConsoleEvent.ToolCalled(c, T0 + 2200, "save_profile_fact", JSON.createObjectNode().put("v", TOOL_ARG),
                 true, MEMORY_TOOL_RESULT, 15));
         events.add(new ConsoleEvent.WhisperSent(c, T0 + 2700, f, ConsoleEvent.WhisperKind.CAUTION, "hi-IN", WHISPER));
+        // A private question to G-One and its answer: never stored, not even as a timing.
+        events.add(new ConsoleEvent.AsideAnswered(c, T0 + 2800, f, LegRole.FARMER, "hi-IN", "CANARY-aside-question",
+                "CANARY-aside-answer", T0 + 2750));
         if (buyerLeg) {
             events.add(new ConsoleEvent.LegJoined(c, T0 + 3000, b, LegRole.BUYER, LegSource.SIMULATOR, "ta-IN"));
             events.add(new ConsoleEvent.TurnHeard(c, T0 + 4000, b, LegRole.BUYER, "ta-IN", BUYER_WORDS, T0 + 3500, T0 + 3800));

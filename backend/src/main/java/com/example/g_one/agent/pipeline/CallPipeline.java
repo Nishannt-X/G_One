@@ -533,8 +533,6 @@ public final class CallPipeline {
                 case KEEP -> { }
             }
             if (mediating && live.farmerTurn(heard)) {
-                note(Speaker.FARMER, turn.text());
-                publish(ConsoleEvent.TurnHeard.of(callId, turn, now()));
                 return;
             }
             if (closingTurn(turn)) {
@@ -590,8 +588,6 @@ public final class CallPipeline {
                 // The intake closed only after a take-over, so the session's phase is settled: live, or over for good.
                 MediationSession owner = mediationSession;
                 if (owner != null && owner.farmerTurn(heard)) {
-                    note(Speaker.FARMER, answerTo.text());
-                    publish(ConsoleEvent.TurnHeard.of(callId, answerTo, now()));
                     return;
                 }
                 answerOrHold(heard, answerTo, true);

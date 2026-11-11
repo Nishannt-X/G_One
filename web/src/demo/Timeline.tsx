@@ -58,7 +58,7 @@ function Turn({ call, item }: { call: CallView; item: Extract<TimelineItem, { ki
   const other = item.role === 'farmer' ? 'buyer' : 'farmer'
   const listening = call.legs.some((l) => l.role === other && !l.ended)
   const gloss = call.origin !== 'feed' && !translation ? sampleGloss(item.text) : null
-  const kept = notPassedOn(call.items, item.key, translation !== undefined)
+  const kept = item.aside === true || notPassedOn(call.items, item.key, translation !== undefined)
   const right = item.role === 'buyer'
   return (
     <div className={`animate-rise flex gap-3 ${right ? 'flex-row-reverse pl-8 lg:ml-auto lg:w-1/2 lg:pl-8' : 'pr-8 lg:w-1/2 lg:pr-8'}`}>
@@ -73,7 +73,9 @@ function Turn({ call, item }: { call: CallView; item: Extract<TimelineItem, { ki
         ) : gloss ? (
           <p lang={gloss.lang} className="mt-1.5 border-t border-ink/10 pt-1.5 text-[1.0625rem] leading-snug text-muted">{gloss.text}</p>
         ) : kept ? (
-          <p className="mt-1.5 border-t border-ink/10 pt-1.5 text-sm font-semibold text-muted">Not passed on to the {other}</p>
+          <p className="mt-1.5 border-t border-ink/10 pt-1.5 text-sm font-semibold text-muted">
+            {item.aside ? `Asked G-One privately · not passed on to the ${other}` : `Not passed on to the ${other}`}
+          </p>
         ) : listening && isOther(item.language, item.text) && !call.ended ? (
           <p className="animate-shimmer mt-1.5 border-t border-ink/10 pt-1.5 text-[1.0625rem] leading-snug text-muted">Translating…</p>
         ) : null}
@@ -89,7 +91,7 @@ function Said({ call, item }: { call: CallView; item: Extract<TimelineItem, { ki
     <div className="animate-rise relative z-10 mx-auto w-full max-w-[34rem]">
       <div className="rounded-2xl border border-assistant/30 bg-assistant-soft px-4 py-3 text-center">
         <p className="flex items-center justify-center gap-1 text-sm font-bold text-assistant">
-          {!toBuyer && <ChevronIcon className="rotate-90" />} G-One to {toBuyer ? 'buyer' : 'farmer'} {toBuyer && <ChevronIcon className="-rotate-90" />}
+          {!toBuyer && <ChevronIcon className="rotate-90" />} G-One to {toBuyer ? 'buyer' : 'farmer'}{item.aside ? ' only · private answer' : ''} {toBuyer && <ChevronIcon className="-rotate-90" />}
         </p>
         <p lang={langOf(item.language)} className="text-xl leading-snug font-semibold">{item.text}</p>
         {gloss && <p lang={gloss.lang} className="mt-1 text-[1.0625rem] leading-snug text-muted">{gloss.text}</p>}

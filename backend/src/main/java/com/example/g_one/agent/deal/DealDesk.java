@@ -96,7 +96,9 @@ public final class DealDesk {
 
     public Card card() {
         Agreement.View v = agreement.view();
-        Terms t = agreed.get() != null ? agreed.get() : v.terms();
+        // The agreed terms only while the agreement itself says agreed: a later offer replaces them.
+        boolean isAgreed = v.state() == Agreement.State.AGREED;
+        Terms t = isAgreed && agreed.get() != null ? agreed.get() : v.terms();
         String q;
         String p;
         String pay;
@@ -115,7 +117,7 @@ public final class DealDesk {
         if (t == null) return new Card(state, null, null, null, null, null, q, p, pay, false, false);
         return new Card(state, t.commodity(), t.variety(), t.market(), t.price(), t.unit(),
                 firstNonNull(t.quantity(), q), firstNonNull(t.pickup(), p), firstNonNull(t.payment(), pay),
-                agreed.get() != null || v.farmerYes(), agreed.get() != null || v.buyerYes());
+                isAgreed || v.farmerYes(), isAgreed || v.buyerYes());
     }
 
     /** What a turn stated about the sale. Only a clear buyer offer opens or replaces a draft. */

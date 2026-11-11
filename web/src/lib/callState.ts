@@ -42,8 +42,8 @@ export interface Translation {
 }
 
 export type TimelineItem =
-  | { kind: 'turn'; key: string; legId: string; role: LegRole; language: string; text: string; startedMs: number; atMs: number }
-  | { kind: 'assistant'; key: string; legId: string; role: LegRole; language: string; text: string; atMs: number }
+  | { kind: 'turn'; key: string; legId: string; role: LegRole; language: string; text: string; startedMs: number; atMs: number; aside?: true }
+  | { kind: 'assistant'; key: string; legId: string; role: LegRole; language: string; text: string; atMs: number; aside?: true }
   | { kind: 'whisper'; key: string; legId: string; whisperKind: WhisperKind; language: string; text: string; atMs: number }
 
 /** A leg's language being chosen or changed, shown as a small note on the conversation. */
@@ -234,6 +234,12 @@ function applyToCall(call: CallView, event: ConsoleEvent): CallView {
     case 'turn_measured':
     case 'consent_recorded':
       return call
+    case 'aside_answered': {
+      // A private exchange with G-One: shown as the question and the answer, both marked, on the asker's side only.
+      const question: TimelineItem = { kind: 'turn', key: `${key}-q`, legId: event.legId, role: event.role, language: event.language, text: event.question, startedMs: event.startedMs, atMs: event.startedMs, aside: true }
+      const answer: TimelineItem = { kind: 'assistant', key: `${key}-a`, legId: event.legId, role: event.role, language: event.language, text: event.answer, atMs: event.atMs, aside: true }
+      return { ...call, items: cap(cap(call.items, question, MAX_ITEMS), answer, MAX_ITEMS) }
+    }
     case 'language_changed':
       return {
         ...call,
@@ -452,6 +458,9 @@ export function normalizeEvent(value: unknown): ConsoleEvent | null {
     case 'language_changed':
       if (typeof raw.legId !== 'string' || typeof raw.to !== 'string' || !ROLES.includes(String(raw.role))) return null
       return { ...base, from: String(raw.from ?? ''), reason: String(raw.reason ?? '') } as ConsoleEvent
+    case 'aside_answered':
+      if (typeof raw.legId !== 'string' || typeof raw.question !== 'string' || typeof raw.answer !== 'string' || !ROLES.includes(String(raw.role))) return null
+      return { ...base, language, startedMs: typeof raw.startedMs === 'number' ? raw.startedMs : atMs } as ConsoleEvent
     case 'consent_recorded':
       if (!ROLES.includes(String(raw.role))) return null
       return { ...base, consent: raw.consent === 'YES' || raw.consent === 'NO' ? raw.consent : 'NONE' } as ConsoleEvent

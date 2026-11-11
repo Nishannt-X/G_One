@@ -30,6 +30,7 @@ import java.util.Locale;
         @JsonSubTypes.Type(value = ConsoleEvent.TurnMeasured.class, name = "turn_measured"),
         @JsonSubTypes.Type(value = ConsoleEvent.LanguageChanged.class, name = "language_changed"),
         @JsonSubTypes.Type(value = ConsoleEvent.ConsentRecorded.class, name = "consent_recorded"),
+        @JsonSubTypes.Type(value = ConsoleEvent.AsideAnswered.class, name = "aside_answered"),
 })
 public sealed interface ConsoleEvent {
     CallId callId();
@@ -72,6 +73,14 @@ public sealed interface ConsoleEvent {
     /** The assistant's own words (greeting, reply, read-back), spoken on leg {@code legId} to {@code role}. */
     record AssistantSaid(CallId callId, long atMs, LegId legId, LegRole role, String language, String text)
             implements ConsoleEvent {}
+
+    /**
+     * During mediation, the party on leg {@code legId} ({@code role}) spoke to G-One directly, and G-One answered them
+     * alone on that leg. Private to that leg: never relayed, never a deal term, and never in the shared transcript,
+     * the gist or analytics. {@code question} is masked like a {@link TurnHeard}; {@code startedMs} is when it began.
+     */
+    record AsideAnswered(CallId callId, long atMs, LegId legId, LegRole role, String language, String question,
+                         String answer, long startedMs) implements ConsoleEvent {}
 
     /** A private message spoken to the farmer only, on farmer leg {@code legId}. The buyer never hears it. */
     record WhisperSent(CallId callId, long atMs, LegId legId, WhisperKind kind, String language, String text)

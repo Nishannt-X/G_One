@@ -23,7 +23,7 @@ export default function ToolsCard({ call }: { call: CallView }) {
                 </summary>
                 <div className="space-y-1 px-3 pb-3 text-sm">
                   <p className="font-semibold">{t('tools_result')}</p>
-                  <p className="text-muted">{tool.result}</p>
+                  <p className="text-muted">{tool.result || t('tools_result_not_kept')}</p>
                   {tool.args && <pre className="overflow-x-auto rounded bg-surface p-2 font-mono text-xs">{JSON.stringify(tool.args, null, 2)}</pre>}
                 </div>
               </details>

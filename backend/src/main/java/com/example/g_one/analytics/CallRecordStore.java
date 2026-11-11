@@ -26,7 +26,7 @@ public final class CallRecordStore implements AutoCloseable {
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
     private static final String COLUMNS = "call_id, started_ms, ended_ms, duration_ms, end_reason, languages, outcome, "
-            + "consent_farmer, consent_buyer, farmer_key_hash, data, created_at";
+            + "consent_farmer, consent_buyer, farmer_key_hash, data, created_at, schema_version";
 
     private final Connection conn;
     private final ObjectMapper json = new ObjectMapper();
@@ -60,16 +60,33 @@ public final class CallRecordStore implements AutoCloseable {
                             created_at      INTEGER NOT NULL
                         )""");
                 st.execute("CREATE INDEX IF NOT EXISTS call_records_farmer ON call_records (farmer_key_hash)");
+                migrate(st);
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Could not open the call records table", e);
         }
     }
 
+    /**
+     * Version 1 tables have no {@code schema_version} column: it is added, and their rows read as version 1. Adding a
+     * column with a default never rewrites or drops a row.
+     */
+    private static void migrate(Statement st) throws SQLException {
+        boolean has = false;
+        try (ResultSet rs = st.executeQuery("PRAGMA table_info(call_records)")) {
+            while (rs.next()) {
+                if (rs.getString("name").equals("schema_version")) has = true;
+            }
+        }
+        if (!has) {
+            st.execute("ALTER TABLE call_records ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1");
+        }
+    }
+
     public synchronized void save(CallRecord r) {
         Objects.requireNonNull(r, "record");
         try (PreparedStatement ps = conn.prepareStatement("INSERT OR REPLACE INTO call_records (" + COLUMNS
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             ps.setString(1, r.callId());
             ps.setLong(2, r.startedMs());
             ps.setLong(3, r.endedMs());
@@ -82,6 +99,7 @@ public final class CallRecordStore implements AutoCloseable {
             ps.setString(10, r.farmerKey());
             ps.setString(11, json.writeValueAsString(r.data()));
             ps.setLong(12, r.createdAt());
+            ps.setInt(13, r.schemaVersion());
             ps.executeUpdate();
             try (PreparedStatement trim = conn.prepareStatement("""
                     DELETE FROM call_records WHERE call_id NOT IN (
@@ -150,7 +168,7 @@ public final class CallRecordStore implements AutoCloseable {
                     out.add(new CallRecord(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4),
                             rs.getString(5), json.readValue(rs.getString(6), STRING_MAP), rs.getString(7),
                             Consent.parse(rs.getString(8)), Consent.parse(rs.getString(9)), rs.getString(10),
-                            json.readTree(rs.getString(11)), rs.getLong(12)));
+                            json.readTree(rs.getString(11)), rs.getLong(12), rs.getInt(13)));
                 } catch (JsonProcessingException e) {
                     throw new IllegalStateException("A stored call record is not valid JSON", e);
                 }

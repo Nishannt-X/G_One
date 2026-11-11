@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import {
   feedReducer,
+  followedCall,
   initialFeed,
   normalizeEvent,
   pickCall,
+  pinCall,
   type FeedState,
 } from './callState'
 import type { ConsoleEvent } from '../types/console'
@@ -169,5 +171,17 @@ describe('pickCall', () => {
     state = start(state, 'b', 2000)
     expect(pickCall(state, 'a')?.callId).toBe('a')
     expect(pickCall(state, 'missing')?.callId).toBe('b')
+  })
+
+  it('drops a hand-picked call once a newer call starts, so the Live tab shows the new call without a reload', () => {
+    let state = start(initialFeed, 'a', 1000)
+    state = end(start(state, 'b', 2000), 'b', 2500)
+    // Pinning the newest call, or an older one, keeps it while nothing newer starts.
+    const pin = pinCall(state, 'a')
+    expect(followedCall(state, pin)?.callId).toBe('a')
+    expect(followedCall(state, pinCall(state, 'b'))?.callId).toBe('b')
+    state = start(state, 'c', 3000)
+    expect(followedCall(state, pin)?.callId).toBe('c')
+    expect(followedCall(state, null)?.callId).toBe('c')
   })
 })

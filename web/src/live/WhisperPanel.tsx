@@ -7,6 +7,8 @@ import { AlertIcon, LockIcon } from '../ui/icons'
 export default function WhisperPanel({ call }: { call: CallView }) {
   const { t } = useI18n()
   const whispers = call.items.flatMap((item) => (item.kind === 'whisper' ? [item] : [])).reverse()
+  // A stored call keeps each note's kind and time only, never its words.
+  const stored = call.origin === 'stored'
   return (
     <section aria-label={t('whisper_title')} className="overflow-hidden rounded-2xl border border-whisper-edge bg-whisper-soft shadow-card">
       <div aria-hidden="true" className="hatch h-1.5" />
@@ -15,9 +17,9 @@ export default function WhisperPanel({ call }: { call: CallView }) {
           <h2 className="flex items-center gap-2 text-lg font-bold text-whisper"><LockIcon /> {t('whisper_title')}</h2>
           <span className="chip bg-whisper text-whisper-soft">{t('farmer_only')}</span>
         </header>
-        <p className="mt-1 text-sm font-medium text-muted">{t('whisper_note')}</p>
+        <p className="mt-1 text-sm font-medium text-muted">{t(stored ? 'whisper_stored_note' : 'whisper_note')}</p>
         {whispers.length === 0 ? (
-          <p className="mt-3 text-muted">{t('whisper_empty')}</p>
+          <p className="mt-3 text-muted">{t(stored ? 'whisper_stored_empty' : 'whisper_empty')}</p>
         ) : (
           <ol className="mt-3 max-h-64 space-y-3 overflow-y-auto">
             {whispers.map((w, i) => (
@@ -27,7 +29,7 @@ export default function WhisperPanel({ call }: { call: CallView }) {
                   {t(`whisper_${w.whisperKind}`)}
                   <span className="font-normal text-muted tabular-nums">{offset(w.atMs, call.startedMs)}</span>
                 </p>
-                <p lang={w.language} className="mt-0.5 text-lg">{w.text}</p>
+                {w.text && <p lang={w.language} className="mt-0.5 text-lg">{w.text}</p>}
               </li>
             ))}
           </ol>

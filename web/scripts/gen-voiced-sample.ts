@@ -399,10 +399,17 @@ for (const beat of BEATS) {
     kept.add(file)
     let durationMs = 0
     if (!DRY_OUT) {
-      const raw = pcmOf(await synthesize(spoken, voice, line.lang, hash))
-      const samples = master(raw.samples, raw.rate)
-      await Bun.write(join(OUT, file), wavOf(samples, raw.rate))
-      durationMs = Math.round((samples.length / raw.rate) * 1000)
+      const target = join(OUT, file)
+      // A committed clip with this name is already mastered for the same text and voice: reuse it as it is.
+      if (existsSync(target)) {
+        const done = pcmOf(new Uint8Array(await Bun.file(target).arrayBuffer()))
+        durationMs = Math.round((done.samples.length / done.rate) * 1000)
+      } else {
+        const raw = pcmOf(await synthesize(spoken, voice, line.lang, hash))
+        const samples = master(raw.samples, raw.rate)
+        await Bun.write(target, wavOf(samples, raw.rate))
+        durationMs = Math.round((samples.length / raw.rate) * 1000)
+      }
     }
     totalMs += durationMs
     clips.push({

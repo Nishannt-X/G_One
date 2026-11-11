@@ -144,8 +144,116 @@
   "memoryAfter": {
     "summary": "Sold 40 quintals of onion at ₹1,900 to Mondal Traders, pay on delivery. Refused a UPI PIN request."
   },
-  "totalMs": 231507,
+  "totalMs": 257356,
   "beats": [
+    {
+      "id": "farmer-language-ask",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "farmer-language-ask-1",
+          "kind": "said",
+          "language": "en-IN",
+          "languages": [
+            "English"
+          ],
+          "text": "Hello, this is G-One. Which language would you like to speak? Hindi, English, Bengali, Tamil, Kannada, or Hinglish.",
+          "spoken": null,
+          "gloss": null,
+          "to": "farmer",
+          "voice": "Kaveri",
+          "file": "farmer-language-ask-1-8d81f7cf.wav",
+          "durationMs": 7351,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "farmer-language-answer",
+      "speakerRole": "farmer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "farmer-language-answer-1",
+          "kind": "original",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಕನ್ನಡ, ಕನ್ನಡದಲ್ಲಿ ಮಾತಾಡಿ.",
+          "spoken": null,
+          "gloss": "Kannada, please speak in Kannada.",
+          "to": null,
+          "voice": "Kavin",
+          "file": "farmer-language-answer-1-fa9c1544.wav",
+          "durationMs": 1902,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "speaking",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "farmer-language-confirm",
+      "speakerRole": "ai",
+      "audience": "farmer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "farmer-language-confirm-1",
+          "kind": "said",
+          "language": "kn-IN",
+          "languages": [
+            "Kannada"
+          ],
+          "text": "ಸರಿ, ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡೋಣ.",
+          "spoken": null,
+          "gloss": "All right, let us speak in Kannada.",
+          "to": "farmer",
+          "voice": "Saanvi",
+          "file": "farmer-language-confirm-1-233a7e8d.wav",
+          "durationMs": 1860,
+          "pan": -0.75,
+          "hearing": {
+            "farmer": "hears",
+            "buyer": "silent"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
     {
       "id": "name-check",
       "speakerRole": "ai",
@@ -397,12 +505,120 @@
       ]
     },
     {
-      "id": "disclose",
+      "id": "buyer-language-ask",
       "speakerRole": "ai",
       "audience": "buyer",
       "whisperKind": null,
       "notPassedOn": false,
       "buyerJoins": true,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "buyer-language-ask-1",
+          "kind": "said",
+          "language": "en-IN",
+          "languages": [
+            "English"
+          ],
+          "text": "Hello, this is G-One. I am connecting you to a farmer. Which language would you like to speak? Hindi, English, Bengali, Tamil, Kannada, or Hinglish.",
+          "spoken": null,
+          "gloss": null,
+          "to": "buyer",
+          "voice": "Kaveri",
+          "file": "buyer-language-ask-1-8b4b4ba9.wav",
+          "durationMs": 8619,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "buyer-language-answer",
+      "speakerRole": "buyer",
+      "audience": "none",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "buyer-language-answer-1",
+          "kind": "original",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "বাংলা।",
+          "spoken": null,
+          "gloss": "Bengali.",
+          "to": null,
+          "voice": "Ishaan",
+          "file": "buyer-language-answer-1-55a6c180.wav",
+          "durationMs": 603,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "speaking"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "buyer-language-confirm",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
+      "endsCall": false,
+      "deliver": null,
+      "tool": null,
+      "note": null,
+      "dealPatch": null,
+      "clips": [
+        {
+          "id": "buyer-language-confirm-1",
+          "kind": "said",
+          "language": "bn-IN",
+          "languages": [
+            "Bengali"
+          ],
+          "text": "ঠিক আছে, বাংলায় কথা বলি।",
+          "spoken": null,
+          "gloss": "All right, let us speak in Bengali.",
+          "to": "buyer",
+          "voice": "Kirra",
+          "file": "buyer-language-confirm-1-52d5e990.wav",
+          "durationMs": 2634,
+          "pan": 0.75,
+          "hearing": {
+            "farmer": "silent",
+            "buyer": "hears"
+          },
+          "pauseAfterMs": 480
+        }
+      ]
+    },
+    {
+      "id": "disclose",
+      "speakerRole": "ai",
+      "audience": "buyer",
+      "whisperKind": null,
+      "notPassedOn": false,
+      "buyerJoins": false,
       "endsCall": false,
       "deliver": null,
       "tool": null,

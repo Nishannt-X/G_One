@@ -8,8 +8,23 @@ import {
   type WhisperKind,
 } from '../types/console'
 
-/** Where a call's events came from: the real feed, the dev-only mock replayer, or the backend's synthetic replay. */
-export type CallOrigin = 'feed' | 'mock' | 'sample'
+/**
+ * Where a call's events came from: the real feed, the dev-only mock replayer, the backend's synthetic replay, or a
+ * stored call record (read only, rebuilt from the record's derived details: never a conversation).
+ */
+export type CallOrigin = 'feed' | 'mock' | 'sample' | 'stored'
+
+/** Why a party's side, or the farmer's memory, is missing from a stored call. */
+export type NotStoredReason = 'withheld' | 'forgotten' | 'said_no' | 'no_answer' | 'no_leg' | 'not_this_farmer'
+
+/** What a stored call adds to the cards, so they can say what was kept and what was not. */
+export interface RecordedFacts {
+  notStored: Partial<Record<LegRole | 'memory', NotStoredReason>>
+  /** The newest mandi price reference sentence, kept with any stored call (market data, not a party's words). */
+  priceReference: string | null
+  /** True once the deal receipt was found on the server; false hides the receipt link. */
+  receipt: boolean
+}
 
 export interface LegView {
   legId: string
@@ -79,6 +94,8 @@ export interface CallView {
   ended: { atMs: number; durationMs: number; reason: string } | null
   /** Counts the events applied to this call; makes each timeline entry's key unique. */
   seq: number
+  /** Set only for a stored call (`origin: 'stored'`). */
+  recorded?: RecordedFacts
 }
 
 export interface FeedState {
@@ -266,7 +283,6 @@ export function legByRole(call: CallView, role: LegRole): LegView | undefined {
   return call.legs.find((l) => l.role === role)
 }
 
-/** The call to show: the pinned one, else the newest running call, else the newest call. */
 /**
  * The call a page follows: the pinned one, else the newest call still running, else the newest call. "Newest" is the
  * call's own start time, not when it reached this tab: a console reconnect resends running calls and appends them to
@@ -279,6 +295,35 @@ export function pickCall(state: FeedState, pinned: string | null): CallView | nu
     .sort((a, b) => b.call.startedMs - a.call.startedMs || b.arrived - a.arrived)
     .map((entry) => entry.call)
   return newestFirst.find((c) => !c.ended) ?? newestFirst[0] ?? null
+}
+
+/** A call picked by hand, and the newest call at that moment, so a call started later takes over again. */
+export interface CallPin {
+  callId: string
+  newestAtPin: string | null
+}
+
+/** The id of the call that started last, by the call's own start time. */
+export function newestCallId(state: FeedState): string | null {
+  let best: CallView | null = null
+  for (const id of state.order) {
+    const call = state.calls[id]
+    if (!best || call.startedMs >= best.startedMs) best = call
+  }
+  return best?.callId ?? null
+}
+
+export function pinCall(state: FeedState, callId: string): CallPin {
+  return { callId, newestAtPin: newestCallId(state) }
+}
+
+/**
+ * The call the Live tab follows. A hand-picked call stays only until a newer call starts: without this, picking a
+ * call in the menu kept the page on it, so a new call never appeared until the page was reloaded.
+ */
+export function followedCall(state: FeedState, pin: CallPin | null): CallView | null {
+  if (pin && newestCallId(state) !== pin.newestAtPin) return pickCall(state, null)
+  return pickCall(state, pin?.callId ?? null)
 }
 
 /** How long the assistant's words take to say, for the speaking indicator. An estimate: audio is not on the console feed. */

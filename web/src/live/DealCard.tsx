@@ -65,7 +65,8 @@ export default function DealCard({ call }: { call: CallView }) {
         <Yes label={t('farmer')} yes={deal?.farmerYes ?? false} />
         <Yes label={t('buyer')} yes={deal?.buyerYes ?? false} />
       </div>
-      {deal && (deal.state === 'agreed' || deal.farmerYes || deal.buyerYes) && (
+      {/* A stored call shows the receipt link only when the server still has that receipt (receipts are not kept across restarts). */}
+      {deal && (deal.state === 'agreed' || deal.farmerYes || deal.buyerYes) && (call.origin !== 'stored' || call.recorded?.receipt === true) && (
         <a
           href={`/api/deals/${encodeURIComponent(call.callId)}/receipt.html`}
           target="_blank"

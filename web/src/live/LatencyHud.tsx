@@ -36,7 +36,7 @@ export default function LatencyHud({ call }: { call: CallView }) {
   const { t } = useI18n()
   if (call.timings.length === 0) return null
   const summary = summarize(call.timings)
-  const scripted = call.origin !== 'feed'
+  const scripted = call.origin === 'mock' || call.origin === 'sample'
   const cells = [
     { label: t('latency_transcript'), hint: t('latency_transcript_hint'), value: summary.last?.transcript ?? null, median: summary.median.transcript, bar: STAGE_BAR.transcript },
     { label: t('latency_translation'), hint: t('latency_translation_hint'), value: summary.last?.translation ?? null, median: summary.median.translation, bar: STAGE_BAR.translation },

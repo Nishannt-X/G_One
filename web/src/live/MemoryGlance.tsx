@@ -2,10 +2,18 @@ import { savedGistText, useSavedGist } from '../demo/savedGist'
 import type { CallView } from '../lib/callState'
 import { openFollowUps } from '../lib/farmers'
 import { humanize, shortDate } from '../lib/format'
-import { useI18n } from '../lib/i18n'
+import { useI18n, type MessageKey } from '../lib/i18n'
 import { CheckIcon } from '../ui/icons'
 import { Card } from '../ui/parts'
 import { ProvenanceChip } from '../views/ProvenanceChip'
+
+/** Why there is no memory to show. A stored call says why it was not kept. */
+function noMemoryKey(call: CallView): MessageKey {
+  const missing = call.recorded?.notStored
+  if (missing?.memory === 'not_this_farmer') return 'memory_not_this_farmer'
+  if (missing?.farmer === 'said_no' || missing?.farmer === 'no_answer') return 'memory_not_stored'
+  return 'memory_none_loaded'
+}
 
 const rank = (field: string) => (field === 'name' ? 0 : field.startsWith('crop:') ? 1 : 2)
 
@@ -17,6 +25,7 @@ export default function MemoryGlance({ call }: { call: CallView }) {
   const { t, lang } = useI18n()
   const memory = call.memory
   const saved = useSavedGist(call)
+  const stored = call.origin === 'stored'
   const open = memory ? openFollowUps(memory.gists) : []
   return (
     <Card
@@ -24,8 +33,9 @@ export default function MemoryGlance({ call }: { call: CallView }) {
       aside={memory ? <span className={`chip ${memory.returning ? 'bg-ok-soft text-ok' : 'bg-sunk text-muted'}`}>{t(memory.returning ? 'memory_returning' : 'memory_first')}</span> : undefined}
     >
       <div className="space-y-3">
+        {stored && memory && <p className="text-sm text-muted">{t('memory_stored_note')}</p>}
         {!memory ? (
-          <p className="text-muted">{t('memory_none_loaded')}</p>
+          <p className="text-muted">{t(noMemoryKey(call))}</p>
         ) : memory.facts.length === 0 && memory.gists.length === 0 ? (
           <p className="text-muted">{t('memory_nothing_yet')}</p>
         ) : (

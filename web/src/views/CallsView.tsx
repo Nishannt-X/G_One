@@ -1,29 +1,26 @@
 import { useEffect, useMemo, useState } from 'react'
-import CallHeader from '../live/CallHeader'
-import DealCard from '../live/DealCard'
-import LatencyHud from '../live/LatencyHud'
-import MemoryGlance from '../live/MemoryGlance'
-import PriceMeter from '../live/PriceMeter'
-import Stage from '../live/Stage'
-import ToolsCard from '../live/ToolsCard'
+import CallBoard from '../live/CallBoard'
 import {
   callCode,
   CONSENT_LABEL,
   filterCalls,
+  keyPoints,
   languagesOf,
   NO_FILTER,
-  notStoredText,
   OUTCOME_LABEL,
+  outcomeLabel,
   toCallView,
   type AnalyticsSummary,
   type CallFilter,
   type CallRecordView,
   type CallSummary,
   type Consent,
+  type KeyPointTone,
   type Outcome,
 } from '../lib/analytics'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
 import { duration, languageLabel, millis, rupees } from '../lib/format'
+import { useI18n } from '../lib/i18n'
 import { ArrowIcon, LockIcon, TrashIcon } from '../ui/icons'
 import { Card, Dialog, Empty, ErrorNote, Skeleton } from '../ui/parts'
 
@@ -49,9 +46,29 @@ function pairLabel(languages: CallSummary['languages']): string {
 }
 
 function dealLine(deal: CallSummary['deal']): string {
-  if (!deal) return '—'
-  const parts = [deal.commodity, deal.quantity, deal.price !== null ? `${rupees(deal.price)}${deal.unit ? `/${deal.unit}` : ''}` : null, deal.market]
-  return parts.filter(Boolean).join(' · ') || '—'
+  if (!deal) return ''
+  const crop = [deal.variety, deal.commodity].filter(Boolean).join(' ')
+  const parts = [crop, deal.quantity, deal.price !== null ? `${rupees(deal.price)}${deal.unit ? `/${deal.unit}` : ''}` : null, deal.market]
+  return parts.filter(Boolean).join(' · ')
+}
+
+const OUTCOME_CLASS: Record<string, string> = {
+  agreed: 'bg-ok-soft text-ok',
+  no_deal: 'bg-warn-soft text-warn',
+  info_only: 'bg-buyer-soft text-buyer',
+  no_terms: 'bg-sunk text-muted',
+}
+
+function OutcomeChip({ outcome }: { outcome: string }) {
+  return <span className={`chip ${OUTCOME_CLASS[outcome] ?? OUTCOME_CLASS.no_terms}`}>{outcomeLabel(outcome)}</span>
+}
+
+/** What else is worth seeing in a row: the connected buyer and any private caution. */
+function rowExtras(c: CallSummary): string[] {
+  const extras: string[] = []
+  if (c.buyerName) extras.push(`Buyer: ${c.buyerName}`)
+  if (c.cautions) extras.push(c.cautions === 1 ? '1 caution' : `${c.cautions} cautions`)
+  return extras
 }
 
 function AccessForm({ onSaved }: { onSaved: () => void }) {
@@ -101,7 +118,7 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
 /** The stored calls table with filters and sort. */
 export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; filter: CallFilter; onFilter: (f: CallFilter) => void }) {
   if (calls.length === 0) {
-    return <Card><Empty title="No calls stored yet">A call is stored only when a party says yes to remembering it.</Empty></Card>
+    return <Card><Empty title="No calls stored yet">A call is stored only when a party says yes to remembering it. Calls where nobody said yes leave nothing behind.</Empty></Card>
   }
   const shown = filterCalls(calls, filter)
   const languages = languagesOf(calls)
@@ -132,84 +149,85 @@ export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; 
         <Empty title="No stored calls match">Change the language or outcome filter.</Empty>
       ) : (
         <ul className="divide-y divide-line">
-          {shown.map((c) => (
-            <li key={c.callId}>
-              <a href={`#/analytics/calls?id=${encodeURIComponent(c.callId)}`} className="grid gap-x-4 gap-y-1 px-4 py-3 transition-colors hover:bg-sunk md:grid-cols-[7rem_9rem_5rem_minmax(0,1fr)_minmax(0,1.2fr)_auto] md:items-center">
-                <span className="font-mono font-bold" title={c.callId}>{callCode(c.callId)}</span>
-                <span className="text-sm text-muted">{dateTime(c.startedMs)}</span>
-                <span className="font-mono text-sm tabular-nums">{duration(c.durationMs)}</span>
-                <span className="min-w-0 truncate text-sm">{pairLabel(c.languages)}</span>
-                <span className="min-w-0 text-sm md:truncate" title={dealLine(c.deal)}><span className="font-semibold">{OUTCOME_LABEL[c.outcome]}</span> · {dealLine(c.deal)}</span>
-                <span className="flex flex-wrap gap-1.5">
-                  <ConsentChip who="Farmer" consent={c.consentFarmer} />
-                  <ConsentChip who="Buyer" consent={c.consentBuyer} />
-                </span>
-              </a>
-            </li>
-          ))}
+          {shown.map((c) => {
+            const terms = dealLine(c.deal)
+            const extras = rowExtras(c)
+            return (
+              <li key={c.callId}>
+                <a href={`#/analytics/calls?id=${encodeURIComponent(c.callId)}`} className="grid gap-x-4 gap-y-1.5 px-4 py-3 transition-colors hover:bg-sunk md:grid-cols-[8.5rem_4rem_minmax(0,0.9fr)_minmax(0,1.6fr)_auto] md:items-center">
+                  <span className="flex items-baseline gap-2 md:block">
+                    <span className="font-mono font-bold" title={c.callId}>{callCode(c.callId)}</span>
+                    <span className="text-sm text-muted md:block">{dateTime(c.startedMs)}</span>
+                  </span>
+                  <span className="font-mono text-sm tabular-nums"><span className="sr-only">Length </span>{duration(c.durationMs)}</span>
+                  <span className="min-w-0 truncate text-sm">{pairLabel(c.languages)}</span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    <OutcomeChip outcome={c.outcome} />
+                    {terms && <span className="min-w-0 font-semibold md:truncate" title={terms}>{terms}</span>}
+                    {extras.length > 0 && <span className="text-muted">{extras.join(' · ')}</span>}
+                  </span>
+                  <span className="flex flex-wrap gap-1.5">
+                    <ConsentChip who="Farmer" consent={c.consentFarmer} />
+                    <ConsentChip who="Buyer" consent={c.consentBuyer} />
+                  </span>
+                </a>
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>
   )
 }
 
-function NotStored({ title, text }: { title: string; text: string }) {
-  return <Card title={title}><p className="text-muted">{text}</p></Card>
+const TONE_CLASS: Record<KeyPointTone, string> = { ok: 'text-ok', bad: 'text-bad', warn: 'text-warn', plain: 'text-faint' }
+
+/** In the place the live subtitles take: the call at a glance, from the stored details only. */
+export function KeyPointsCard({ record }: { record: CallRecordView }) {
+  const points = keyPoints(record)
+  return (
+    <section aria-labelledby="key-points" className="card p-4 md:p-5">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 id="key-points" className="text-lg font-bold">Key points</h2>
+        <span className="chip bg-sunk text-muted">From the stored details</span>
+      </header>
+      <ul className="space-y-2">
+        {points.map((p) => (
+          <li key={p.id} className="flex items-start gap-2.5">
+            <span aria-hidden="true" className={`mt-2 h-2 w-2 shrink-0 rounded-full bg-current ${TONE_CLASS[p.tone]}`} />
+            <span>{p.text}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 border-t border-line pt-3 text-sm text-muted">The conversation itself is never stored: no subtitles, no recordings and no private advice text. These points are worked out from the stored details, without asking a model.</p>
+    </section>
+  )
 }
 
-/** One stored call, on the live cards. No conversation and no private advice text: neither is ever stored. */
-export function CallDetail({ record, onDelete }: { record: CallRecordView; onDelete?: () => void }) {
-  const call = toCallView(record)
-  const { farmer, buyer, notStored } = record.data
+/** One stored call, on the same cards as the live call, without the conversation. */
+export function CallDetail({ record, onDelete, receipt = false }: { record: CallRecordView; onDelete?: () => void; receipt?: boolean }) {
+  const { t } = useI18n()
+  const call = toCallView(record, { receipt })
   const [confirm, setConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
+  const older = (record.schemaVersion ?? 1) < 2
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <a href="#/analytics/calls" className="btn-quiet btn-sm"><ArrowIcon className="rotate-180" /> All stored calls</a>
-        <h2 className="text-xl font-bold"><span className="font-mono">{callCode(record.callId)}</span></h2>
-        <button type="button" className="font-mono text-sm text-faint underline-offset-4 hover:underline" title="Copy the full call id" onClick={() => { void navigator.clipboard?.writeText(record.callId).then(() => setCopied(true)) }}>
+        <h2 className="text-xl font-bold"><span className="font-mono">{callCode(record.callId)}</span> <span className="text-base font-semibold text-muted">{t('call_stored')}</span></h2>
+        <button type="button" className="min-w-0 font-mono text-sm break-all text-faint underline-offset-4 hover:underline" title="Copy the full call id" onClick={() => { void navigator.clipboard?.writeText(record.callId).then(() => setCopied(true)) }}>
           {record.callId}{copied ? ' (copied)' : ''}
         </button>
         {onDelete && <button type="button" className="btn-danger btn-sm ml-auto" onClick={() => setConfirm(true)}><TrashIcon /> Delete record</button>}
       </div>
-      <CallHeader call={call} calls={[call]} onPick={() => {}} />
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <ConsentChip who="Farmer" consent={record.consentFarmer} />
         <ConsentChip who="Buyer" consent={record.consentBuyer} />
-        <span className="chip bg-sunk text-muted">{OUTCOME_LABEL[record.outcome]}</span>
+        <OutcomeChip outcome={record.outcome} />
+        {older && <span className="text-sm text-muted">Stored before leg end times, language switches and confirmation times were kept.</span>}
       </div>
-      <p className="text-sm text-muted">The conversation itself is never stored: no subtitles, no recordings and no private advice text. Only the details below are kept.</p>
-      {call.legs.length === 2 ? (
-        <Stage call={call} />
-      ) : (
-        <Card title="Stored leg">
-          <ul className="space-y-1">
-            {call.legs.map((l) => (
-              <li key={l.legId}><span className="font-semibold capitalize">{l.role}</span> · {languageLabel(l.language)} · <span className="capitalize">{l.source}</span> · ended ({l.ended?.reason})</li>
-            ))}
-          </ul>
-        </Card>
-      )}
-      {!farmer && <p role="note" className="rounded-xl bg-sunk px-4 py-2 text-muted">{notStoredText('farmer', notStored.farmer)}</p>}
-      {!buyer && <p role="note" className="rounded-xl bg-sunk px-4 py-2 text-muted">{notStoredText('buyer', notStored.buyer)}</p>}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <DealCard call={call} />
-        <PriceMeter call={call} />
-      </div>
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {call.timings.length > 0 ? <LatencyHud call={call} /> : <NotStored title="Turn latency" text="No measured turns were stored for this call." />}
-        {farmer ? <MemoryGlance call={call} /> : <NotStored title="Farmer memory" text={notStoredText('farmer', notStored.farmer)} />}
-        {farmer ? <ToolsCard call={call} /> : <NotStored title="AI tools and lookups" text={notStoredText('farmer', notStored.farmer)} />}
-      </div>
-      {farmer && farmer.advice.length > 0 && (
-        <Card title="Private advice given">
-          <p className="text-muted">Only the kind and time are stored, never the words.</p>
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {farmer.advice.map((a, i) => <li key={i} className="chip bg-whisper-soft text-whisper">{a.kind.replace('_', ' ')} · {duration(Math.max(0, a.atMs - record.startedMs))}</li>)}
-          </ul>
-        </Card>
-      )}
+      <CallBoard call={call} main={<KeyPointsCard record={record} />} />
       <Dialog open={confirm} onClose={() => setConfirm(false)} title="Delete this call record?">
         <p className="text-muted">The stored record of {callCode(record.callId)} is removed for good. Farmer memory is not changed.</p>
         <div className="mt-4 flex justify-end gap-2">
@@ -234,6 +252,7 @@ export default function CallsView({ callId }: { callId: string | null }) {
   const [filter, setFilter] = useState<CallFilter>(NO_FILTER)
   const [reload, setReload] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
+  const [receipt, setReceipt] = useState<{ callId: string; found: boolean } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -249,6 +268,20 @@ export default function CallsView({ callId }: { callId: string | null }) {
       cancelled = true
     }
   }, [callId, reload])
+
+  // The receipt lives in the backend's memory, so it is gone after a restart: link to it only when it is still there.
+  const hasYes = Boolean(record?.data.deal && (record.data.deal.state === 'agreed' || record.data.deal.farmerYes || record.data.deal.buyerYes))
+  const recordId = record?.callId ?? null
+  useEffect(() => {
+    if (!recordId || !hasYes) return
+    let cancelled = false
+    api(`/api/deals/${encodeURIComponent(recordId)}/receipt`)
+      .then(() => { if (!cancelled) setReceipt({ callId: recordId, found: true }) })
+      .catch(() => { if (!cancelled) setReceipt({ callId: recordId, found: false }) })
+    return () => {
+      cancelled = true
+    }
+  }, [recordId, hasYes])
 
   const remove = useMemo(() => async (id: string) => {
     try {
@@ -268,7 +301,7 @@ export default function CallsView({ callId }: { callId: string | null }) {
   if (failure) return <ErrorNote title={failureText(failure)} onRetry={() => setReload((r) => r + 1)} />
 
   if (callId) {
-    return record && record.callId === callId ? <CallDetail record={record} onDelete={() => void remove(callId)} /> : <Skeleton className="h-64 w-full" />
+    return record && record.callId === callId ? <CallDetail record={record} receipt={receipt?.callId === callId && receipt.found} onDelete={() => void remove(callId)} /> : <Skeleton className="h-64 w-full" />
   }
   return (
     <div className="space-y-4">

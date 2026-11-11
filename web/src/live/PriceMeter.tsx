@@ -1,14 +1,24 @@
-import type { CallView } from '../lib/callState'
+import type { CallView, ToolView } from '../lib/callState'
 import { rupees } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 import { comparePrice, latestReference, meterPosition, METER_RANGE_PCT as RANGE_PCT } from '../lib/pricing'
 import { Card } from '../ui/parts'
 
+/**
+ * The call's tools, plus a stored call's kept price reference when its tool list was not kept (the farmer did not say
+ * yes, but the buyer did): the reference is market data, so the comparison can still be shown.
+ */
+function toolsWithReference(call: CallView): ToolView[] {
+  const reference = call.recorded?.priceReference
+  if (!reference || call.tools.some((tool) => tool.tool === 'get_mandi_price' && tool.result === reference)) return call.tools
+  return [...call.tools, { key: 'stored-price', tool: 'get_mandi_price', args: null, ok: true, result: reference, durationMs: 0, atMs: call.startedMs }]
+}
+
 /** How the offer on the table compares with the newest dated reference. Never says "fair": the reference is dated. */
 export default function PriceMeter({ call }: { call: CallView }) {
   const { t } = useI18n()
   const deal = call.deal
-  const reference = latestReference(call.tools, deal?.commodity ?? null)
+  const reference = latestReference(toolsWithReference(call), deal?.commodity ?? null)
   const comparison = comparePrice(deal?.price ?? null, deal?.unit ?? null, reference)
   const delta = comparison?.deltaPct ?? 0
   const same = Math.abs(delta) < 0.5

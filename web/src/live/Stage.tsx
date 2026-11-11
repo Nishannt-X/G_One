@@ -24,7 +24,11 @@ function LegCard({ call, role, now }: { call: CallView; role: LegRole; now: numb
   const style = ROLE_STYLE[role]
   const activity = legActivity(call, role, now)
   const Icon = role === 'farmer' ? WheatIcon : BuyersIcon
-  const status = !leg ? t('leg_waiting') : leg.ended ? t('leg_ended', { reason: leg.ended.reason }) : t('leg_connected')
+  // A stored call has no one left to wait for: a missing leg either never joined or was not kept.
+  const stored = call.origin === 'stored'
+  const missing = call.recorded?.notStored[role]
+  const absent = stored && missing && missing !== 'no_leg' ? t('leg_not_stored') : t('leg_not_joined')
+  const status = !leg ? (stored ? '' : t('leg_waiting')) : leg.ended ? t('leg_ended', { reason: leg.ended.reason }) : t('leg_connected')
   return (
     <div className={`rounded-xl border border-line p-3 md:p-4 ${leg ? 'bg-surface' : 'border-dashed bg-transparent'}`}>
       <div className="flex items-center gap-3">
@@ -32,7 +36,7 @@ function LegCard({ call, role, now }: { call: CallView; role: LegRole; now: numb
         <div className="min-w-0 flex-1">
           <p className="text-lg leading-tight font-bold">{t(role)}</p>
           <p className="truncate text-sm text-muted">
-            {leg ? `${languageLabel(leg.language, lang)} · ${t(leg.source === 'twilio' ? 'source_twilio' : 'source_simulator')}` : t('leg_not_joined')}
+            {leg ? `${languageLabel(leg.language, lang)} · ${t(leg.source === 'twilio' ? 'source_twilio' : 'source_simulator')}` : absent}
           </p>
         </div>
         <p className="text-right text-sm font-semibold text-muted">{status}</p>

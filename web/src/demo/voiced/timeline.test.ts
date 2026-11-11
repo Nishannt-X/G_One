@@ -57,9 +57,13 @@ describe('voiced sample timeline', () => {
     }
   })
 
-  it('checks the name first, and asks to end and to remember before saying goodbye', () => {
+  it('chooses each language before the greeting and asks to end and remember before goodbye', () => {
     const at = (id: string) => sample.beats.findIndex((b) => b.id === id)
-    expect(at('name-check')).toBe(0)
+    expect(sample.beats.slice(0, 4).map((b) => b.id)).toEqual(['farmer-language-ask', 'farmer-language-answer', 'farmer-language-confirm', 'name-check'])
+    expect(sample.beats.slice(at('buyer-language-ask'), at('disclose') + 1).map((b) => b.id)).toEqual(['buyer-language-ask', 'buyer-language-answer', 'buyer-language-confirm', 'disclose'])
+    expect(sample.beats[at('buyer-language-ask')].buyerJoins).toBe(true)
+    expect(sample.beats[at('farmer-language-confirm')].clips[0].language).toBe('kn-IN')
+    expect(sample.beats[at('buyer-language-confirm')].clips[0].language).toBe('bn-IN')
     expect(at('name-check')).toBeLessThan(at('greet'))
     expect(at('sent-buyer')).toBeLessThan(at('ask-end'))
     expect(at('ask-end')).toBeLessThan(at('ask-save'))

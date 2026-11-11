@@ -62,6 +62,18 @@ const KN_SPOKEN: Record<string, string> = {
 // (nameCheck, askQuantity, askNoLimits, askEnd, askSave, goodbye), so the sample says what the product says.
 const BEATS: Beat[] = [
   {
+    id: 'farmer-language-ask', speaker: 'ai', audience: 'farmer',
+    lines: [{ kind: 'own', lang: 'en-IN', to: 'farmer', text: 'Hello, this is G-One. Which language would you like to speak? Hindi, English, Bengali, Tamil, Kannada, or Hinglish.' }],
+  },
+  {
+    id: 'farmer-language-answer', speaker: 'farmer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'kn-IN', text: 'ಕನ್ನಡ, ಕನ್ನಡದಲ್ಲಿ ಮಾತಾಡಿ.', gloss: 'Kannada, please speak in Kannada.' }],
+  },
+  {
+    id: 'farmer-language-confirm', speaker: 'ai', audience: 'farmer',
+    lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ಸರಿ, ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡೋಣ.', gloss: 'All right, let us speak in Kannada.' }],
+  },
+  {
     id: 'name-check', speaker: 'ai', audience: 'farmer',
     note: 'The remembered name is confirmed before memory is used.',
     lines: [{ kind: 'own', lang: 'kn-IN', to: 'farmer', text: 'ನಮಸ್ಕಾರ, ಜಿ-ಒನ್ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನೀವು ಬಸವರಾಜ್ ಅವರೇ?', gloss: 'Namaskara, this is G-One speaking. Are you Basavaraj?' }],
@@ -92,7 +104,19 @@ const BEATS: Beat[] = [
     lines: [{ kind: 'own', lang: 'kn-IN', text: 'ಆಯ್ತು, ಮಾಡಿ.', gloss: 'All right, do it.' }],
   },
   {
-    id: 'disclose', speaker: 'ai', audience: 'buyer', buyerJoins: true,
+    id: 'buyer-language-ask', speaker: 'ai', audience: 'buyer', buyerJoins: true,
+    lines: [{ kind: 'own', lang: 'en-IN', to: 'buyer', text: 'Hello, this is G-One. I am connecting you to a farmer. Which language would you like to speak? Hindi, English, Bengali, Tamil, Kannada, or Hinglish.' }],
+  },
+  {
+    id: 'buyer-language-answer', speaker: 'buyer', audience: 'none',
+    lines: [{ kind: 'own', lang: 'bn-IN', text: 'বাংলা।', gloss: 'Bengali.' }],
+  },
+  {
+    id: 'buyer-language-confirm', speaker: 'ai', audience: 'buyer',
+    lines: [{ kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'ঠিক আছে, বাংলায় কথা বলি।', gloss: 'All right, let us speak in Bengali.' }],
+  },
+  {
+    id: 'disclose', speaker: 'ai', audience: 'buyer',
     deal: { market: 'Kolkata' },
     lines: [
       { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'নমস্কার, আমি জি-ওয়ান, একটা এআই সহকারী। কর্ণাটকের এক চাষির হয়ে ফোন করছি। ওঁর চল্লিশ কুইন্টাল পেঁয়াজ বিক্রি আছে।', gloss: 'Namaskar, I am G-One, an AI assistant. I am calling on behalf of a farmer in Karnataka. He has forty quintals of onion for sale.' },

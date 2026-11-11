@@ -59,6 +59,25 @@ class AskGoneUnitTest {
     }
 
     @Test
+    void theSameNumberInAnotherUnitOrCropIsNotTheSamePrice() {
+        CallLedger.Known perQuintal = new CallLedger.Known("Onion", null, null, new BigDecimal("4000"), "quintal", null,
+                null, null);
+        DealDesk.Card agreedPerKg = new DealDesk.Card("agreed", "Onion", null, null, new BigDecimal("4E+3"), "kg",
+                null, null, null, true, true);
+        assertThat(AskDigest.priceState(perQuintal, agreedPerKg)).as("4000 a quintal is not 4000 a kilo")
+                .isEqualTo(AskDigest.PriceState.CLOSED);
+        DealDesk.Card openPerKg = new DealDesk.Card("offer_open", "Onion", null, null, new BigDecimal("4000"), "kg",
+                null, null, null, false, false);
+        assertThat(AskDigest.priceState(perQuintal, openPerKg)).isEqualTo(AskDigest.PriceState.CLOSED);
+        DealDesk.Card otherCrop = new DealDesk.Card("agreed", "Potato", null, null, new BigDecimal("4000"), "quintal",
+                null, null, null, true, true);
+        assertThat(AskDigest.priceState(perQuintal, otherCrop)).isEqualTo(AskDigest.PriceState.CLOSED);
+        DealDesk.Card sameInQtl = new DealDesk.Card("agreed", "onions", null, null, new BigDecimal("4000.00"), "qtl",
+                null, null, null, true, true);
+        assertThat(AskDigest.priceState(perQuintal, sameInQtl)).as("only spelling differs").isEqualTo(AskDigest.PriceState.AGREED);
+    }
+
+    @Test
     void calculationsAreLabelledAndOnlyFromTypedFacts() {
         CallLedger.Known knows = new CallLedger.Known("Onion", "Red", null, new BigDecimal("4E+3"), "quintal",
                 "20 quintal", null, null);

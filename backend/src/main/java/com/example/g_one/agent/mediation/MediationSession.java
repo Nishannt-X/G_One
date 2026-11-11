@@ -63,7 +63,7 @@ public final class MediationSession {
     private static final Language ENGLISH = new Language("en-IN", "English", "n/a");
     private static final Logger log = LoggerFactory.getLogger(MediationSession.class);
     private static final int RECENT_LINES = 4;
-    /** A yes or no to a pending question is at most this many words, the assistant's name included. */
+    /** A yes or no to a pending question is at most this many words, and never names the assistant. */
     private static final int SHORT_REPLY_WORDS = 5;
     /** An offer this far below the dated reference gets the stronger wording. */
     private static final BigDecimal FAR_BELOW = new BigDecimal("0.15");
@@ -421,35 +421,39 @@ public final class MediationSession {
      */
     private void process(Turn turn, long n, long heardAt) {
         desk.tick();
-        if (closingTurn(turn, heardAt)) return;
         LegRole speaker = turn.role();
+        // Classified before anything else, so a question for G-One never reaches a reply reading or a shared record.
+        boolean named = AddressDetector.addressed(turn.text(), speaker);
+        // Only a standalone short yes or no answers a pending question: "G-One, my floor is X, do not tell him" is not a
+        // "no", and "yes, and G-One what..." is not a "yes".
+        ReplyGuard.Reading quick = !named && turn.text().strip().split("[\\s,.!?।]+").length <= SHORT_REPLY_WORDS
+                ? ReplyGuard.read(turn.text()) : ReplyGuard.Reading.UNCLEAR;
+        if (closingTurn(turn, heardAt, named)) return;
         LegRole listener = speaker.other();
         Language to = language(listener);
         var awaiting = desk.awaiting(speaker);
-        ReplyGuard.Reading quick = ReplyGuard.read(turn.text());
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent() && quick != ReplyGuard.Reading.UNCLEAR) {
             recordHeard(turn, heardAt);
             desk.heard(speaker, quick == ReplyGuard.Reading.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO, n, turn.startedMs());
             return; // a plain yes or no to the read-back is answered by the read-back flow, and needs no model
         }
 
-        boolean sameLanguage = language(speaker).equals(to);
         boolean farmerSecret = speaker == LegRole.FARMER && ScamPatterns.farmerSharedSecret(turn.text());
+        if (named) {
+            // Said to G-One by name: answered privately, never read or translated, so one model call in all. A secret
+            // said to G-One is masked before the model sees the question, and still earns the farmer the caution.
+            if (farmerSecret) whisperCaution("cautionShareWithheld");
+            aside(turn, "name");
+            return;
+        }
+        boolean sameLanguage = language(speaker).equals(to);
         if (farmerSecret) {
             recordHeard(turn, heardAt); // masked: the digits never reach the console or the transcript
             whisperCaution("cautionShareWithheld");
             oneMoment();
             return; // never sent to the model, and never translated for the buyer
         }
-
-        // A short yes or no to a pending question ("G-One, haan") is an answer to the deal, never a question for the
-        // assistant. A longer turn that happens to hold a "no" word ("G-One, my floor is X, mat batana") is not a reply.
-        boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR
-                && turn.text().strip().split("[\\s,.!?।]+").length <= SHORT_REPLY_WORDS;
-        if (!replying && AddressDetector.addressed(turn.text(), speaker)) {
-            aside(turn, "name");
-            return; // called by name: answered without reading or translating the turn, so one model call in all
-        }
+        boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
 
         TurnReader.Reading read = reader.read(speaker, turn.text(), language(speaker), to, recent(),
                 awaiting.map(a -> a.name().toLowerCase(Locale.ROOT)).orElse("none"));
@@ -497,7 +501,8 @@ public final class MediationSession {
         } else {
             translate(turn, listener, to, spoken, read.offer());
         }
-        ledger.learned(speaker, read.offer(), speaker == LegRole.BUYER); // the speaker knows what they said
+        // The speaker knows what they said, which is what their words carry, not what the model read into them.
+        ledger.learned(speaker, HeardTerms.in(read.offer(), turn.text(), language(speaker).code()), speaker == LegRole.BUYER);
 
         if (speaker == LegRole.BUYER && read.offer() != null && "clear".equals(read.offer().status())) {
             priceWhisper(read.offer());
@@ -527,7 +532,9 @@ public final class MediationSession {
         voice(listener).say(new LegVoice.Line(spoken, to, false, outcome -> {
             if (outcome != PlaybackOutcome.PLAYED) return;
             ledger.heard(listener, spoken);
-            ledger.learned(listener, offer, turn.role() == LegRole.BUYER);
+            // Played to the end proves the line was heard, not that the model's reading of it was: keep only the
+            // terms the heard words carry.
+            ledger.learned(listener, HeardTerms.in(offer, spoken, to.code()), turn.role() == LegRole.BUYER);
         }));
         ledger.said(turn.role(), ScamPatterns.masked(turn.text()));
         bus.publish(new ConsoleEvent.TurnTranslated(callId, clock.millis(), turn.legId(), turn.role(), listener,
@@ -547,7 +554,7 @@ public final class MediationSession {
         LegRole asker = turn.role();
         Language lang = language(asker);
         long started = clock.millis();
-        AskGone.Answer answer = ask.answer(asker, turn.text(), ledger.askedBefore(asker));
+        AskGone.Answer answer = ask.answer(asker, ScamPatterns.masked(turn.text()), ledger.askedBefore(asker));
         String text = withoutThinking(AskLines.render(answer.intent(), asker, facts(asker), lang.code(),
                 phrase -> localized(phrase, lang)));
         if (text == null) text = AskLines.line("askOnlyCall", lang.code());
@@ -762,9 +769,17 @@ public final class MediationSession {
     // ---- the end of the call, asked of both parties (agent/closing) ----
 
     /** A turn answering the end-of-call check, or a short "bye" outside any read-back. True when handled here. */
-    private boolean closingTurn(Turn turn, long heardAt) {
+    private boolean closingTurn(Turn turn, long heardAt, boolean named) {
         CallClosing closing = side.closing();
         LegRole speaker = turn.role();
+        if (closing.active() && named) {
+            // A question for G-One during the check: answered privately, never taken as the answer, and the pending
+            // question is asked once more on a fresh token, which neither counts as nor uses up the re-ask.
+            aside(turn, "name");
+            closing.repeat(speaker).ifPresent(ask -> sayClosing(ask.role(),
+                    ClosingLines.ask(ask.question(), language(ask.role()).code()), o -> waitForAnswer(ask.role(), ask.token())));
+            return true;
+        }
         if (closing.active()) {
             recordHeard(turn, heardAt);
             closingStep(closing.heard(speaker, turn.text()));

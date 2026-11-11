@@ -115,6 +115,9 @@ public class ConsoleState {
                         new ActiveCall.Leg(leg.legId(), leg.role(), leg.source(), changed.to()));
                 if (changed.role() == LegRole.FARMER) language = changed.to();
             }
+            // A party's private question to G-One is shown to consoles watching live and never kept for a later one:
+            // the console feed is not authenticated (see ConsoleSocket), so it must not be served on demand.
+            if (event instanceof ConsoleEvent.AsideAnswered) return;
             if (events.size() < MAX_EVENTS_PER_CALL || event instanceof ConsoleEvent.CallEnded) events.add(event);
         }
 

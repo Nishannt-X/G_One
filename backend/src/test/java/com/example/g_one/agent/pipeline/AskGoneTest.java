@@ -440,6 +440,56 @@ class AskGoneTest {
         assertThat(spokenTo(buyer)).last().isEqualTo("The quantity said on this call so far is fifty quintal.");
     }
 
+    @Test
+    void anExtractedQuantityTheDeliveredTranslationNeverSaidIsNotKnown() {
+        buyerJoinsAndAgrees(null);
+        // The reader extracts fifty quintal, but neither the turn nor the translation the buyer heard says it.
+        llm.replyText(reading("I have as much as I told you", "{\"status\":\"none\",\"quantity\":\"50 quintal\"}", "none", false));
+        session(LegRole.FARMER).say("utna hi hai jitna bataya");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).contains("I have as much as I told you");
+        llm.replyText(intent("quantity"));
+        session(LegRole.BUYER).say("G-One, how much?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).last().isEqualTo(EN_NO_QUANTITY);
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("जी-वन, मैंने कितना बताया?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().as("nor did the farmer say it").isEqualTo("इस कॉल पर अभी तक मात्रा नहीं बताई गई है।");
+    }
+
+    @Test
+    void anExtractedUnitTheDeliveredTranslationNeverSaidLeavesThePriceUnknown() {
+        buyerJoinsAndAgrees();
+        // A clear offer per quintal is read, but nobody said "quintal": the farmer heard a bare figure.
+        llm.replyText(reading("मैं चार हज़ार दे सकता हूँ", clearOffer(4000), "none", false));
+        session(LegRole.BUYER).say("I can pay 4000");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("price"));
+        session(LegRole.FARMER).say("जी-वन, उसने क्या भाव दिया?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().isEqualTo("इस कॉल पर अभी तक कोई भाव नहीं दिया गया है।");
+    }
+
+    @Test
+    void aQuantityAndPriceTheTranslationReallySaysAreKnown() {
+        buyerJoinsAndAgrees(null);
+        llm.replyText(reading("I have fifty quintals", "{\"status\":\"none\",\"quantity\":\"50 quintal\"}", "none", false));
+        session(LegRole.FARMER).say("pachaas quintal hai");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("quantity"));
+        session(LegRole.BUYER).say("G-One, how much?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).last().isEqualTo("The quantity said on this call so far is fifty quintal.");
+    }
+
     // ---- P2-5 / P2-6: honest prices, figures only from typed facts ----
 
     @Test
@@ -682,42 +732,104 @@ class AskGoneTest {
 
     // ---- flow: confirmation, the end-of-call check, held turns ----
 
-    @Test
-    void aYesToTheReadBackThatNamesGOneIsAConfirmationNotAQuestion() {
+    /** The buyer offers, the farmer accepts: both are asked to confirm the read-back. */
+    private void toConfirming() {
         buyerJoinsAndAgrees();
         buyerOffers(4000);
         llm.replyText(reading("Yes, agreed", NO_OFFER, "yes", false));
         session(LegRole.FARMER).say("haan theek hai");
         executor.runAll();
         finishAll();
+        List<ConsoleEvent.DealUpdated> deals = eventsOf(ConsoleEvent.DealUpdated.class);
+        assertThat(deals.get(deals.size() - 1).state()).isEqualTo(DealState.CONFIRMING);
+    }
+
+    private ConsoleEvent.DealUpdated lastDeal() {
+        List<ConsoleEvent.DealUpdated> deals = eventsOf(ConsoleEvent.DealUpdated.class);
+        return deals.get(deals.size() - 1);
+    }
+
+    @Test
+    void onlyAStandaloneShortYesAnswersTheReadBack() {
+        toConfirming();
         int requests = llm.requests().size();
 
-        session(LegRole.BUYER).say("G-One, yes");
+        session(LegRole.BUYER).say("yes");
         executor.runAll();
         finishAll();
 
         assertThat(llm.requests()).as("a plain yes needs no model").hasSize(requests);
-        List<ConsoleEvent.DealUpdated> deals = eventsOf(ConsoleEvent.DealUpdated.class);
-        assertThat(deals.get(deals.size() - 1).buyerYes()).as("counted as the buyer's yes to the read-back").isTrue();
-        assertThat(deals.get(deals.size() - 1).state()).isEqualTo(DealState.CONFIRMING);
+        assertThat(lastDeal().buyerYes()).isTrue();
     }
 
     @Test
-    void whileTheEndOfCallCheckIsAskedAQuestionToGOneIsReadAsItsAnswer() {
+    void aPrivateFloorWithADoNotInItDuringTheReadBackStaysPrivateAndDeclinesNothing() {
+        toConfirming();
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
+        llm.replyText(intent("other"));
+
+        session(LegRole.FARMER).say("G-One, my minimum is 3900, do not tell him");
+        executor.runAll();
+        finishAll();
+
+        assertThat(lastDeal().state()).as("the confirmation is not declined").isEqualTo(DealState.CONFIRMING);
+        assertThat(spokenTo(buyer)).noneMatch(t -> t.contains("not confirmed") || t.contains("3900"));
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).as("not in the shared feed").hasSize(heard);
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last().satisfies(e -> assertThat(e.question()).contains("3900"));
+        farmer.remoteHangup();
+        executor.runAll();
+        assertThat(ended).singleElement().satisfies(e -> assertThat(e.transcript()).extracting(line -> line.text())
+                .noneMatch(t -> t.contains("3900")));
+    }
+
+    @Test
+    void aYesThatAlsoAsksGOneIsAQuestionNotAConfirmation() {
+        toConfirming();
+        llm.replyText(intent("pickup"));
+
+        session(LegRole.BUYER).say("yes, and G-One what is the pickup?");
+        executor.runAll();
+        finishAll();
+
+        assertThat(lastDeal().buyerYes()).as("a mixed turn never counts as the yes").isFalse();
+        assertThat(spokenTo(buyer)).last().isEqualTo("Pickup: Monday at the farm.");
+    }
+
+    @Test
+    void aQuestionToGOneDuringTheEndOfCallCheckIsAnsweredPrivatelyThenTheQuestionIsAskedAgain() {
         buyerJoinsAndAgrees();
         session(LegRole.FARMER).say("bye");
         executor.runAll();
-        int requests = llm.requests().size();
-        int buyerLines = spokenTo(buyer).size();
+        finishAll();
+        String endQuestion = ClosingLines.ask(CallClosing.Question.END, FakeLeg.ENGLISH.code());
+        long asked = spokenTo(buyer).stream().filter(endQuestion::equals).count();
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
+        llm.replyText(intent("quantity"));
 
         session(LegRole.BUYER).say("G-One, how much does he have?");
         executor.runAll();
         finishAll();
 
-        assertThat(llm.requests()).as("the end check reads words, not the model").hasSize(requests);
-        assertThat(spokenTo(buyer).subList(buyerLines, spokenTo(buyer).size()))
-                .noneMatch(t -> t.startsWith("The quantity said") || t.startsWith("No quantity"));
-        assertThat(spokenTo(buyer)).contains(ClosingLines.ask(CallClosing.Question.END, FakeLeg.ENGLISH.code()));
+        List<String> buyerHeard = spokenTo(buyer);
+        assertThat(buyerHeard.get(buyerHeard.size() - 2)).as("answered privately first").isEqualTo(EN_QUANTITY_20);
+        assertThat(buyerHeard.get(buyerHeard.size() - 1)).as("then asked again").isEqualTo(endQuestion);
+        assertThat(buyerHeard.stream().filter(endQuestion::equals).count()).isEqualTo(asked + 1);
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).as("not in the shared feed").hasSize(heard);
+
+        // It was not an answer, and did not use up the one re-ask: an unclear reply is still asked once more.
+        session(LegRole.BUYER).say("hmm");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer).stream().filter(endQuestion::equals).count()).isEqualTo(asked + 2);
+        session(LegRole.BUYER).say("yes");
+        session(LegRole.FARMER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).contains(ClosingLines.ask(CallClosing.Question.SAVE, FakeLeg.ENGLISH.code()));
+        farmer.remoteHangup();
+        executor.runAll();
+        assertThat(ended).singleElement().satisfies(e -> assertThat(e.transcript()).extracting(line -> line.text())
+                .doesNotContain("G-One, how much does he have?", EN_QUANTITY_20));
     }
 
     @Test

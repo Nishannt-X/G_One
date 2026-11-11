@@ -27,6 +27,13 @@ public class ConsoleSocket implements WebSocketConfigurer {
     static final String PATH = "/ws/console";
     private static final String SUBSCRIPTION = "console.subscription";
     private static final int SEND_TIME_LIMIT_MS = 2_000;
+    /*
+     * Not authenticated. This feed is the local operator's view and carries everything: the farmer's private whispers,
+     * tool results, memory, and each party's private questions to G-One (AsideAnswered, sent live only and never
+     * replayed). The only gate is the origin allow-list below, which keeps other web pages out of a browser but does
+     * not stop a client that forges its Origin header. A real deployment must authenticate operators before this feed
+     * is reachable by anyone else, buyers on the same network included.
+     */
     private static final int BUFFER_LIMIT_BYTES = 256 * 1024;
 
     private final ConsoleState state;

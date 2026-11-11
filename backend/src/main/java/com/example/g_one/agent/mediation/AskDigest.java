@@ -61,6 +61,10 @@ final class AskDigest {
 
     private AskDigest() {}
 
+    private static String unitKey(String unit) {
+        return unit == null ? null : Offer.unit(unit);
+    }
+
     /** What the buyer may be told: the terms the buyer said or heard, the deal's state, and their own leg. */
     static Facts forBuyer(CallLedger.Known buyerKnows, DealDesk.Card desk, String farmerName, String lastHeard) {
         return facts(buyerKnows, desk, farmerName, lastHeard, null);
@@ -79,12 +83,16 @@ final class AskDigest {
     }
 
     /**
-     * The asker's last known price against the desk: open or agreed only when the desk holds that same price now, so an
-     * expired, declined or replaced offer reads as "no longer open", never as "no price offered".
+     * The asker's last known price against the desk: open or agreed only when the desk holds that same offer now (price,
+     * unit and crop), so an expired, declined or replaced offer reads as "no longer open", never as "no price offered".
      */
     static PriceState priceState(CallLedger.Known k, DealDesk.Card desk) {
         if (k.price() == null) return PriceState.NONE;
-        boolean same = desk.hasPrice() && desk.price().compareTo(k.price()) == 0;
+        // The same offer: the same price, per the same unit, for the same crop. 4000 a quintal is not 4000 a kilo.
+        boolean same = desk.hasPrice() && desk.price().compareTo(k.price()) == 0
+                && java.util.Objects.equals(unitKey(desk.unit()), unitKey(k.unit()))
+                && (k.commodity() == null || desk.commodity() == null
+                        || Offer.norm(desk.commodity()).equals(Offer.norm(k.commodity())));
         if (same && "agreed".equals(desk.state())) return PriceState.AGREED;
         if (same && !"none".equals(desk.state())) return PriceState.OPEN;
         return PriceState.CLOSED;

@@ -20,7 +20,15 @@ final class PriceBasis {
     }
 
     static boolean conflicting(String text) {
-        return text != null && TOTAL_RE.matcher(text).find() && RATE_RE.matcher(text).find();
+        if (text == null) return false;
+        var rates = RATE_RE.matcher(text);
+        String first = null;
+        while (rates.find()) {
+            String unit = canonical(rates.group(1));
+            if (first != null && !first.equals(unit)) return true;
+            first = unit;
+        }
+        return first != null && TOTAL_RE.matcher(text).find();
     }
 
     static String read(String text) {
@@ -47,7 +55,8 @@ final class PriceBasis {
         String amount = "(?<![\\d.])" + Pattern.quote(number) + "(?![\\d.])";
         String money = "(?:\\s*(?:rupees?|rs|inr|रुपये|रुपए|টাকা|ರೂಪಾಯಿ|ரூபாய்))?\\s*";
         String tie = "total".equals(basis) ? "(?:" + amount + money + TOTAL + "|" + TOTAL + "\\s*(?:of\\s*)?" + amount + ")"
-                : amount + money + PER + "\\s*" + UNIT;
+                : "(?:" + amount + money + PER + "\\s*" + UNIT + "|"
+                    + PER + "\\s*" + UNIT + "\\s+" + amount + ")";
         return Pattern.compile("(?iu)" + tie).matcher(digitized).find() ? basis : null;
     }
 

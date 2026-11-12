@@ -170,6 +170,31 @@ class AskGoneTest {
     }
 
     @Test
+    void conflictingTranslatedUnitsNeverReachTheFarmer() {
+        buyerJoinsAndAgrees("10 kg");
+        int before = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        llm.replyText(reading("दो हज़ार किलो प्याज़, दस रुपये प्रति किलो और दो हज़ार रुपये प्रति bag",
+                clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("10 kg onion, 2000 per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(before);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void bengaliPerUnitBeforeAmountIsAccepted() {
+        buyerJoinsAndAgrees("10 kg");
+        buyer.switchLanguage(new Language("bn-IN", "Bengali", "test"));
+        llm.replyText(reading("दो हज़ार रुपये प्रति किलो", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("প্রতি কেজি ২০০০ টাকা");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
     void previousBasisWithoutPriceDoesNotQualifyNewOffer() {
         buyerJoinsAndAgrees();
         llm.replyText(reading("पिछली बार प्रति किलो था, आज दो हज़ार दूँगा", clearOffer(2000), "none", false));

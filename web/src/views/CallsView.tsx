@@ -305,7 +305,7 @@ export default function CallsView({ callId }: { callId: string | null }) {
     <div className="space-y-4">
       {notice && <p role="status" className="rounded-xl bg-ok-soft px-4 py-3 font-semibold text-ok">{notice}</p>}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted">Finished calls appear after someone agrees to memory. This list contains summaries, not recordings.</p>
+        <p className="text-sm text-muted">Finished calls appear when a consenting side can be kept. This list contains summaries, not recordings.</p>
         <button type="button" className="btn-quiet btn-sm" onClick={() => setReload((r) => r + 1)}>Refresh stored calls</button>
       </div>
       {summary ? <KpiStrip summary={summary} /> : <Skeleton className="h-24 w-full" />}

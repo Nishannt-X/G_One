@@ -78,7 +78,7 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">{t('memory_title')}</h1>
-          <p className="text-sm text-muted">Browse farmers by name, crop or district. Use a caller key here only when you already have one.</p>
+          <p className="text-sm text-muted">Browse farmers this browser has seen by name, crop or district. Use a caller key here when you already have one.</p>
         </div>
         <a href="#/farmers" className="btn-primary">Browse farmer memory</a>
       </header>

@@ -36,12 +36,22 @@ public record Terms(String commodity, String variety, String market, BigDecimal 
         try {
             String commodity = shown(o.commodity());
             String unit = shown(Offer.unit(o.unit()));
-            if (commodity == null || unit == null) return null;
+            // Generic model output cannot assert a total; only the independently verified path may do so.
+            if (commodity == null || unit == null || "total".equals(unit)) return null;
             return new Terms(commodity, shown(o.variety()), shown(o.market()), o.price().stripTrailingZeros(), unit,
                     phrase(o.quantity()), phrase(o.pickup()), phrase(o.payment()));
         } catch (IllegalArgumentException unsafe) {
             return null; // fail closed: odd text means no draft, never a cleaned-up guess
         }
+    }
+
+    /** A total whose basis was independently verified from the speaker's words. */
+    static Terms fromVerifiedTotal(Offer offer) {
+        if (offer == null || !"total".equals(Offer.unit(offer.unit()))) return null;
+        Terms checked = from(new Offer(offer.status(), offer.commodity(), offer.variety(), offer.market(), offer.price(),
+                offer.currency(), "kg", offer.quantity(), offer.pickup(), offer.payment()));
+        return checked == null ? null : new Terms(checked.commodity(), checked.variety(), checked.market(), checked.price(),
+                "total", checked.quantity(), checked.pickup(), checked.payment());
     }
 
     /** @return the tidied text, null when there is none, or throws when it is not short plain text */
@@ -99,7 +109,7 @@ public record Terms(String commodity, String variety, String market, BigDecimal 
     String say() {
         return commodity + ", variety " + (variety == null ? "not stated" : variety)
                 + ", market " + (market == null ? "not stated" : market)
-                + ", " + priceText() + " rupees per " + unit;
+                + ", " + priceText() + ("total".equals(unit) ? " rupees total" : " rupees per " + unit);
     }
 
     /** JSON-ready view for the phones. Price is a plain string so it is never rounded on the way. */

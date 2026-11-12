@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { CallView } from '../../lib/callState'
-import { rupees } from '../../lib/format'
+import { dealPrice } from '../../lib/format'
 import { meterPosition, METER_RANGE_PCT, priceCheck } from '../../lib/pricing'
 import type { LegRole } from '../../types/console'
 import { CheckIcon, CrossIcon, EarOffIcon, LockIcon, Logo, PlayIcon, RestartIcon, StoreIcon, WheatIcon } from '../../ui/icons'
@@ -138,7 +138,7 @@ function DealStrip({ view }: { view: CallView | null }) {
   const terms: [string, string | null][] = [
     ['Crop', deal?.commodity ?? null],
     ['Quantity', deal?.quantity ?? null],
-    ['Price', deal?.price != null ? `${rupees(deal.price)}${deal.unit ? ` / ${deal.unit}` : ''}` : null],
+    ['Price', deal?.price != null ? dealPrice(deal.price, deal.unit) : null],
   ]
   return (
     <div className="grid gap-4 border-t border-night-line px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_auto] lg:items-center lg:gap-8">

@@ -105,6 +105,9 @@ public final class MediationSession {
     private boolean askedTwice;
     private String buyerEndReason = "hangup";
     private BigDecimal lastWhispered;
+    /** Unpriced offer held on this call's serial mediation lane until its speaker states a basis. */
+    private record PendingBasis(Offer offer, String translation, String speech) {}
+    private PendingBasis pendingBasis;
     private SttSession buyerSession;
     /** Answers a party who speaks to G-One directly. */
     private final AskGone ask;
@@ -422,6 +425,7 @@ public final class MediationSession {
     private void process(Turn turn, long n, long heardAt) {
         desk.tick();
         LegRole speaker = turn.role();
+        if (speaker == LegRole.FARMER) pendingBasis = null;
         // Classified before anything else, so a question for G-One never reaches a reply reading or a shared record.
         boolean named = AddressDetector.addressed(turn.text(), speaker);
         // Only a standalone short yes or no answers a pending question: "G-One, my floor is X, do not tell him" is not a
@@ -453,10 +457,39 @@ public final class MediationSession {
             oneMoment();
             return; // never sent to the model, and never translated for the buyer
         }
+        if (speaker == LegRole.BUYER && pendingBasis != null) {
+            String basis = PriceBasis.clarification(turn.text());
+            if (basis != null) {
+                PendingBasis held = pendingBasis;
+                pendingBasis = null;
+                recordHeard(turn, heardAt);
+                publishPricedOffer(turn, to, withBasis(held.offer(), basis), held.translation(),
+                        held.speech() + " " + turn.text(), n);
+                return;
+            }
+            pendingBasis = null; // A different buyer turn supersedes this pending amount.
+        }
         boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
 
         TurnReader.Reading read = reader.read(speaker, turn.text(), language(speaker), to, recent(),
                 awaiting.map(a -> a.name().toLowerCase(Locale.ROOT)).orElse("none"));
+
+        if (speaker == LegRole.BUYER && !read.addressed() && PriceBasis.conditional(turn.text())
+                && read.offer() != null && read.offer().price() != null) {
+            desk.unpricedOffer();
+            pendingBasis = null;
+        }
+        if (speaker == LegRole.BUYER && !read.addressed() && read.offer() != null
+                && "clear".equals(read.offer().status()) && read.offer().price() != null
+                && (read.withheld() || (!sameLanguage && read.translation() == null))) {
+            desk.unpricedOffer();
+            pendingBasis = null;
+        }
+        if (read.offer() != null && (read.withheld() || (!sameLanguage && read.translation() == null)
+                || (read.offer().price() != null && !"INR".equalsIgnoreCase(read.offer().currency()))
+                || (speaker == LegRole.BUYER && PriceBasis.conditional(turn.text())))) {
+            read = new TurnReader.Reading(read.translation(), null, read.cautions(), read.reply(), read.withheld(), read.toAssistant());
+        }
 
         Set<Caution> cautions = EnumSet.noneOf(Caution.class);
         cautions.addAll(ScamPatterns.supported(read.cautions(), turn.text()));
@@ -466,8 +499,6 @@ public final class MediationSession {
             return; // spoken to the assistant without its name: never translated, remembered or read as deal terms
         }
         recordHeard(turn, heardAt);
-        // A line that earned a caution stays out of the context, so it cannot colour how the next turn is read.
-        if (cautions.isEmpty()) remember(turn.text());
 
         if (speaker == LegRole.FARMER && cautions.contains(Caution.SECRET_SHARE)) {
             whisperCaution("cautionShareWithheld");
@@ -477,6 +508,7 @@ public final class MediationSession {
 
         DealDesk.Heard reply = guarded(read.reply(), quick, turn.text(), awaiting.isPresent());
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent()
+                && (read.offer() == null || read.offer().price() == null)
                 && (reply == DealDesk.Heard.YES || reply == DealDesk.Heard.NO || reply == DealDesk.Heard.UNCLEAR)) {
             desk.heard(speaker, reply, n, turn.startedMs());
             return;
@@ -490,6 +522,23 @@ public final class MediationSession {
             if (fresh.contains(Caution.THREAT)) warned |= whisperCaution("cautionThreat");
             if (warned) oneMoment();
         }
+
+        Offer extracted = read.offer();
+        if (speaker == LegRole.BUYER && extracted != null && "clear".equals(extracted.status())
+                && extracted.price() != null && !read.withheld()) {
+            String basis = PriceBasis.evidence(turn.text(), language(speaker).code(), extracted.price());
+            if (basis == null) {
+                desk.unpricedOffer();
+                pendingBasis = new PendingBasis(extracted, sameLanguage ? turn.text() : read.translation(), turn.text());
+                sayAssistant(speaker, basisQuestion(language(speaker)), false, null);
+                return;
+            }
+            pendingBasis = null;
+            publishPricedOffer(turn, to, withBasis(extracted, basis), sameLanguage ? turn.text() : read.translation(), turn.text(), n);
+            return;
+        }
+        // A line that earned a caution stays out of the context, so it cannot colour the next turn.
+        if (cautions.isEmpty()) remember(turn.text());
 
         // Cleaned once here, so the console, the transcript and the voice all get the same text without model thinking.
         String spoken = withoutThinking(read.translation());
@@ -515,6 +564,46 @@ public final class MediationSession {
         } else if (reply == DealDesk.Heard.CHANGED) {
             desk.heard(speaker, reply, n, turn.startedMs());
         }
+    }
+
+    private static Offer withBasis(Offer o, String basis) {
+        return new Offer(o.status(), o.commodity(), o.variety(), o.market(), o.price(), o.currency(), basis,
+                o.quantity(), o.pickup(), o.payment());
+    }
+
+    private void publishPricedOffer(Turn turn, Language to, Offer offer, String translation, String speech, long n) {
+        String code = lineCode(to);
+        String amount = SpokenNumbers.words(offer.price(), code);
+        String unit = CropNames.unit(offer.unit(), code);
+        boolean total = "total".equals(offer.unit());
+        String line = code.startsWith("hi") ? amount + (total ? " रुपये पूरे माल के लिए" : " रुपये प्रति " + unit)
+                : code.startsWith("bn") ? (total ? "মোট " + amount + " টাকা" : "প্রতি " + unit + " " + amount + " টাকা")
+                : amount + (total ? " rupees total for all of it" : " rupees per " + unit);
+        String voiced = withoutThinking(translation);
+        String saidBasis = PriceBasis.read(voiced);
+        if (voiced != null && (PriceBasis.conflicting(voiced) || PriceBasis.conditional(voiced)
+                || (saidBasis != null && !saidBasis.equals(offer.unit())))) {
+            desk.unpricedOffer();
+            sayAssistant(turn.role(), lines.get("unsafeTranslation", language(turn.role()).code()), false, null);
+            return;
+        }
+        String delivered = saidBasis != null ? voiced : (voiced == null ? "" : voiced + " ") + rendered(line, to);
+        translate(turn, turn.role().other(), to, delivered, offer);
+        ledger.learned(turn.role(), HeardTerms.in(offer, speech, language(turn.role()).code()), true);
+        if (total) desk.verifiedTotal(offer, n);
+        else {
+            priceWhisper(offer);
+            desk.terms(offer, turn.role(), n);
+        }
+    }
+
+    private static String basisQuestion(Language language) {
+        String code = language.code().toLowerCase(Locale.ROOT);
+        if (code.startsWith("hi")) return "यह रकम पूरे माल के लिए है या प्रति इकाई?";
+        if (code.startsWith("bn")) return "এই দাম পুরো মালটির জন্য, নাকি প্রতি এককের জন্য?";
+        if (code.startsWith("ta")) return "இந்த விலை மொத்தத்திற்கா அல்லது ஒரு அலகுக்கா?";
+        if (code.startsWith("kn")) return "ಈ ಬೆಲೆ ಒಟ್ಟು ಸರಕಿಗಾ ಅಥವಾ ಪ್ರತಿ ಘಟಕಕ್ಕಾ?";
+        return "Is that the total price for all of it, or a price per unit?";
     }
 
     /** A model's yes counts only when the words pass the guard; the code's own reading comes first. */
@@ -713,13 +802,16 @@ public final class MediationSession {
         String code = lineCode(lang);
         String notStated = lines.get("notStated", code);
         Language wording = lines.hasOwnLines(lang.code()) ? lang : ENGLISH;
-        return rendered(lines.get("readback", code, Map.of(
+        BigDecimal total = "total".equals(t.unit()) ? null : AskDigest.total(t.price(), t.unit(), t.quantity());
+        String totalLine = total == null ? "" : lines.get("calculatedTotal", code,
+                Map.of("total", SpokenNumbers.words(total, code)));
+        return rendered(lines.get("total".equals(t.unit()) ? "readbackTotal" : "readback", code, Map.of(
                 "quantity", t.quantity() == null ? notStated : CropNames.quantity(t.quantity(), code),
                 "crop", CropNames.spoken(t.commodity(), t.variety(), code),
                 "price", SpokenNumbers.words(t.price(), code),
                 "unit", CropNames.unit(t.unit(), code),
                 "pickup", t.pickup() == null ? notStated : localized(t.pickup(), wording),
-                "payment", t.payment() == null ? notStated : localized(t.payment(), wording))), lang);
+                "payment", t.payment() == null ? notStated : localized(t.payment(), wording), "total", totalLine)), lang);
     }
 
     /** A language without its own written lines is built in English, figures included, and then translated whole. */

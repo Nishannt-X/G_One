@@ -160,7 +160,8 @@ class MediationTest {
     }
 
     private void buyerOffers(int price) {
-        llm.replyText(reading("चार हज़ार रुपये", clearOffer(price), NO_CAUTION, "none"));
+        llm.replyText(reading(com.example.g_one.agent.llm.SpokenNumbers.words(java.math.BigDecimal.valueOf(price), "hi-IN")
+                + " रुपये", clearOffer(price), NO_CAUTION, "none"));
         session(LegRole.BUYER).say("I can pay " + price + " per quintal");
         executor.runAll();
         finishAll();

@@ -169,6 +169,91 @@ class AskGoneTest {
         finishAll();
     }
 
+    @Test
+    void anUnqualifiedAmountIsHeldUntilItsBasisIsSpoken() {
+        buyerJoinsAndAgrees("10 kg");
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        llm.replyText(reading("दो हज़ार रुपये", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("I will pay 2000");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).containsIgnoringCase("total");
+        session(LegRole.BUYER).say("per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void totalClarificationIsKeptAsTotal() {
+        buyerJoinsAndAgrees("10 kg");
+        llm.replyText(reading("दो हज़ार रुपये", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("I will pay 2000");
+        executor.runAll();
+        finishAll();
+        session(LegRole.BUYER).say("total");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("total");
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class).getLast().text()).contains("पूरे");
+        llm.replyText(reading("Yes, agreed", NO_OFFER, "yes", false));
+        session(LegRole.FARMER).say("haan theek hai");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().state()).isEqualTo(DealState.CONFIRMING);
+        assertThat(spokenTo(buyer)).anyMatch(line -> line.contains("rupees total") && line.contains("ten"));
+    }
+
+    @Test
+    void explicitSpokenBasisOverridesAnInventedModelUnit() {
+        buyerJoinsAndAgrees("10 kg");
+        llm.replyText(reading("दो हज़ार रुपये प्रति किलो", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("I will pay 2000 per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+    }
+
+    @Test
+    void anAmbiguousNewOfferVoidsAnOlderDraft() {
+        buyerJoinsAndAgrees();
+        buyerOffers(4000);
+        llm.replyText(reading("दो हज़ार रुपये", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("I will pay 2000");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().state()).isEqualTo(DealState.CLOSED);
+        assertThat(lastDeal().price()).isEqualByComparingTo("4000");
+    }
+
+    @Test
+    void explicitTotalIsNeverConvertedToAPerUnitPrice() {
+        buyerJoinsAndAgrees("10 kg");
+        llm.replyText(reading("कुल दो हज़ार रुपये", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("I will pay 2000 total");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().unit()).isEqualTo("total");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+    }
+
+    @Test
+    void nonRupeePriceIsNotInventedAsRupees() {
+        buyerJoinsAndAgrees();
+        String offer = clearOffer(2000).replace("\"INR\"", "\"USD\"");
+        llm.replyText(reading("दो हज़ार डॉलर प्रति किलो", offer, "none", false));
+        session(LegRole.BUYER).say("I will pay 2000 dollars per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class).getLast().text()).doesNotContain("रुपये");
+    }
+
     private void farmerSaid(String text, String translation) {
         llm.replyText(reading(translation, NO_OFFER, "none", false));
         session(LegRole.FARMER).say(text);

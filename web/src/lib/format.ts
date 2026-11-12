@@ -48,6 +48,11 @@ export function rupees(amount: number): string {
   return RUPEES.format(amount)
 }
 
+/** A deal price with its explicit basis. */
+export function dealPrice(amount: number, unit: string | null): string {
+  return `${rupees(amount)}${unit === 'total' ? ' total' : unit ? ` / ${unit}` : ''}`
+}
+
 const DATES = {
   en: new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }),
   hi: new Intl.DateTimeFormat('hi-IN', { day: 'numeric', month: 'short' }),

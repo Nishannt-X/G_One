@@ -49,9 +49,9 @@ export default function BuyersView() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">{t('buyers_title')}</h1>
-          <p className="text-sm text-muted">Synthetic buyer directory for mandi traders and aggregators.</p>
+          <p className="text-sm text-muted">Every buyer, name and price range here is invented for this demo. These are not real traders or market quotes.</p>
         </div>
-        <a href="#/simulator" className="btn-quiet">
+        <a href="#/call" className="btn-quiet">
           <BuyersIcon /> {t('open_simulator')}
         </a>
       </header>
@@ -157,7 +157,7 @@ export default function BuyersView() {
             <Card key={b.id} className="flex flex-col justify-between">
               <div>
                 <header className="flex items-start justify-between gap-2">
-                  <h2 className="text-lg font-bold">{b.name}</h2>
+                  <h2 className="text-lg font-bold">{b.name} <span className="badge badge-warn align-middle text-xs">Synthetic</span></h2>
                   {b.district && (
                     <span className="chip bg-sunk text-muted">{b.district}</span>
                   )}
@@ -180,7 +180,7 @@ export default function BuyersView() {
               </div>
 
               <div className="mt-4 border-t border-line pt-3">
-                <p className="text-xs font-semibold text-muted">Indicative Price Range</p>
+                <p className="text-xs font-semibold text-muted">Invented price range</p>
                 <p className="text-lg font-bold">
                   {b.priceMin != null && b.priceMax != null
                     ? `${rupees(b.priceMin)} – ${rupees(b.priceMax)} / ${b.unit}`

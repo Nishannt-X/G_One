@@ -53,8 +53,11 @@ describe('the Analytics route', () => {
 })
 
 describe('MAIN_NAV', () => {
-  it('lists Demo, Try a call and Farmers, in that order, with no How it works item', () => {
-    expect(MAIN_NAV.map((n) => [n.label, n.href])).toEqual([['Demo', '#/demo'], ['Try a call', '#/call'], ['Farmers', '#/farmers']])
+  it('lists every primary destination with a working sample link', () => {
+    expect(MAIN_NAV.map((n) => [n.label, n.href])).toEqual([
+      ['Sample demo', '#/demo?autoplay=1'], ['Try a call', '#/call'], ['Farmers', '#/farmers'],
+      ['Buyer directory', '#/buyers'], ['Analytics', '#/analytics'],
+    ])
     for (const item of MAIN_NAV) expect(parseRoute(item.href).view).toBe(item.view)
   })
 })

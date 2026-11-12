@@ -182,7 +182,7 @@ function AccessForm({ onSaved }: { onSaved: () => void }) {
 export function NoFarmers() {
   return (
     <Empty icon={<WheatIcon />} title="No farmers here yet" action={<div className="flex flex-wrap justify-center gap-2"><a className="btn-primary" href="#/call"><PhoneIcon /> Make a browser call</a><a className="btn-quiet" href="#/demo?autoplay=1"><PlayIcon /> Watch the scripted sample</a></div>}>
-      This browser lists farmers it has watched in a call. The scripted sample shows how memory works, but does not save a farmer here. Make a browser call to see its farmer here.
+      This browser lists farmer profiles it has seen in the call feed. The scripted sample shows how memory works, but does not save a farmer here. Make a browser call and agree to remember it; the farmer appears after memory is saved.
     </Empty>
   )
 }

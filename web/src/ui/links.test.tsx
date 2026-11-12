@@ -4,7 +4,8 @@ import { parseRoute } from '../lib/route'
 import LandingPage from '../views/LandingPage'
 import LiveView from '../views/LiveView'
 import { initialFeed } from '../lib/callState'
-import BuyersView from '../views/BuyersView'
+import BuyersView, { BuyerCard } from '../views/BuyersView'
+import { NoFarmers } from '../views/FarmersPage'
 import MemoryView from '../views/MemoryView'
 import Shell from './Shell'
 import SampleCallButton from './SampleCallButton'
@@ -75,7 +76,19 @@ describe('demo entry points', () => {
   })
 
   it('calls every buyer and price range synthetic', () => {
-    const html = renderToStaticMarkup(<BuyersView />)
-    expect(html).toContain('Every buyer, name and price range here is invented')
+    const page = renderToStaticMarkup(<BuyersView />)
+    const card = renderToStaticMarkup(<BuyerCard buyer={{ id: 'sample-1', name: 'Sample Trader', crops: ['onion'], district: 'Gadag', language: 'Kannada', priceMin: 1800, priceMax: 2000, unit: 'quintal' }} />)
+    expect(page).toContain('Every buyer, name and price range here is invented')
+    expect(card).toContain('Sample Trader')
+    expect(card).toContain('Synthetic')
+    expect(card).toContain('Invented price range')
+    expect(card).toContain('₹1,800')
+  })
+
+  it('explains that the scripted sample does not create stored farmer memory', () => {
+    const html = renderToStaticMarkup(<NoFarmers />)
+    expect(html).toContain('The scripted sample shows how memory works, but does not save a farmer here.')
+    expect(html).toContain('href="#/call"')
+    expect(html).toContain('href="#/demo?autoplay=1"')
   })
 })

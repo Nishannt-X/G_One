@@ -170,6 +170,41 @@ class AskGoneTest {
     }
 
     @Test
+    void previousBasisWithoutPriceDoesNotQualifyNewOffer() {
+        buyerJoinsAndAgrees();
+        llm.replyText(reading("पिछली बार प्रति किलो था, आज दो हज़ार दूँगा", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("Last time it was per kg; today I offer 2000");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).containsIgnoringCase("total");
+    }
+
+    @Test
+    void swappedPriceAndQuantityNeverReachTheFarmer() {
+        buyerJoinsAndAgrees("10 kg");
+        int before = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        llm.replyText(reading("दो हज़ार किलो प्याज़, दस रुपये प्रति किलो", clearOffer(2000), "none", false));
+        session(LegRole.BUYER).say("10 kg onion, 2000 per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(before);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void foreignCurrencyCounterofferVoidsTheOldDraft() {
+        buyerJoinsAndAgrees();
+        buyerOffers(4000);
+        String offer = clearOffer(2000).replace("\"INR\"", "\"USD\"");
+        llm.replyText(reading("दो हज़ार डॉलर प्रति किलो", offer, "none", false));
+        session(LegRole.BUYER).say("I offer 2000 dollars per kg");
+        executor.runAll();
+        finishAll();
+        assertThat(lastDeal().state()).isEqualTo(DealState.CLOSED);
+    }
+
+    @Test
     void anUnqualifiedAmountIsHeldUntilItsBasisIsSpoken() {
         buyerJoinsAndAgrees("10 kg");
         int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();

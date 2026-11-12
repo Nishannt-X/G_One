@@ -43,7 +43,6 @@ final class PriceBasis {
         String number = price.stripTrailingZeros().toPlainString();
         var numbers = NumberGuard.numbers(text, code);
         if (!numbers.contains(number)) return null;
-        if (numbers.size() == 1) return basis;
         String digitized = NumberGuard.digitized(text, code);
         String amount = "(?<![\\d.])" + Pattern.quote(number) + "(?![\\d.])";
         String money = "(?:\\s*(?:rupees?|rs|inr|रुपये|रुपए|টাকা|ರೂಪಾಯಿ|ரூபாய்))?\\s*";

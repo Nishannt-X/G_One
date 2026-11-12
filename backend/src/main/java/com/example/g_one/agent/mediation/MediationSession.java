@@ -481,7 +481,8 @@ public final class MediationSession {
         }
         if (speaker == LegRole.BUYER && !read.addressed() && read.offer() != null
                 && "clear".equals(read.offer().status()) && read.offer().price() != null
-                && (read.withheld() || (!sameLanguage && read.translation() == null))) {
+                && (read.withheld() || (!sameLanguage && read.translation() == null)
+                    || !"INR".equalsIgnoreCase(read.offer().currency()))) {
             desk.unpricedOffer();
             pendingBasis = null;
         }
@@ -582,7 +583,8 @@ public final class MediationSession {
         String voiced = withoutThinking(translation);
         String saidBasis = PriceBasis.read(voiced);
         if (voiced != null && (PriceBasis.conflicting(voiced) || PriceBasis.conditional(voiced)
-                || (saidBasis != null && !saidBasis.equals(offer.unit())))) {
+                || (saidBasis != null && (!saidBasis.equals(offer.unit())
+                    || !offer.unit().equals(PriceBasis.evidence(voiced, to.code(), offer.price())))))) {
             desk.unpricedOffer();
             sayAssistant(turn.role(), lines.get("unsafeTranslation", language(turn.role()).code()), false, null);
             return;

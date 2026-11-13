@@ -1,6 +1,7 @@
 package com.example.g_one.agent.brain;
 
 import com.example.g_one.agent.AgentBrain;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.YesNoReader;
 import com.example.g_one.agent.llm.ChatClient;
@@ -262,6 +263,11 @@ public class LlmAgentBrain implements AgentBrain {
     @Override
     public ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
         return yesNo.read(question, reply);
+    }
+
+    @Override
+    public CompoundReply.Parsed readAnswer(CallId callId, String question, String reply) {
+        return yesNo.readCompound(question, reply);
     }
 
     /**

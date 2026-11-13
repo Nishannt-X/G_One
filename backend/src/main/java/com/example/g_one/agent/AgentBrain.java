@@ -1,5 +1,6 @@
 package com.example.g_one.agent;
 
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.core.CallContext;
 import com.example.g_one.core.CallId;
@@ -57,6 +58,18 @@ public interface AgentBrain {
      */
     default ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
         return ReplyGuard.read(reply);
+    }
+
+    /**
+     * Reads a turn the farmer spoke while a yes or no question G-One asked outside the conversation waits (the
+     * end-of-call questions): the answer, and anything else they said in the same turn, which the caller handles as a
+     * request of its own. Blocks for at most a few seconds; never throws. The default reads words only
+     * ({@link CompoundReply}).
+     *
+     * @param question the question as the farmer heard it
+     */
+    default CompoundReply.Parsed readAnswer(CallId callId, String question, String reply) {
+        return CompoundReply.parse(reply);
     }
 
     /** Who said a line of the conversation. */

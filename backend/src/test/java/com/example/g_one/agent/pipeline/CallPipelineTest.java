@@ -577,6 +577,118 @@ class CallPipelineTest {
         assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
     }
 
+    // ---- a turn that answers the end-of-call question and also asks something (CompoundReply) ----
+
+    private static String endAsk(String code) {
+        return com.example.g_one.agent.closing.ClosingLines.ask(com.example.g_one.agent.closing.CallClosing.Question.END, code);
+    }
+
+    private static String saveAsk(String code) {
+        return com.example.g_one.agent.closing.ClosingLines.ask(com.example.g_one.agent.closing.CallClosing.Question.SAVE, code);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+            "haan, but aaj ka bhav kya hai?|aaj ka bhav kya hai?",
+            "yes, and what was the price?|what was the price?",
+            "हाँ, लेकिन आज का भाव क्या है?|आज का भाव क्या है?",
+            "হ্যাঁ, কিন্তু আজকের দাম কত?|আজকের দাম কত?",
+            "ஆமா, ஆனா இன்று விலை என்ன?|இன்று விலை என்ன?",
+            "ಹೌದು, ಆದರೆ ಇವತ್ತಿನ ಬೆಲೆ ಏನು?|ಇವತ್ತಿನ ಬೆಲೆ ಏನು?"})
+    void aYesToEndingWithAQuestionAnswersItThenAsksToRemember(String said, String question) {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        session().say("that's all");
+        executor.runAll();
+        leg.finishPlayback();
+        session().say(said);
+        executor.runAll();
+        assertThat(brain.responds).as("the question is answered, not ignored").last()
+                .satisfies(r -> assertThat(r.latest().text()).isEqualTo(question));
+        assertThat(spoken()).last().isEqualTo(replyTo(question));
+        leg.finishPlayback();
+        executor.runAll();
+        assertThat(spoken()).as("the yes was recorded: the next question follows").last().isEqualTo(saveAsk(code));
+        leg.finishPlayback();
+        session().say("haan");
+        executor.runAll();
+        leg.finishPlayback();
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=YES", "BUYER=NONE");
+        assertThat(spoken().stream().filter(t -> t.equals(endAsk(code)))).hasSize(1);
+    }
+
+    @Test
+    void aYesToRememberingWithAQuestionAnswersItThenSaysGoodbye() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        for (String said : List.of("bye", "haan")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        session().say("haan ji, aur buyer ka naam kya tha?");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(replyTo("buyer ka naam kya tha?"));
+        leg.finishPlayback();
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(com.example.g_one.agent.closing.ClosingLines.goodbye(code));
+        leg.finishPlayback();
+        assertThat(leg.isEnded()).isTrue();
+        assertThat(consents()).containsExactly("FARMER=YES", "BUYER=NONE");
+    }
+
+    @Test
+    void aQuestionInsteadOfAnAnswerIsAnsweredThenAskedOnceMoreNeverLooping() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        session().say("bye");
+        executor.runAll();
+        leg.finishPlayback();
+        session().say("pehle batao aaj ka bhav kya hai?");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(replyTo("pehle batao aaj ka bhav kya hai?"));
+        leg.finishPlayback();
+        executor.runAll();
+        assertThat(spoken()).as("asked once more after the answer").last().isEqualTo(endAsk(code));
+        leg.finishPlayback();
+        session().say("aur mausam kaisa rahega?");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(replyTo("aur mausam kaisa rahega?"));
+        leg.finishPlayback();
+        executor.runAll();
+        assertThat(spoken().stream().filter(t -> t.equals(endAsk(code)))).as("never a third time").hasSize(2);
+        assertThat(leg.isEnded()).isFalse();
+        session().say("mandi kab khulegi?");
+        executor.runAll();
+        assertThat(spoken()).as("the conversation goes on").last().isEqualTo(replyTo("mandi kab khulegi?"));
+    }
+
+    @Test
+    void aConditionalYesToRememberingIsNotAYesAndAddsNoBrainCall() {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        for (String said : List.of("bye", "haan")) {
+            session().say(said);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        int before = brain.responds.size();
+        session().say("haan par kisi ko mat batana");
+        executor.runAll();
+        assertThat(spoken()).last().isEqualTo(saveAsk(code));
+        assertThat(brain.responds).hasSize(before);
+        leg.finishPlayback();
+        session().say("pata nahi");
+        executor.runAll();
+        leg.finishPlayback();
+        assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
+    }
+
     @Test
     void aNoToEndingCarriesOnAndTheNextByeWithinThreeTurnsGoesToTheBrain() {
         FakeLeg leg = join(FakeLeg.farmer(callId));

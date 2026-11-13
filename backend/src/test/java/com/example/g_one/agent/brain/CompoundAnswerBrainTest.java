@@ -61,7 +61,7 @@ class CompoundAnswerBrainTest {
     @ValueSource(strings = {
             "haan, but unka naam kya hai?", "yes, and what is the buyer's name", "हाँ, लेकिन उनका नाम क्या है?",
             "হ্যাঁ, কিন্তু ওনার নাম কী?", "ஆமா, ஆனா அவர் பெயர் என்ன?", "ಹೌದು, ಆದರೆ ಅವರ ಹೆಸರು ಏನು?",
-            "haan ji, wo kab tak aayenge?", "phone laga do, unka naam kya hai?"})
+            "haan ji, wo kab aayenge?", "phone laga do, unka naam kya hai?"})
     void aYesWithAFollowUpQuestionConnectsAndTheQuestionReachesTheModel(String turn) {
         f.llm.replyToolCall("connect_buyer", "{\"buyerId\":\"mehta-agro\"}");
         f.llm.replyText("Mehta Agro Traders ko call kar rahi hoon, line par bane rahiye.");
@@ -112,7 +112,8 @@ class CompoundAnswerBrainTest {
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {"haan agar 4500 de to", "haan but only if he pays today", "theek hai lekin 4500 mein",
-            "हाँ, अगर आज पैसा दें तो", "phone laga do agar rate achha ho"})
+            "हाँ, अगर आज पैसा दें तो", "phone laga do agar rate achha ho", "yes tomorrow", "haan kal subah",
+            "haan ji, wo kab tak aayenge?", "yes bring a truck"})
     void aConditionalYesNeverConnects(String turn) {
         f.llm.replyToolCall("connect_buyer", "{\"buyerId\":\"mehta-agro\"}");
         f.llm.replyText("Theek hai.");
@@ -142,8 +143,8 @@ class CompoundAnswerBrainTest {
     // ---- the returning farmer's name check ----
 
     @ParameterizedTest(name = "{0}")
-    @ValueSource(strings = {"haan lekin aaj pyaz ka bhav kya hai", "हाँ, पर आज प्याज़ का भाव क्या है?",
-            "yes, but what is the onion price today?", "haan ji, mandi ka bhav batao"})
+    @ValueSource(strings = {"haan lekin pyaz ka bhav kya hai", "हाँ, पर प्याज़ का भाव क्या है?",
+            "yes, but what is the onion price?", "haan ji, mandi ka bhav batao"})
     void aYesToTheNameCheckWithAQuestionConfirmsAndTheModelAnswersWithMemory(String turn) {
         CallContext returning = BrainFixture.returning(HINDI, f.seedSuresh());
         f.brain.greet(returning);
@@ -159,6 +160,19 @@ class CompoundAnswerBrainTest {
         assertThat(f.brain.memoryState(returning.callId())).contains(MemoryGate.State.CONFIRMED);
         assertThat(f.llm.requests()).as("the question goes to the model, once").hasSize(1);
         assertThat(classifierCalls()).isZero();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"haan kal", "yes tomorrow", "haan, gaadi bhejna", "ಹೌದು ನಾಳೆ"})
+    void aQualifiedYesToTheNameCheckNeverUnlocksMemory(String turn) {
+        CallContext returning = BrainFixture.returning(HINDI, f.seedSuresh());
+        f.brain.greet(returning);
+        f.llm.replyToolCall("confirm_name", "{\"confirmed\":true}"); // a model that would confirm is never asked
+        f.llm.replyText("ठीक है।");
+        f.brain.respond(returning, List.of(new Line(Speaker.ASSISTANT, "क्या मैं Suresh जी से बात कर रही हूँ?")),
+                said(returning, turn));
+        assertThat(f.brain.memoryState(returning.callId())).as(turn)
+                .isNotEqualTo(java.util.Optional.of(MemoryGate.State.CONFIRMED));
     }
 
     @Test

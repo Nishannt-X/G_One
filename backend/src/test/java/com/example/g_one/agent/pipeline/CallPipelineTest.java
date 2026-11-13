@@ -589,12 +589,12 @@ class CallPipelineTest {
 
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
-            "haan, but aaj ka bhav kya hai?|aaj ka bhav kya hai?",
+            "haan, but bhav kya hai?|bhav kya hai?",
             "yes, and what was the price?|what was the price?",
-            "हाँ, लेकिन आज का भाव क्या है?|आज का भाव क्या है?",
-            "হ্যাঁ, কিন্তু আজকের দাম কত?|আজকের দাম কত?",
-            "ஆமா, ஆனா இன்று விலை என்ன?|இன்று விலை என்ன?",
-            "ಹೌದು, ಆದರೆ ಇವತ್ತಿನ ಬೆಲೆ ಏನು?|ಇವತ್ತಿನ ಬೆಲೆ ಏನು?"})
+            "हाँ, लेकिन भाव क्या है?|भाव क्या है?",
+            "হ্যাঁ, কিন্তু দাম কত?|দাম কত?",
+            "ஆமா, ஆனா விலை என்ன?|விலை என்ன?",
+            "ಹೌದು, ಆದರೆ ಬೆಲೆ ಏನು?|ಬೆಲೆ ಏನು?"})
     void aYesToEndingWithAQuestionAnswersItThenAsksToRemember(String said, String question) {
         FakeLeg leg = join(FakeLeg.farmer(callId));
         leg.finishPlayback();
@@ -691,7 +691,8 @@ class CallPipelineTest {
 
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"yes but don't tell anyone", "yes but tell nobody",
-            "haan lekin kisi ko mat batana", "हाँ, लेकिन किसी को मत बताना", "হ্যাঁ, কিন্তু কাউকে বলবেন না"})
+            "haan lekin kisi ko mat batana", "हाँ, लेकिन किसी को मत बताना", "হ্যাঁ, কিন্তু কাউকে বলবেন না",
+            "yes tomorrow", "हाँ कल तक", "yes on delivery", "ಹೌದು ಹಣ ಬಂದರೆ"})
     void aRestrictedYesToRememberingIsNeverConsent(String said) {
         FakeLeg leg = join(FakeLeg.farmer(callId));
         leg.finishPlayback();

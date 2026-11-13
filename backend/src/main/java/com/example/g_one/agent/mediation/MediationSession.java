@@ -486,7 +486,16 @@ public final class MediationSession {
                 desk.heard(speaker, parsed.answer() == CompoundReply.Answer.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO,
                         n, turn.startedMs());
                 return;
+            } else if (!named && parsed.decided() && (parsed.conditional()
+                    || (parsed.answer() == CompoundReply.Answer.NONE && quick != ReplyGuard.Reading.UNCLEAR))) {
+                // Default deny: "yes tomorrow", "yes on delivery", "हाँ कल तक" qualify the yes, so the read-back is
+                // asked again. Decided by words, so it never reaches a model that could read it as a yes.
+                recordHeard(turn, heardAt);
+                desk.heard(speaker, DealDesk.Heard.UNCLEAR, n, turn.startedMs());
+                return;
             }
+            // Only the parsed answer can confirm: a short turn the plain lexicon calls a yes is no longer enough.
+            if (parsed.answer() == CompoundReply.Answer.NONE || parsed.conditional()) quick = ReplyGuard.Reading.UNCLEAR;
         }
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent() && quick != ReplyGuard.Reading.UNCLEAR) {
             recordHeard(turn, heardAt);

@@ -372,8 +372,11 @@ public class LlmAgentBrain implements AgentBrain {
         Optional<String> given = TurnIntent.introducedName(text);
         boolean otherName = given.isPresent() && NameMatch.differs(given.get(), remembered);
         boolean business = aboutBusiness(latest) || TurnIntent.wantsConnection(text);
-        ReplyGuard.Reading answer = leadAnswer(text);
-        if (answer == ReplyGuard.Reading.UNCLEAR && !business && !otherName && !TurnIntent.deniesIdentity(text)) {
+        CompoundReply.Parsed parsed = CompoundReply.parse(text);
+        ReplyGuard.Reading answer = parsed.reading();
+        boolean qualified = parsed.decided() && parsed.conditional();
+        if (answer == ReplyGuard.Reading.UNCLEAR && !qualified && !business && !otherName
+                && !TurnIntent.deniesIdentity(text)) {
             answer = yesNo.read(lastAssistantLine(past), text);
         }
         if (answer == ReplyGuard.Reading.NO || TurnIntent.deniesIdentity(text) || otherName) {
@@ -390,19 +393,12 @@ public class LlmAgentBrain implements AgentBrain {
             String welcome = local.greeting(lang.code(), remembered);
             return continueHeld(ctx, past, latest, memo, welcome.substring(0, firstSentenceEnd(welcome)), lang, turn);
         }
-        if (!business) return null;
-        if (memo.held == null) memo.held = text;
+        // "haan kal", "yes tomorrow": a qualified yes never unlocks memory, and no model is asked to read it as one.
+        if (!business && !qualified) return null;
+        if (business && memo.held == null) memo.held = text;
         turn.handler = "local";
         if (memo.nameChecksAsked++ == 0) return local(local.line(lang.code(), "nameCheckFirst", remembered), lang);
         return otherSpeaker(ctx, past, latest, memo, Optional.empty(), false, lang, turn);
-    }
-
-    /**
-     * The answer at the start of a turn, when the rest goes on ("हाँ, मैं सुरेश हूँ। प्याज़ का क्या हुआ?", "haan lekin
-     * bhav kya hai"). A condition or the opposite answer later in the turn makes it no answer ({@link CompoundReply}).
-     */
-    private static ReplyGuard.Reading leadAnswer(String text) {
-        return CompoundReply.parse(text).reading();
     }
 
     /** Records the name check answer through {@code confirm_name}, so the console shows it like any tool call. */

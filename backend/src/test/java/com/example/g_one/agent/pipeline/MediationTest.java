@@ -347,6 +347,17 @@ class MediationTest {
         assertThat(spokenTo(buyer)).noneMatch(t -> t.startsWith("Sorry, I did not catch"));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"yes tomorrow", "yes bring a truck", "haan kal subah"})
+    void aBuyersQualifiedYesDoesNotJoin(String said) {
+        buyerIsAsked();
+        session(LegRole.BUYER).say(said);
+        executor.runAll();
+        finishAll();
+        assertThat(live()).as(said).isFalse();
+        assertThat(spokenTo(buyer).stream().filter(t -> t.startsWith("Sorry, I did not catch"))).hasSize(1);
+    }
+
     @Test
     void aBuyersQuestionInsteadOfAnAnswerIsAnsweredThenAskedOnceMore() {
         buyerIsAsked();
@@ -904,7 +915,7 @@ class MediationTest {
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"haan, but who is he?", "हाँ, लेकिन वो कौन है?",
             "হ্যাঁ, কিন্তু উনি কে?", "ஆமா, ஆனா அவர் யார்?", "ಹೌದು, ಆದರೆ ಅವರು ಯಾರು?", "yes, and when is the pickup?",
-            "yes when will he come?"})
+            "yes when will he come?", "yes what is the price?", "haan kya bhav hai?", "yes how much?"})
     void aYesWithAFollowUpQuestionConfirmsTheReadBackAndTheQuestionStaysPrivate(String said) {
         toConfirming();
         now.addAndGet(1000);
@@ -919,6 +930,20 @@ class MediationTest {
         assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).as("never in a shared record")
                 .noneMatch(e -> e.text().contains("?"));
         assertThat(llm.requests().size() - before).as("one model call at most: the private answer").isLessThanOrEqualTo(1);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"yes tomorrow", "yes on delivery", "हाँ कल तक",
+            "haan gaadi bhejna", "ಹೌದು ನಾಳೆ", "হ্যাঁ কাল"})
+    void aQualifiedShortYesNeverConfirmsTheReadBackAndIsAskedAgain(String said) {
+        toConfirming();
+        now.addAndGet(1000);
+        int before = llm.requests().size();
+        session(LegRole.FARMER).say(said);
+        executor.runAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).as(said).noneMatch(d -> d.farmerYes());
+        assertThat(spokenTo(farmer)).contains("माफ़ कीजिए, साफ़ नहीं सुना। क्या सौदे का सार सही है? हाँ या ना बोलिए।");
+        assertThat(llm.requests()).as("decided by words: no model call").hasSize(before);
     }
 
     @Test
@@ -948,7 +973,8 @@ class MediationTest {
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"theek hai lekin 4500 mein", "4500 mein theek hai",
             "haan but only at 4500", "हाँ, पर साढ़े चार हज़ार में", "yes when you pay 4500", "haan jab 4500 do",
-            "yes after you pay 4500", "haan par kal tak 4500", "yes when you pay 4500?"})
+            "yes after you pay 4500", "haan par kal tak 4500", "yes when you pay 4500?", "yes 4500 per quintal",
+            "yes 4500?"})
     void aYesWithDifferentTermsIsACounterOfferNeverAConfirmation(String said) {
         toConfirming();
         now.addAndGet(1000);

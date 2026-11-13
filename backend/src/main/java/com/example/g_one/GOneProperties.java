@@ -65,11 +65,19 @@ public record GOneProperties(
      */
     public record Llm(String baseUrl, String apiKey, String model, int timeoutSeconds, String reasoningEffort,
                       List<String> fallbackModels, List<String> numericUnsafeModels, long tokensPerMinute,
-                      String extraBaseUrl, String extraApiKey, List<String> extraModels) {
+                      String extraBaseUrl, String extraApiKey, List<String> extraModels,
+                      String plainBaseUrl, String plainApiKey, List<String> plainModels, long plainTokensPerMinute) {
         public Llm(String baseUrl, String apiKey, String model, int timeoutSeconds, String reasoningEffort,
                    List<String> fallbackModels, List<String> numericUnsafeModels, long tokensPerMinute) {
             this(baseUrl, apiKey, model, timeoutSeconds, reasoningEffort, fallbackModels, numericUnsafeModels, tokensPerMinute,
-                    "", "", List.of());
+                    "", "", List.of(), "", "", List.of(), 0);
+        }
+
+        public Llm(String baseUrl, String apiKey, String model, int timeoutSeconds, String reasoningEffort,
+                   List<String> fallbackModels, List<String> numericUnsafeModels, long tokensPerMinute,
+                   String extraBaseUrl, String extraApiKey, List<String> extraModels) {
+            this(baseUrl, apiKey, model, timeoutSeconds, reasoningEffort, fallbackModels, numericUnsafeModels,
+                    tokensPerMinute, extraBaseUrl, extraApiKey, extraModels, "", "", List.of(), 0);
         }
 
         public Llm(String baseUrl, String apiKey, String model, int timeoutSeconds) {
@@ -91,6 +99,10 @@ public record GOneProperties(
             extraApiKey = extraApiKey == null ? "" : extraApiKey.strip();
             extraModels = extraBaseUrl.isEmpty() || extraApiKey.isEmpty() || extraModels == null ? List.of()
                     : extraModels.stream().map(String::strip).filter(m -> !m.isEmpty()).toList();
+            plainBaseUrl = plainBaseUrl == null ? "" : plainBaseUrl.strip();
+            plainApiKey = plainApiKey == null ? "" : plainApiKey.strip();
+            plainModels = plainBaseUrl.isEmpty() || plainApiKey.isEmpty() || plainModels == null ? List.of()
+                    : plainModels.stream().map(String::strip).filter(m -> !m.isEmpty()).toList();
             if (apiKey != null && apiKey.startsWith("gsk_")) {
                 if (baseUrl == null || baseUrl.contains("api.x.ai") || baseUrl.isBlank()) {
                     baseUrl = "https://api.groq.com/openai/v1";
@@ -106,6 +118,10 @@ public record GOneProperties(
         }
 
         /** True when this model is served by the extra endpoint rather than the primary one. */
+        public boolean isPlain(String routedModel) {
+            return plainModels.contains(routedModel);
+        }
+
         public boolean isExtra(String routedModel) {
             return extraModels.contains(routedModel);
         }
@@ -119,7 +135,7 @@ public record GOneProperties(
          */
         public java.util.Map<String, Object> reasoningFields(String routedModel) {
             java.util.Map<String, Object> fields = new java.util.LinkedHashMap<>();
-            if (!isGroq(isExtra(routedModel) ? extraBaseUrl : baseUrl)) return fields;
+            if (!isGroq(isPlain(routedModel) ? plainBaseUrl : isExtra(routedModel) ? extraBaseUrl : baseUrl)) return fields;
             String name = routedModel == null ? "" : routedModel.toLowerCase(java.util.Locale.ROOT);
             if (isQwen(routedModel)) {
                 fields.put("reasoning_effort", "none");

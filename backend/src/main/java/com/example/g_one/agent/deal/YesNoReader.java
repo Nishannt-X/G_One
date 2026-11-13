@@ -121,10 +121,7 @@ public final class YesNoReader {
         String remainder = node.path("remainder").asText("").strip();
         // Only the caller's own words are ever handled as their request: anything else the model wrote is dropped.
         if (!remainder.isEmpty() && !squeezed(reply).contains(squeezed(remainder))) remainder = "";
-        if (answer == CompoundReply.Answer.YES && !CompoundReply.permitsYes(reply) && !ReplyGuard.permitsYes(
-                remainder.isEmpty() ? reply : reply.replace(remainder, ""))) {
-            answer = CompoundReply.Answer.NONE;
-        }
+        if (answer == CompoundReply.Answer.YES && !CompoundReply.permitsYes(reply)) answer = CompoundReply.Answer.NONE;
         if (answer == CompoundReply.Answer.YES && ReplyGuard.verdict(reply).vetoed() && remainder.isEmpty()) {
             answer = CompoundReply.Answer.NONE; // a vetoed reply with nothing split off is never a yes
         }

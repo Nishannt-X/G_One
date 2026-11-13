@@ -689,6 +689,28 @@ class CallPipelineTest {
         assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
     }
 
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"yes but don't tell anyone", "yes but tell nobody",
+            "haan lekin kisi ko mat batana", "हाँ, लेकिन किसी को मत बताना", "হ্যাঁ, কিন্তু কাউকে বলবেন না"})
+    void aRestrictedYesToRememberingIsNeverConsent(String said) {
+        FakeLeg leg = join(FakeLeg.farmer(callId));
+        leg.finishPlayback();
+        String code = leg.language().code();
+        for (String turn : List.of("bye", "haan")) {
+            session().say(turn);
+            executor.runAll();
+            leg.finishPlayback();
+        }
+        session().say(said);
+        executor.runAll();
+        assertThat(spoken()).as("asked once more").last().isEqualTo(saveAsk(code));
+        leg.finishPlayback();
+        session().say("hmm");
+        executor.runAll();
+        leg.finishPlayback();
+        assertThat(consents()).containsExactly("FARMER=NONE", "BUYER=NONE");
+    }
+
     @Test
     void aNoToEndingCarriesOnAndTheNextByeWithinThreeTurnsGoesToTheBrain() {
         FakeLeg leg = join(FakeLeg.farmer(callId));

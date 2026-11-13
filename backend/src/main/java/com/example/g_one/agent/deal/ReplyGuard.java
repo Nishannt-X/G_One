@@ -201,6 +201,11 @@ public final class ReplyGuard {
         return tokens(text).stream().anyMatch(QUESTION::contains);
     }
 
+    /** True when any of these words (already {@link #tokens}) is a no or a negation: "nahi", "mat", "don't", "না", "ಇಲ್ಲ". */
+    static boolean hasNoWord(List<String> tokens) {
+        return tokens.stream().anyMatch(NO::contains);
+    }
+
     /** "kya?", "what?", "kya matlab": a question about the question, with nothing else in it. */
     static boolean bareQuestion(String text) {
         if (text == null) return false;

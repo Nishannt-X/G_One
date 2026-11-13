@@ -31,7 +31,7 @@ class CompoundReplyTest {
             "হ্যাঁ, কিন্তু ওনার নাম কী?|YES|ওনার নাম কী?",
             "ஆமா, ஆனா அவர் பெயர் என்ன?|YES|அவர் பெயர் என்ன?",
             "ಹೌದು, ಆದರೆ ಅವರ ಹೆಸರು ಏನು?|YES|ಅವರ ಹೆಸರು ಏನು?",
-            "Yes, G-One, what quantity did we discuss?|YES|G-One, what quantity did we discuss?",
+            "Yes, G-One, what quantity did we discuss?|YES|what quantity did we discuss?",
             "haan main Suresh hoon, bhav kya hai|YES|bhav kya hai",
             // A no, then a question: the no stands and the question is handled.
             "nahi, unka naam kya hai?|NO|unka naam kya hai?",
@@ -72,7 +72,8 @@ class CompoundReplyTest {
         assertThat(CompoundReply.confirmsDeal("theek hai lekin 1900 mein")).isFalse();
         assertThat(CompoundReply.confirmsDeal("haan, but who is he?")).isTrue();
         assertThat(CompoundReply.confirmsDeal("haan ji")).isTrue();
-        assertThat(CompoundReply.parse("haan, kitne quintal the?").termsStated()).as("asked, not stated").isFalse();
+        assertThat(CompoundReply.parse("haan, kitne quintal the?").termsStated())
+                .as("any term beside a yes keeps a read-back from confirming").isTrue();
     }
 
     @Test
@@ -107,5 +108,79 @@ class CompoundReplyTest {
         assertThat(CompoundReply.parse("who is he? haan connect karo").decided()).isFalse();
         assertThat(CompoundReply.parse("haan, but unka naam kya hai?").decided()).isTrue();
         assertThat(CompoundReply.parse("pata nahi").decided()).isTrue();
+    }
+
+    // ---- review round: a clause beside the answer is a follow-up only when it is positively a question ----
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            // A negation or restriction is a qualification, even beside a request verb like "tell" or "batao".
+            "yes but don't tell anyone", "yes but tell nobody", "yes, but do not share it", "yes, never tell him",
+            "haan lekin kisi ko mat batana", "haan, kisi ko mat batao", "हाँ, लेकिन किसी को मत बताना",
+            "হ্যাঁ, কিন্তু কাউকে বলবেন না", "ஆமா, ஆனா யாரிடமும் சொல்லாதீங்க", "ಹೌದು, ಆದರೆ ಯಾರಿಗೂ ಹೇಳಬೇಡಿ",
+            "haan, bina naam ke", "yes, but only for this call", "yes, without my name"})
+    void aRestrictionBesideAYesIsNeverAFollowUp(String turn) {
+        Parsed p = CompoundReply.parse(turn);
+        assertThat(p.answer()).as(turn).isNotEqualTo(Answer.YES);
+        assertThat(p.conditional()).as(turn).isTrue();
+        assertThat(CompoundReply.permitsYes(turn)).as(turn).isFalse();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            // A temporal or conditional clause with an amount is a counter offer, never a question to answer privately.
+            "yes when you pay 4500", "haan jab 4500 do", "yes after you pay 4500", "yes if he pays now",
+            "haan par kal tak 4500", "yes when you pay 4500?", "हाँ, जब आप 4500 देंगे", "হ্যাঁ, যখন ৪৫০০ দেবেন",
+            "ஆமா, 4500 கொடுக்கும் போது", "ಹೌದು, 4500 ಕೊಟ್ಟಾಗ", "yes once you pay 4500", "yes as long as it is 4500"})
+    void aTermOrConditionBesideAYesNeverConfirmsADeal(String turn) {
+        Parsed p = CompoundReply.parse(turn);
+        assertThat(CompoundReply.confirmsDeal(turn)).as(turn).isFalse();
+        assertThat(p.answer() == Answer.YES && !p.conditional() && p.hasRemainder()
+                && CompoundReply.followUp(p.remainder())).as(turn + ": never a yes with a private follow-up").isFalse();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', value = {
+            "yes when will he come?|when will he come?", "yes, when is the pickup?|when is the pickup?",
+            "haan, but tell me his name|tell me his name", "haan, unka naam batao na|unka naam batao na",
+            "हाँ, वो कब आएँगे?|वो कब आएँगे?", "হ্যাঁ, উনি কখন আসবেন?|উনি কখন আসবেন?",
+            "ஆமா, அவர் எப்போது வருவார்?|அவர் எப்போது வருவார்?", "ಹೌದು, ಅವರು ಯಾವಾಗ ಬರುತ್ತಾರೆ?|ಅವರು ಯಾವಾಗ ಬರುತ್ತಾರೆ?"})
+    void aRealQuestionBesideAYesIsStillAFollowUp(String turn, String remainder) {
+        Parsed p = CompoundReply.parse(turn);
+        assertThat(p.answer()).as(turn).isEqualTo(Answer.YES);
+        assertThat(p.conditional()).as(turn).isFalse();
+        assertThat(p.termsStated()).as(turn).isFalse();
+        assertThat(p.remainder()).as(turn).isEqualTo(remainder);
+        assertThat(CompoundReply.followUp(p.remainder())).as(turn).isTrue();
+        assertThat(CompoundReply.confirmsDeal(turn)).as(turn).isTrue();
+    }
+
+    @Test
+    void aRequestAloneIsAFollowUpAndNothingElseIsNeeded() {
+        Parsed p = CompoundReply.parse("tell me his name");
+        assertThat(p.answer()).isEqualTo(Answer.NONE);
+        assertThat(p.remainder()).isEqualTo("tell me his name");
+        assertThat(p.decided()).isTrue();
+        assertThat(CompoundReply.followUp("tell me his name")).isTrue();
+        assertThat(CompoundReply.followUp("don't tell anyone")).isFalse();
+        assertThat(CompoundReply.followUp("when you pay 4500")).isFalse();
+    }
+
+    @Test
+    void aQuestionAboutThePriceBesideAYesIsAnsweredButNeverConfirmsADeal() {
+        Parsed p = CompoundReply.parse("haan, but aaj ka bhav kya hai?");
+        assertThat(p.answer()).isEqualTo(Answer.YES);
+        assertThat(p.remainder()).isEqualTo("aaj ka bhav kya hai?");
+        assertThat(p.termsStated()).as("price-bearing: a read-back treats it as a counter offer").isTrue();
+        assertThat(CompoundReply.confirmsDeal("haan, but aaj ka bhav kya hai?")).isFalse();
+    }
+
+    @Test
+    void nothingElseAfterAYesIsNotARestriction() {
+        for (String turn : new String[] {"haan, aur kuch nahi", "yes, nothing else", "हाँ, और कुछ नहीं"}) {
+            Parsed p = CompoundReply.parse(turn);
+            assertThat(p.answer()).as(turn).isEqualTo(Answer.YES);
+            assertThat(p.conditional()).as(turn).isFalse();
+        }
     }
 }

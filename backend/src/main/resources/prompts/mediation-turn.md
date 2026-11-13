@@ -18,8 +18,12 @@ Answer with exactly these fields:
 {{translation_rules}}offer: what this turn states about the sale.
 - status is "clear" only when the buyer commits to a price, including by accepting a number the farmer said (use
   "recent" for that number); "unclear" when a price is mentioned but vague; otherwise "none".
-- commodity, variety and market in English, only when said in this turn or in "recent". price is a plain JSON number in
-  rupees. currency is "INR". unit is the unit the price is per, for example "quintal" or "kg".
+- commodity, variety and market in English, only when said in this turn or in "recent". price is a plain JSON number as
+  spoken. currency is the ISO code of the currency the speaker named for that price, "INR" for rupees or "USD" for
+  dollars; null when no currency was said. Never assume rupees. unit is the unit the price is per, for example
+  "quintal" or "kg"; use "total" for a price explicitly for the whole lot. Set unit to null when the speaker did not
+  state a price basis. A quantity's unit is not evidence that the price is per that unit. Never infer the basis from
+  customary prices or from the crop.
 - quantity, pickup and payment: short English phrases, each only when this turn states it, for example "20 quintal",
   "Monday morning at the farm", "on delivery". They may be set while status is "none".
 

@@ -69,6 +69,10 @@ g-one:
     extra-base-url: ${G_ONE_LLM_EXTRA_BASE_URL:}
     extra-api-key: ${G_ONE_LLM_EXTRA_API_KEY:}
     extra-models: ${G_ONE_LLM_EXTRA_MODELS:}
+    plain-base-url: ${G_ONE_LLM_PLAIN_BASE_URL:}
+    plain-api-key: ${G_ONE_LLM_PLAIN_API_KEY:}
+    plain-models: ${G_ONE_LLM_PLAIN_MODELS:}
+    plain-tokens-per-minute: ${G_ONE_LLM_PLAIN_TOKENS_PER_MINUTE:8000}
   # Who translates a mediated turn: auto = Sarvam when SARVAM_API_KEY is set, else the language model.
   translate:
     provider: ${G_ONE_TRANSLATOR:auto}

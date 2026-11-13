@@ -8,6 +8,7 @@ import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.llm.ChatException;
 import com.example.g_one.agent.llm.ChatMessage;
 import com.example.g_one.agent.llm.ChatRequest;
+import com.example.g_one.agent.llm.ToolSpec;
 import com.example.g_one.speech.LlmClient;
 import com.example.g_one.speech.UpstreamException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -25,6 +26,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 
 /** Routing, cooldowns and the token budget with a hand-moved clock, and both callers against a fake server. No network. */
@@ -92,6 +96,118 @@ class ModelRouterTest {
     }
 
     private static final ChatRequest REQUEST = ChatRequest.of(List.of(ChatMessage.user("hello")), List.of());
+
+    @Test
+    void mixedBrainRoutesPlainOnlyAndSkipsItsBudget() {
+        GOneProperties.Llm cfg = new GOneProperties.Llm("http://gemini", "gemini-key", "gemini", 5, "",
+                List.of(), List.of(), 0, "", "", List.of(), "http://plain", "plain-key",
+                List.of("fast"), 300);
+        ModelRouter r = new ModelRouter(cfg, clock::get, ms -> sleeps.add(ms));
+        assertThat(r.chain(ModelRouter.Task.CHAT, true)).containsExactly("fast", "gemini");
+        assertThat(r.chain(ModelRouter.Task.CHAT, false)).containsExactly("gemini");
+        assertThat(r.chain(ModelRouter.Task.NUMERIC, true)).containsExactly("gemini");
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, true, 250, s -> s.model())).isEqualTo("fast");
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, true, 250, s -> s.model())).isEqualTo("gemini");
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void mixedEndpointsKeepKeysSeparateAndFallBackAfterFailures() throws IOException {
+        HttpServer plain = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        List<String> plainAuth = new CopyOnWriteArrayList<>();
+        List<String> primaryAuth = new CopyOnWriteArrayList<>();
+        List<Integer> statuses = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(200, 429, 500, 201, 202, 401, 403, 400));
+        plain.createContext("/chat/completions", x -> {
+            plainAuth.add(x.getRequestHeaders().getFirst("Authorization"));
+            int status = statuses.remove(0);
+            if (status == 202) {
+                try { Thread.sleep(1_500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                status = 200;
+            }
+            String value = status == 201 ? "{\"choices\":[{\"message\":{\"content\":\"\"}}]}" : status == 200 ? """
+                    {"choices":[{"message":{"content":"plain"}}]}
+                    """ : "{}";
+            byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+            x.sendResponseHeaders(status, bytes.length);
+            try { x.getResponseBody().write(bytes); } catch (IOException ignored) { }
+            x.close();
+        });
+        plain.start();
+        try {
+            server.removeContext("/chat/completions");
+            server.createContext("/chat/completions", x -> {
+                primaryAuth.add(x.getRequestHeaders().getFirst("Authorization"));
+                byte[] bytes = "{\"choices\":[{\"message\":{\"content\":\"gemini\"}}]}".getBytes(StandardCharsets.UTF_8);
+                x.sendResponseHeaders(200, bytes.length);
+                x.getResponseBody().write(bytes);
+                x.close();
+            });
+            GOneProperties.Llm cfg = new GOneProperties.Llm("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "gemini-key", "gemini", 1, "", List.of(), List.of(), 0, "", "", List.of(),
+                    "http://127.0.0.1:" + plain.getAddress().getPort(), "plain-key", List.of("fast"), 8000);
+            GOneProperties props = new GOneProperties(List.of(), "", null, null, cfg);
+            ChatClient chat = new ChatClient(props, JSON);
+            assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("fast");
+            assertThat(chat.complete(REQUEST.numeric()).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(ChatRequest.of(REQUEST.messages(),
+                    List.of(new ToolSpec("example", "synthetic", null)))).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(ChatRequest.of(List.of(ChatMessage.user("hello"),
+                    ChatMessage.tool("call_1", "done")), List.of())).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(new ChatRequest(REQUEST.messages(), List.of(), 0.3, 300,
+                    ModelRouter.Task.CHAT)).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("gemini");
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(2);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(5);
+            for (int i = 0; i < 3; i++) {
+                ChatClient fresh = new ChatClient(props, JSON);
+                assertThat(fresh.complete(REQUEST).usage().model()).isEqualTo("gemini");
+            }
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(5);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(8);
+            for (int status : List.of(401, 403, 400)) {
+                ChatClient fresh = new ChatClient(props, JSON);
+                assertThat(fresh.complete(REQUEST).usage().model()).as("status " + status).isEqualTo("gemini");
+                int afterFailure = plainAuth.size();
+                assertThat(fresh.complete(REQUEST).usage().model()).isEqualTo("gemini");
+                assertThat(plainAuth).as("plain model cooling after " + status).hasSize(afterFailure);
+            }
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(8);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(14);
+        } finally {
+            plain.stop(0);
+        }
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void overlapIsWarnedAndIgnored(CapturedOutput output) {
+        GOneProperties.Llm cfg = new GOneProperties.Llm("http://gemini", "gemini-key", "gemini", 5, "",
+                List.of(), List.of(), 0, "http://extra", "extra-key", List.of("fast"),
+                "http://plain", "plain-key", List.of("fast"), 8000);
+        ModelRouter r = new ModelRouter(cfg, clock::get, ms -> { });
+        assertThat(r.chain(ModelRouter.Task.CHAT, true)).containsExactly("gemini", "fast");
+        assertThat(cfg.isPlain("fast")).isFalse();
+        assertThat(output).contains("plain overlap ignored").contains("fast");
+    }
+
+    @Test
+    void configuredBudgetKeepsTheDefaultLimit() throws IOException {
+        String yml = new String(getClass().getResourceAsStream("/application.yml").readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(yml).contains("G_ONE_LLM_TOKENS_PER_MINUTE:8000");
+        ModelRouter r = router(8_000);
+        r.call(ModelRouter.Task.CHAT, 7_900, slot -> { slot.spent(7_900); return slot.model(); });
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, 500, slot -> slot.model())).isEqualTo(SECOND);
+    }
+
+    @Test
+    void zeroConfiguredBudgetStillLearnsTheProviderLimit() {
+        ModelRouter r = router(0);
+        HttpHeaders h = new HttpHeaders();
+        h.set("x-ratelimit-remaining-tokens", "10");
+        h.set("x-ratelimit-limit-tokens", "8000");
+        r.call(ModelRouter.Task.CHAT, 100, slot -> { slot.observe(h); return slot.model(); });
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, 500, slot -> slot.model())).isEqualTo(SECOND);
+    }
 
     @Test
     void aRateLimitedModelFallsToTheNextAndIsNotAskedDuringItsCooldown() {

@@ -75,6 +75,7 @@ public class ChatClient {
     private final GOneProperties.Llm cfg;
     private final RestClient client;
     private final RestClient extraClient;
+    private final RestClient plainClient;
     private final ObjectMapper json;
     private final Scripted scripted;
     private final ModelRouter router;
@@ -105,6 +106,7 @@ public class ChatClient {
         this.cfg = props.llm();
         this.client = cfg != null && cfg.configured() ? Http.client(cfg.baseUrl(), cfg.timeoutSeconds()) : null;
         this.extraClient = cfg != null && !cfg.extraModels().isEmpty() ? Http.client(cfg.extraBaseUrl(), cfg.timeoutSeconds()) : null;
+        this.plainClient = cfg != null && !cfg.plainModels().isEmpty() ? Http.client(cfg.plainBaseUrl(), cfg.timeoutSeconds()) : null;
         this.json = json;
     }
 
@@ -155,7 +157,12 @@ public class ChatClient {
     /** The router's choice of model, turning "nobody can take this" into the caller's rate-limit error. */
     private ChatReply send(ChatRequest request) {
         try {
-            return router.call(request.task(), estimate(request), slot -> sendTo(slot, request));
+            boolean plain = request.task() == ModelRouter.Task.CHAT && request.tools().isEmpty()
+                    && request.messages().stream().noneMatch(m -> "tool".equals(m.role()) || !m.toolCalls().isEmpty()
+                            || !"system".equals(m.role()) && m.content() != null
+                                    && m.content().matches("(?s).*\\p{N}.*"));
+            log.info("llm_route reason={} task={}", plain ? "plain_eligible" : "tool_or_numeric", request.task());
+            return router.call(request.task(), plain, estimate(request), slot -> sendTo(slot, request));
         } catch (ModelRouter.AllBusy e) {
             throw new ChatException(ChatException.Kind.RATE_LIMITED, 429, "Every language model is busy right now.");
         }
@@ -173,9 +180,10 @@ public class ChatClient {
         long started = System.nanoTime();
         Http.Result r;
         try {
-            boolean extra = cfg.isExtra(slot.model()) && extraClient != null;
-            r = Http.call(STAGE, (extra ? extraClient : client).post().uri("/chat/completions")
-                    .header("Authorization", "Bearer " + (extra ? cfg.extraApiKey() : cfg.apiKey()))
+            boolean plain = cfg.isPlain(slot.model()) && plainClient != null;
+            boolean extra = !plain && cfg.isExtra(slot.model()) && extraClient != null;
+            r = Http.call(STAGE, (plain ? plainClient : extra ? extraClient : client).post().uri("/chat/completions")
+                    .header("Authorization", "Bearer " + (plain ? cfg.plainApiKey() : extra ? cfg.extraApiKey() : cfg.apiKey()))
                     .headers(h -> {
                         if (extra) h.set("api-subscription-key", cfg.extraApiKey());
                     })
@@ -186,7 +194,8 @@ public class ChatClient {
             if (e.status() == 429) throw new ModelRouter.RateLimited(null);
             if (e.status() > 0) {
                 throw new ModelRouter.TryNext(new ChatException(ChatException.Kind.HTTP_ERROR, e.status(),
-                        "The language model returned HTTP " + e.status() + "."));
+                        "The language model returned HTTP " + e.status() + "."),
+                        cfg.isPlain(slot.model()) && (e.status() == 401 || e.status() == 403) ? 300_000 : 5_000);
             }
             throw new ModelRouter.TryNext(new ChatException(ChatException.Kind.UNREACHABLE, 0,
                     "The language model could not be reached (timeout or network error)."));
@@ -197,17 +206,27 @@ public class ChatClient {
                 throw new ModelRouter.RateLimited(r.headers());
             }
             String code = errorCode(r.body());
-            if (r.status() == 400 && UNFINISHED_CODES.contains(code)) {
+            if (!cfg.isPlain(slot.model()) && r.status() == 400 && UNFINISHED_CODES.contains(code)) {
                 throw new Unfinished(400, code, "The language model could not finish its answer (HTTP 400 " + code + ").");
             }
             log.warn("Language model refused the request: HTTP {} {} model={}", r.status(), code, slot.model());
             ChatException refused = new ChatException(ChatException.Kind.HTTP_ERROR, r.status(),
                     "The language model returned HTTP " + r.status() + ".");
+            if (cfg.isPlain(slot.model())) {
+                long cooldownMs = r.status() == 401 || r.status() == 403 ? 300_000 : 5_000;
+                throw new ModelRouter.TryNext(refused, cooldownMs);
+            }
             if (r.status() >= 500 || r.status() == 404 || MODEL_GONE_CODES.contains(code)) throw new ModelRouter.TryNext(refused);
             throw refused;
         }
         if (r.body().length > MAX_BODY_BYTES) throw bad("The language model's answer was too large.");
-        ChatReply reply = parse(r.body(), slot.model(), (System.nanoTime() - started) / 1_000_000);
+        ChatReply reply;
+        try {
+            reply = parse(r.body(), slot.model(), (System.nanoTime() - started) / 1_000_000);
+        } catch (Unfinished e) {
+            if (cfg.isPlain(slot.model())) throw new ModelRouter.TryNext(e);
+            throw e;
+        }
         slot.spent(reply.usage().totalTokens());
         slot.observe(r.headers());
         log.info("llm_call model={} finish={} prompt_tokens={} completion_tokens={} latency_ms={}", reply.usage().model(),

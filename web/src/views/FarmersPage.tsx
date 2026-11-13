@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
 import { forgetSeen, fromRecord, maskedKey, readSeen, searchFarmers, toFarmer, type Farmer, type FarmerDeal } from '../lib/farmers'
-import { humanize, languageLabel, rupees, shortDate } from '../lib/format'
+import { dealPrice, humanize, languageLabel, shortDate } from '../lib/format'
 import { parseMemory } from '../lib/memory'
 import type { Origin } from '../types/console'
 import { AlertIcon, CheckIcon, ChevronIcon, CrossIcon, LockIcon, PhoneIcon, PlayIcon, SearchIcon, TrashIcon, WheatIcon } from '../ui/icons'
@@ -152,7 +152,7 @@ function Detail({ farmer, onClose, onForget }: { farmer: Farmer; onClose: () => 
                     <span className="font-semibold capitalize">{d.quantity} {d.commodity}</span>
                     {d.state === 'agreed' && <span className="chip bg-ok-soft text-ok"><CheckIcon /> Agreed</span>}
                   </p>
-                  <p className="text-sm text-muted">{d.price !== null ? `${rupees(d.price)} / ${d.unit}` : 'Price not stated'}{d.pickup ? ` · ${d.pickup}` : ''}{d.atMs ? ` · ${shortDate(d.atMs)}` : ''}</p>
+                  <p className="text-sm text-muted">{d.price !== null ? dealPrice(d.price, d.unit) : 'Price not stated'}{d.pickup ? ` · ${d.pickup}` : ''}{d.atMs ? ` · ${shortDate(d.atMs)}` : ''}</p>
                 </li>
               ))}
             </ul>
@@ -176,14 +176,6 @@ function AccessForm({ onSaved }: { onSaved: () => void }) {
       <label className="min-w-40 flex-1"><span className="sr-only">Access code</span><input type="password" className="field" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off" /></label>
       <button type="submit" className="btn-primary" disabled={!code}>Unlock</button>
     </form>
-  )
-}
-
-export function NoFarmers() {
-  return (
-    <Empty icon={<WheatIcon />} title="No farmers here yet" action={<div className="flex flex-wrap justify-center gap-2"><a className="btn-primary" href="#/call"><PhoneIcon /> Make a browser call</a><a className="btn-quiet" href="#/demo?autoplay=1"><PlayIcon /> Watch the scripted sample</a></div>}>
-      This browser lists farmer profiles it has seen in the call feed. The scripted sample shows how memory works, but does not save a farmer here. Make a browser call and agree to remember it; the farmer appears after memory is saved.
-    </Empty>
   )
 }
 
@@ -256,8 +248,8 @@ export default function FarmersPage({ openKey, seed }: { openKey: string | null;
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl">
           <p className="kicker">Farmer memory</p>
-          <h1 className="mt-2 text-headline font-semibold">Pick up with farmers this browser has seen.</h1>
-          <p className="mt-3 text-lg text-muted">Each fact says whether the farmer told G-One or G-One inferred it. Memory sits against a hash of the number, and a farmer's saved facts can be forgotten.</p>
+          <h1 className="mt-2 text-headline font-semibold">Every farmer, picked up where they left off.</h1>
+          <p className="mt-3 text-lg text-muted">Each fact says whether the farmer told G-One or G-One inferred it. Memory sits against a hash of the number, and any farmer can be forgotten.</p>
         </div>
         {import.meta.env.DEV && !showSeed && <a className="btn-quiet btn-sm" href="#/farmers?seed=1">Load synthetic farmers (dev only)</a>}
       </header>
@@ -289,7 +281,9 @@ export default function FarmersPage({ openKey, seed }: { openKey: string | null;
               <Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" />
             </div>
           ) : farmers.length === 0 ? (
-            <NoFarmers />
+            <Empty icon={<WheatIcon />} title="No farmers here yet" action={<div className="flex flex-wrap justify-center gap-2"><a className="btn-primary" href="#/demo?autoplay=1"><PlayIcon /> Play the sample call</a><a className="btn-quiet" href="#/call"><PhoneIcon /> Make a call</a></div>}>
+              A farmer appears here after this browser has watched them call. Memory has no public list, so nothing shows until then.
+            </Empty>
           ) : shown.length === 0 ? (
             <Empty icon={<SearchIcon />} title="No farmer matches that">Try a crop, a district or part of a name.</Empty>
           ) : (

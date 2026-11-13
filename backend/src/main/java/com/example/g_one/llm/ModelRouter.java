@@ -56,12 +56,23 @@ public class ModelRouter {
 
     /** This model failed in a way the next model may not (server error, timeout, model gone). */
     public static final class TryNext extends RuntimeException {
+        private final long cooldownMs;
+
         public TryNext(RuntimeException cause) {
+            this(cause, DEFAULT_COOLDOWN_MS);
+        }
+
+        public TryNext(RuntimeException cause, long cooldownMs) {
             super("try next model", cause, false, false);
+            this.cooldownMs = cooldownMs;
         }
 
         RuntimeException failure() {
             return (RuntimeException) getCause();
+        }
+
+        long cooldownMs() {
+            return cooldownMs;
         }
     }
 
@@ -189,6 +200,9 @@ public class ModelRouter {
 
     private final List<String> chain;
     private final List<String> numericChain;
+    private final List<String> plainChain;
+    private final List<String> plainModels;
+    private final long plainTokensPerMinute;
     private final long tokensPerMinute;
     private final Map<String, Budget> budgets = new ConcurrentHashMap<>();
     private final LongSupplier now;
@@ -207,6 +221,14 @@ public class ModelRouter {
         if (cfg != null) cfg.fallbackModels().stream().filter(m -> !models.contains(m)).forEach(models::add);
         if (cfg != null) cfg.extraModels().stream().filter(m -> !models.contains(m)).forEach(models::add);
         this.chain = List.copyOf(models);
+        if (cfg != null) cfg.plainModels().stream().filter(models::contains)
+                .forEach(m -> log.warn("llm_route model={} plain overlap ignored; remove it from primary/fallback/extra or plain config", m));
+        this.plainModels = cfg == null ? List.of() : cfg.plainModels().stream()
+                .filter(m -> !models.contains(m)).toList();
+        List<String> plainFirst = new ArrayList<>(plainModels);
+        plainFirst.addAll(models);
+        this.plainChain = List.copyOf(plainFirst);
+        this.plainTokensPerMinute = cfg == null ? 0 : cfg.plainTokensPerMinute();
         List<String> unsafe = cfg == null ? List.of() : cfg.numericUnsafeModels();
         this.numericChain = models.stream().filter(m -> unsafe.stream().noneMatch(u -> matches(m, u))).toList();
         this.tokensPerMinute = cfg == null ? 0 : cfg.tokensPerMinute();
@@ -218,7 +240,11 @@ public class ModelRouter {
 
     /** The models allowed for this task, best first. */
     public List<String> chain(Task task) {
-        return task == Task.NUMERIC ? numericChain : chain;
+        return chain(task, false);
+    }
+
+    public List<String> chain(Task task, boolean plain) {
+        return task == Task.NUMERIC ? numericChain : plain ? plainChain : chain;
     }
 
     /** The primary model, used for wire formats that need a name before any call is made. */
@@ -233,18 +259,22 @@ public class ModelRouter {
      * @throws AllBusy when no allowed model can take the call within the wait limit
      */
     public <T> T call(Task task, int estimatedTokens, Attempt<T> attempt) {
+        return call(task, false, estimatedTokens, attempt);
+    }
+
+    public <T> T call(Task task, boolean plain, int estimatedTokens, Attempt<T> attempt) {
         long started = now.getAsLong();
         long waitedTotal = 0;
         long soonest = Long.MAX_VALUE;
         RuntimeException lastFailure = null;
-        List<String> models = chain(task);
+        List<String> models = chain(task, plain);
         for (int i = 0; i < models.size(); i++) {
             String model = models.get(i);
             Budget budget = budget(model);
             boolean retried = false;
             while (true) {
                 long wait = budget.waitFor(estimatedTokens, now.getAsLong());
-                if (wait > 0 && (wait > MAX_WAIT_MS - waitedTotal)) {
+                if (wait > 0 && (plainModels.contains(model) || wait > MAX_WAIT_MS - waitedTotal)) {
                     soonest = Math.min(soonest, wait);
                     log.info("llm_route model={} skipped wait_ms={}", model, wait);
                     break;
@@ -267,6 +297,7 @@ public class ModelRouter {
                 } catch (TryNext e) {
                     slot.release();
                     lastFailure = e.failure();
+                    if (plainModels.contains(model)) budget.cool(now.getAsLong() + e.cooldownMs());
                     log.warn("llm_route model={} failed; trying the next", model);
                     if (now.getAsLong() - started > SWITCH_DEADLINE_MS) throw lastFailure;
                     break;
@@ -289,7 +320,7 @@ public class ModelRouter {
     }
 
     private Budget budget(String model) {
-        return budgets.computeIfAbsent(model, m -> new Budget(tokensPerMinute));
+        return budgets.computeIfAbsent(model, m -> new Budget(plainModels.contains(m) ? plainTokensPerMinute : tokensPerMinute));
     }
 
     /** Tokens used by this model in the last minute, for tests and logs. */

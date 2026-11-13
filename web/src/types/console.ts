@@ -154,7 +154,7 @@ export interface MemoryLoaded {
   gists: CallGist[]
 }
 
-/** The deal summary changed. Terms are as spoken (null when not stated); price is rupees per unit. Nonbinding. */
+/** The deal summary changed. Unit is the explicit price unit or "total"; null when not stated. Nonbinding. */
 export interface DealUpdated {
   type: 'deal_updated'
   callId: string

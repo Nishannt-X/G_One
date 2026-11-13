@@ -1,5 +1,5 @@
 import type { CallView, LegView, NotStoredReason, TimelineItem, ToolView, TurnTiming } from './callState'
-import { languageLabel, offset, rupees } from './format'
+import { dealPrice, languageLabel, offset, rupees } from './format'
 import { comparePrice, dealValue, parseReference } from './pricing'
 import type { CallGist, DealState, DealUpdated, LegRole, LegSource, MemoryLoaded, ProfileFact, WhisperKind } from '../types/console'
 
@@ -279,10 +279,10 @@ function cropOf(deal: StoredDeal): string | null {
 }
 
 function termsLine(deal: StoredDeal): string {
-  const price = deal.price !== null ? `${rupees(deal.price)}${deal.unit ? ` per ${deal.unit}` : ''}` : null
+  const price = deal.price !== null ? dealPrice(deal.price, deal.unit, ' per ') : null
   const value = dealValue(deal.quantity, deal.price, deal.unit)
   const parts = [cropOf(deal), deal.quantity, price ? `at ${price}` : null].filter(Boolean).join(', ')
-  return value !== null ? `${parts} (about ${rupees(Math.round(value))} in all)` : parts
+  return value !== null && deal.unit !== 'total' ? `${parts} (about ${rupees(Math.round(value))} in all)` : parts
 }
 
 function switches(role: LegRole, side: StoredSide | null): string | null {

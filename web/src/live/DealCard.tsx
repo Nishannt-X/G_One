@@ -1,5 +1,5 @@
 import type { CallView } from '../lib/callState'
-import { rupees } from '../lib/format'
+import { dealPrice, rupees } from '../lib/format'
 import { useI18n, type MessageKey } from '../lib/i18n'
 import { dealValue } from '../lib/pricing'
 import type { DealState } from '../types/console'
@@ -56,7 +56,7 @@ export default function DealCard({ call }: { call: CallView }) {
       <dl className="grid grid-cols-2 gap-2">
         <Term label={t('term_crop')} value={deal ? [deal.variety, deal.commodity].filter(Boolean).join(' ') || null : null} />
         <Term label={t('term_quantity')} value={deal?.quantity ?? null} />
-        <Term label={t('term_price')} value={deal?.price != null ? `${rupees(deal.price)}${deal.unit ? ` / ${deal.unit}` : ''}` : null} />
+        <Term label={t('term_price')} value={deal?.price != null ? dealPrice(deal.price, deal.unit) : null} />
         <Term label={t('term_value')} value={total !== null ? rupees(total) : null} />
         <Term label={t('term_market')} value={deal?.market ?? null} />
         <Term label={t('term_pickup')} value={deal?.pickup ?? null} />

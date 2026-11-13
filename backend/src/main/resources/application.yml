@@ -63,7 +63,7 @@ g-one:
     # Substrings of models that mistranslate figures: never used for mediation, deal extraction or price replies.
     numeric-unsafe-models: ${G_ONE_LLM_NUMERIC_UNSAFE_MODELS:qwen}
     # Each model's tokens-per-minute limit (Groq free tier). 0 turns the local budget off.
-    tokens-per-minute: ${G_ONE_LLM_TOKENS_PER_MINUTE:0}
+    tokens-per-minute: ${G_ONE_LLM_TOKENS_PER_MINUTE:8000}
     # Optional second OpenAI-compatible endpoint, tried last, for when the primary provider runs out of quota.
     # Sarvam: https://api.sarvam.ai/v1 with the model sarvam-105b-conversations.
     extra-base-url: ${G_ONE_LLM_EXTRA_BASE_URL:}
@@ -72,7 +72,7 @@ g-one:
     plain-base-url: ${G_ONE_LLM_PLAIN_BASE_URL:}
     plain-api-key: ${G_ONE_LLM_PLAIN_API_KEY:}
     plain-models: ${G_ONE_LLM_PLAIN_MODELS:}
-    plain-tokens-per-minute: ${G_ONE_LLM_PLAIN_TOKENS_PER_MINUTE:0}
+    plain-tokens-per-minute: ${G_ONE_LLM_PLAIN_TOKENS_PER_MINUTE:8000}
   # Who translates a mediated turn: auto = Sarvam when SARVAM_API_KEY is set, else the language model.
   translate:
     provider: ${G_ONE_TRANSLATOR:auto}

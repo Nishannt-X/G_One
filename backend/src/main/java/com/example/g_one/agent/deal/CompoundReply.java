@@ -228,7 +228,7 @@ public final class CompoundReply {
     }
 
     /** The turn in clauses: cut at punctuation and before every joining or condition word. */
-    static List<String> clauses(String text) {
+    public static List<String> clauses(String text) {
         List<String> out = new ArrayList<>();
         for (String part : BREAK.split(text)) {
             List<int[]> words = words(part);

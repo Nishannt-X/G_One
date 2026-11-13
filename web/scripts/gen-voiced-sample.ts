@@ -120,7 +120,8 @@ const BEATS: Beat[] = [
     deal: { market: 'Kolkata' },
     lines: [
       { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'নমস্কার, আমি জি-ওয়ান, একটা এআই সহকারী। কর্ণাটকের এক চাষির হয়ে ফোন করছি। ওঁর চল্লিশ কুইন্টাল পেঁয়াজ বিক্রি আছে।', gloss: 'Namaskar, I am G-One, an AI assistant. I am calling on behalf of a farmer in Karnataka. He has forty quintals of onion for sale.' },
-      { kind: 'own', lang: 'hi-IN', to: 'buyer', text: 'क्या मैं आपको उनसे जोड़ दूँ?', gloss: 'Shall I connect you with him?' },
+      // The product's own question to a buyer (bn-IN buyerIntro in backend/src/main/resources/prompts/mediation-lines.json).
+      { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'এখন কথা বলা যাবে? হ্যাঁ বা না বলুন।', gloss: 'Can you talk now? Please say yes or no.' },
     ],
   },
   {

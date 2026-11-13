@@ -144,7 +144,7 @@
   "memoryAfter": {
     "summary": "Sold 40 quintals of onion at ₹1,900 to Mondal Traders, pay on delivery. Refused a UPI PIN request."
   },
-  "totalMs": 257356,
+  "totalMs": 259219,
   "beats": [
     {
       "id": "farmer-language-ask",
@@ -651,17 +651,17 @@
         {
           "id": "disclose-2",
           "kind": "said",
-          "language": "hi-IN",
+          "language": "bn-IN",
           "languages": [
-            "Hindi"
+            "Bengali"
           ],
-          "text": "क्या मैं आपको उनसे जोड़ दूँ?",
+          "text": "এখন কথা বলা যাবে? হ্যাঁ বা না বলুন।",
           "spoken": null,
-          "gloss": "Shall I connect you with him?",
+          "gloss": "Can you talk now? Please say yes or no.",
           "to": "buyer",
-          "voice": "Bhavna",
-          "file": "disclose-2-31e2d8b4.wav",
-          "durationMs": 1469,
+          "voice": "Kirra",
+          "file": "disclose-2-37150f77.wav",
+          "durationMs": 3332,
           "pan": 0.75,
           "hearing": {
             "farmer": "silent",

@@ -107,8 +107,10 @@ public final class MediationSession {
     private BigDecimal lastWhispered;
     /** Unpriced offer held on this call's serial mediation lane until its speaker states a basis. */
     /** @param explicitCurrency the words held currency-like text that is not clearly rupees: only a yes or "rupees" settles it */
+    /** @param asks questions asked so far for this amount, the first included; at most two are asked */
     private record PendingBasis(Offer offer, String translation, String speech, String basis, boolean explicitCurrency,
             boolean remember, int asks) {}
+    private static final int MAX_BASIS_QUESTIONS = 2;
     private PendingBasis pendingBasis;
     private SttSession buyerSession;
     /** Answers a party who speaks to G-One directly. */
@@ -476,7 +478,7 @@ public final class MediationSession {
                 // clearly rupees needs a yes or "rupees": a bare "per kg" leaves it open.
                 boolean currencyOpen = held.explicitCurrency() && !answer.affirmed();
                 if (basis == null || currencyOpen) {
-                    if (held.asks() < 2) {
+                    if (held.asks() < MAX_BASIS_QUESTIONS) {
                         pendingBasis = new PendingBasis(held.offer(), held.translation(), held.speech(), basis, currencyOpen,
                                 held.remember(), held.asks() + 1);
                         BigDecimal price = held.offer().price();
@@ -584,7 +586,7 @@ public final class MediationSession {
                 // Neither the basis nor the currency is ever assumed: hold the amount and ask the buyer, once and briefly.
                 desk.unpricedOffer();
                 pendingBasis = new PendingBasis(extracted, carried, turn.text(), basis,
-                        saidCurrency == PriceBasis.Currency.UNRESOLVED, cautions.isEmpty(), 0);
+                        saidCurrency == PriceBasis.Currency.UNRESOLVED, cautions.isEmpty(), 1);
                 sayAssistant(speaker, basis == null ? basisQuestion(language(speaker), extracted.price())
                         : currencyQuestion(language(speaker), extracted.price(), basis), false, null);
                 return;

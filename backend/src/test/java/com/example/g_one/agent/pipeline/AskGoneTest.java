@@ -671,6 +671,17 @@ class AskGoneTest {
         assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null && d.price().compareTo(new java.math.BigDecimal("2000")) == 0);
     }
 
+    @Test
+    void theClarificationIsAskedAtMostTwiceThenTheBuyerRestatesThePrice() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your rice at 2000", "मैं आपका चावल दो हज़ार में खरीदूँगा", kgOffer(2000));
+        buyerAnswers("yes");
+        buyerAnswers("yes");
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("Is that two thousand rupees in total"))).hasSize(2);
+        assertThat(spokenTo(buyer).getLast()).startsWith("Please say the full price again in rupees");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
     private void farmerSaid(String text, String translation) {
         llm.replyText(reading(translation, NO_OFFER, "none", false));
         session(LegRole.FARMER).say(text);

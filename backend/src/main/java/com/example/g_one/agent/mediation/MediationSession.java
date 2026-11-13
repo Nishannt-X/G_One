@@ -475,8 +475,9 @@ public final class MediationSession {
                 desk.heard(speaker, DealDesk.Heard.CHANGED, n, turn.startedMs());
                 awaiting = desk.awaiting(speaker);
                 quick = ReplyGuard.Reading.UNCLEAR;
-            } else if (parsed.answer() != CompoundReply.Answer.NONE && !parsed.conditional() && parsed.hasRemainder()
-                    && (named || CompoundReply.followUp(parsed.remainder()))) {
+            } else if (parsed.answer() != CompoundReply.Answer.NONE && !parsed.conditional() && !parsed.termsStated()
+                    && parsed.hasRemainder() && (named || CompoundReply.followUp(parsed.remainder()))) {
+                // Never with a price or another term beside the yes: that turn is not a confirmation, even said to G-One.
                 // "yes, but who is he?": the answer goes to the read-back, the question to G-One alone. Only the answer
                 // reaches the shared record; the question is classified as private before any shared sink sees it.
                 String answered = CompoundReply.answerOf(turn.text(), parsed.remainder());

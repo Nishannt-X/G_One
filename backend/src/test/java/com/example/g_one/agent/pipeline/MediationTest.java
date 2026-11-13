@@ -903,7 +903,8 @@ class MediationTest {
 
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"haan, but who is he?", "हाँ, लेकिन वो कौन है?",
-            "হ্যাঁ, কিন্তু উনি কে?", "ஆமா, ஆனா அவர் யார்?", "ಹೌದು, ಆದರೆ ಅವರು ಯಾರು?", "yes, and when is the pickup?"})
+            "হ্যাঁ, কিন্তু উনি কে?", "ஆமா, ஆனா அவர் யார்?", "ಹೌದು, ಆದರೆ ಅವರು ಯಾರು?", "yes, and when is the pickup?",
+            "yes when will he come?"})
     void aYesWithAFollowUpQuestionConfirmsTheReadBackAndTheQuestionStaysPrivate(String said) {
         toConfirming();
         now.addAndGet(1000);
@@ -946,7 +947,8 @@ class MediationTest {
 
     @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
     @org.junit.jupiter.params.provider.ValueSource(strings = {"theek hai lekin 4500 mein", "4500 mein theek hai",
-            "haan but only at 4500", "हाँ, पर साढ़े चार हज़ार में"})
+            "haan but only at 4500", "हाँ, पर साढ़े चार हज़ार में", "yes when you pay 4500", "haan jab 4500 do",
+            "yes after you pay 4500", "haan par kal tak 4500", "yes when you pay 4500?"})
     void aYesWithDifferentTermsIsACounterOfferNeverAConfirmation(String said) {
         toConfirming();
         now.addAndGet(1000);
@@ -1198,6 +1200,26 @@ class MediationTest {
         java.util.Map<LegRole, String> out = new java.util.EnumMap<>(LegRole.class);
         eventsOf(ConsoleEvent.ConsentRecorded.class).forEach(c -> out.put(c.role(), c.consent()));
         return out;
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"yes but don't tell anyone", "haan lekin kisi ko mat batana"})
+    void aRestrictedYesToRememberingOnAMediatedCallIsNeverConsent(String said) {
+        farmerSaysByeInMediation();
+        finishAll();
+        session(LegRole.FARMER).say("हाँ");
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).last().isEqualTo(farmerAsk(com.example.g_one.agent.closing.CallClosing.Question.SAVE));
+        session(LegRole.FARMER).say(said);
+        session(LegRole.BUYER).say("no");
+        executor.runAll();
+        finishAll();
+        session(LegRole.FARMER).say("hmm");
+        executor.runAll();
+        finishAll();
+        assertThat(consents()).containsEntry(LegRole.FARMER, "NONE");
     }
 
     @Test

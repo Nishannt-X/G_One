@@ -37,14 +37,7 @@ final class AskDigest {
 
         /** Price times quantity in rupees, when both are known in units that convert; otherwise null. */
         BigDecimal value() {
-            if (price == null || unit == null || quantity == null) return null;
-            Matcher m = AMOUNT.matcher(quantity);
-            if (!m.find()) return null;
-            Integer quantityKg = KG.get(Offer.unit(m.group(2)));
-            Integer priceKg = KG.get(Offer.unit(unit));
-            if (quantityKg == null || priceKg == null) return null;
-            return new BigDecimal(m.group(1)).multiply(BigDecimal.valueOf(quantityKg)).multiply(price)
-                    .divide(BigDecimal.valueOf(priceKg), 0, RoundingMode.HALF_UP);
+            return total(price, unit, quantity);
         }
 
         /** The price per kilo, or null when the unit does not convert or already is a kilo. */
@@ -57,9 +50,20 @@ final class AskDigest {
 
     private static final Map<String, Integer> KG = Map.of("kg", 1, "kilo", 1, "kilogram", 1, "quintal", 100,
             "ton", 1000, "tonne", 1000);
-    private static final Pattern AMOUNT = Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)\\s*([\\p{L}]+)");
+    private static final Pattern AMOUNT = Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)\\s*([\\p{L}]+)\\s*$");
 
     private AskDigest() {}
+
+    static BigDecimal total(BigDecimal price, String unit, String quantity) {
+        if (price == null || unit == null || quantity == null) return null;
+        Matcher m = AMOUNT.matcher(quantity);
+        if (!m.matches()) return null;
+        Integer quantityKg = KG.get(Offer.unit(m.group(2)));
+        Integer priceKg = KG.get(Offer.unit(unit));
+        if (quantityKg == null || priceKg == null) return null;
+        return new BigDecimal(m.group(1)).multiply(BigDecimal.valueOf(quantityKg)).multiply(price)
+                .divide(BigDecimal.valueOf(priceKg)).stripTrailingZeros();
+    }
 
     private static String unitKey(String unit) {
         return unit == null ? null : Offer.unit(unit);

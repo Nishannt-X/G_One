@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
 import { forgetSeen, fromRecord, maskedKey, readSeen, searchFarmers, toFarmer, type Farmer, type FarmerDeal } from '../lib/farmers'
-import { humanize, languageLabel, rupees, shortDate } from '../lib/format'
+import { dealPrice, humanize, languageLabel, shortDate } from '../lib/format'
 import { parseMemory } from '../lib/memory'
 import type { Origin } from '../types/console'
 import { AlertIcon, CheckIcon, ChevronIcon, CrossIcon, LockIcon, PhoneIcon, PlayIcon, SearchIcon, TrashIcon, WheatIcon } from '../ui/icons'
@@ -152,7 +152,7 @@ function Detail({ farmer, onClose, onForget }: { farmer: Farmer; onClose: () => 
                     <span className="font-semibold capitalize">{d.quantity} {d.commodity}</span>
                     {d.state === 'agreed' && <span className="chip bg-ok-soft text-ok"><CheckIcon /> Agreed</span>}
                   </p>
-                  <p className="text-sm text-muted">{d.price !== null ? `${rupees(d.price)} / ${d.unit}` : 'Price not stated'}{d.pickup ? ` · ${d.pickup}` : ''}{d.atMs ? ` · ${shortDate(d.atMs)}` : ''}</p>
+                  <p className="text-sm text-muted">{d.price !== null ? dealPrice(d.price, d.unit) : 'Price not stated'}{d.pickup ? ` · ${d.pickup}` : ''}{d.atMs ? ` · ${shortDate(d.atMs)}` : ''}</p>
                 </li>
               ))}
             </ul>

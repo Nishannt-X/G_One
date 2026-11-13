@@ -121,4 +121,28 @@ class NumberGuardTest {
                 .isEqualByComparingTo("2500");
         assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("999"), "eighteen hundred or nineteen hundred", "en-IN", java.util.List.of())).isNull();
     }
+
+    @Test
+    void multiplierSuffixesAreReadAsTheWholeAmount() {
+        assertThat(NumberGuard.numbers("I offer 2k", "en-IN")).contains("2000").doesNotContain("2");
+        assertThat(NumberGuard.numbers("I offer 2K only", "en-IN")).contains("2000");
+        assertThat(NumberGuard.numbers("2.5k per quintal", "en-IN")).contains("2500");
+        assertThat(NumberGuard.numbers("1.5 lakh for all", "en-IN")).contains("150000");
+        assertThat(NumberGuard.numbers("1.5L for all", "en-IN")).contains("150000");
+        assertThat(NumberGuard.numbers("2cr total", "en-IN")).contains("20000000");
+        assertThat(NumberGuard.numbers("2 hazaar per kg", "en-IN")).contains("2000");
+        assertThat(NumberGuard.digitized("main 2k dunga", "hi-IN")).isEqualTo("main 2000 dunga");
+    }
+
+    @Test
+    void anUnreadableSuffixNeverYieldsAPartialPrice() {
+        assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("2000000"), "I offer 2m", "en-IN", java.util.List.of())).isNull();
+        assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("2000"), "I offer 2x", "en-IN", java.util.List.of())).isNull();
+        assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("2000"), "I offer 2k", "en-IN", java.util.List.of()))
+                .isEqualByComparingTo("2000");
+        assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("1800"), "10kg at 1800rs", "en-IN", java.util.List.of()))
+                .isEqualByComparingTo("1800");
+        assertThat(NumberGuard.trustedPrice(new java.math.BigDecimal("180"), "10kg at 1800rs", "en-IN", java.util.List.of()))
+                .isEqualByComparingTo("1800");
+    }
 }

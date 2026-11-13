@@ -17,7 +17,7 @@ public class MediationLines {
     private static final Set<String> KEYS = Set.of("buyerIntro", "buyerRetry", "buyerAccepted", "buyerDeclined",
             "farmerBuyerJoined", "farmerBuyerDeclined", "farmerBuyerLeft", "buyerFarmerLeft", "oneMoment", "repeat", "unsafeTranslation",
             "cautionSecret", "cautionThreat", "cautionAdvance", "cautionShareWithheld", "priceBelow", "priceFarBelow",
-            "priceNear", "priceAbove", "readback", "notStated", "confirmRetry", "confirmedWait", "declined", "expired",
+            "priceNear", "priceAbove", "readback", "readbackTotal", "calculatedTotal", "notStated", "confirmRetry", "confirmedWait", "declined", "expired",
             "voided", "endFarmer", "endBuyer");
 
     private final Map<String, Map<String, String>> byCode = new LinkedHashMap<>();

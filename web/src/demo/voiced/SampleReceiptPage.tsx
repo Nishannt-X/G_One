@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { rupees } from '../../lib/format'
+import { dealPrice, rupees } from '../../lib/format'
 import { DoubleCheckIcon, Logo } from '../../ui/icons'
 import { MANIFEST_BASE, type Manifest } from './manifest'
 import { sampleReceipt, type SampleReceipt } from './sampleReceipt'
@@ -29,7 +29,11 @@ export function ReceiptCard({ receipt }: { receipt: SampleReceipt }) {
         )}
         <p className="text-sm font-semibold text-ok"><span lang="hi">कुल राशि</span> / Total</p>
         <p className="text-3xl font-bold tabular-nums">{receipt.total !== null ? rupees(receipt.total) : '—'}</p>
-        <p className="text-base font-medium">{receipt.quantity} × {receipt.price !== null ? rupees(receipt.price) : '—'} / {receipt.unit}</p>
+        {receipt.unit === 'total' ? (
+          <p className="text-base font-medium">{receipt.quantity} · {receipt.price !== null ? dealPrice(receipt.price, receipt.unit) : '—'}</p>
+        ) : (
+          <p className="text-base font-medium">{receipt.quantity} × {receipt.price !== null ? rupees(receipt.price) : '—'} / {receipt.unit}</p>
+        )}
       </div>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <Item hi="किसान" en="Farmer" value={receipt.farmer} />

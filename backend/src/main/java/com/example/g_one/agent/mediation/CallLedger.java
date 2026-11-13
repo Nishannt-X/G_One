@@ -115,7 +115,7 @@ final class CallLedger {
     void learned(LegRole leg, Offer offer, boolean buyerOffer) {
         if (offer == null) return;
         boolean price = buyerOffer && "clear".equals(offer.status()) && offer.price() != null && offer.price().signum() > 0
-                && (offer.currency() == null || "INR".equalsIgnoreCase(offer.currency())) && phrase(offer.unit()) != null;
+                && "INR".equalsIgnoreCase(offer.currency()) && phrase(offer.unit()) != null;
         synchronized (known) {
             Known k = known.get(leg);
             known.put(leg, new Known(

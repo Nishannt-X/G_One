@@ -23,7 +23,8 @@ final class HeardTerms {
             "quintal", List.of("quintal", "qtl", "क्विंटल", "कुंतल", "কুইন্টাল", "குவிண்டால்", "ಕ್ವಿಂಟಲ್", "ಕ್ವಿಂಟಾಲ್"),
             "kg", List.of("kg", "kilo", "किलो", "केजी", "কেজি", "কিলো", "கிலோ", "ಕೆಜಿ", "ಕಿಲೋ"),
             "ton", List.of("ton", "टन", "টন", "டன்", "ಟನ್"),
-            "tonne", List.of("ton", "टन", "টন", "டன்", "ಟನ್"));
+            "tonne", List.of("ton", "टन", "টন", "டன்", "ಟನ್"),
+            "total", List.of("total", "पूरे", "कुल", "মোট", "மொத்தம்", "ಒಟ್ಟು"));
     private static final Pattern AMOUNT = Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)\\s*([\\p{L}]*)");
     private static final Pattern WORD = Pattern.compile("[\\p{L}\\p{M}]{3,}");
 

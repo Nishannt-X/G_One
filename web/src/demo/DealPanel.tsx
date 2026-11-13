@@ -1,5 +1,5 @@
 import type { CallView } from '../lib/callState'
-import { humanize, rupees, shortDate } from '../lib/format'
+import { dealPrice, humanize, rupees, shortDate } from '../lib/format'
 import { dealValue, meterPosition, METER_RANGE_PCT, priceCheck } from '../lib/pricing'
 import type { DealState } from '../types/console'
 import { CheckIcon, CrossIcon } from '../ui/icons'
@@ -133,7 +133,7 @@ export default function DealPanel({ call, compact = false, saved = null }: { cal
       <dl className="grid grid-cols-2 gap-2">
         <Term compact={compact} label="Crop" value={deal ? [deal.variety, deal.commodity].filter(Boolean).join(' ') || null : null} />
         <Term compact={compact} label="Quantity" value={deal?.quantity ?? null} />
-        <Term compact={compact} label="Price" value={deal?.price != null ? `${rupees(deal.price)}${deal.unit ? ` / ${deal.unit}` : ''}` : null} />
+        <Term compact={compact} label="Price" value={deal?.price != null ? dealPrice(deal.price, deal.unit) : null} />
         <Term compact={compact} label="Total" value={total !== null ? rupees(total) : null} />
         <Term compact={compact} label="Pickup" value={deal?.pickup ?? null} wide />
       </dl>

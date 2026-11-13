@@ -235,6 +235,13 @@ final class Agreement {
         return expireDue();
     }
 
+    /** A newer offer with unknown terms makes the previous draft unsafe to confirm. */
+    synchronized List<Notice> superseded() {
+        List<Notice> out = new ArrayList<>(expireDue());
+        if (state != State.IDLE) close(out, Kind.VOIDED);
+        return out;
+    }
+
     private boolean due() {
         Instant now = clock.instant();
         return switch (state) {

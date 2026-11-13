@@ -108,15 +108,23 @@ class YesNoReaderTest {
 
     @Test
     void anUnsettledTurnGetsOneSmallStrictJsonCall() {
-        llm.replyText("{\"answer\": \"YES\", \"conditional\": false, \"remainder\": \"gaadi kal bhejiye\"}");
-        CompoundReply.Parsed p = reader.readCompound(SAVE_Q, "aap yaad rakhiyega bhai, gaadi kal bhejiye");
+        llm.replyText("{\"answer\": \"YES\", \"conditional\": false, \"remainder\": \"\"}");
+        CompoundReply.Parsed p = reader.readCompound(SAVE_Q, "aap yaad rakhiyega bhai");
         assertThat(p.answer()).isEqualTo(CompoundReply.Answer.YES);
-        assertThat(p.remainder()).isEqualTo("gaadi kal bhejiye");
         assertThat(llm.requests()).hasSize(1);
         JsonNode request = llm.requests().get(0);
         assertThat(request.has("tools")).isFalse();
         assertThat(request.path("max_tokens").asInt()).isLessThanOrEqualTo(150);
         assertThat(request.path("messages").get(0).path("content").asText()).contains("JSON");
+    }
+
+    @Test
+    void aModelYesBesideAStatementIsDeniedLikeTheWords() {
+        llm.replyText("{\"answer\": \"YES\", \"conditional\": false, \"remainder\": \"gaadi bhejiye\"}");
+        CompoundReply.Parsed p = reader.readCompound(SAVE_Q, "aap yaad rakhiyega bhai, gaadi bhejiye");
+        assertThat(p.answer()).as("a statement beside the yes qualifies it").isEqualTo(CompoundReply.Answer.NONE);
+        assertThat(p.conditional()).isTrue();
+        assertThat(llm.requests()).hasSize(1);
     }
 
     @Test

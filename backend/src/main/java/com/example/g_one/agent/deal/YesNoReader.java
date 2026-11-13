@@ -122,6 +122,11 @@ public final class YesNoReader {
         // Only the caller's own words are ever handled as their request: anything else the model wrote is dropped.
         if (!remainder.isEmpty() && !squeezed(reply).contains(squeezed(remainder))) remainder = "";
         if (answer == CompoundReply.Answer.YES && !CompoundReply.permitsYes(reply)) answer = CompoundReply.Answer.NONE;
+        // Default deny, as for the words: a yes stands beside a question or a request, never beside a statement.
+        if (answer == CompoundReply.Answer.YES && !remainder.isEmpty() && !CompoundReply.followUp(remainder)) {
+            answer = CompoundReply.Answer.NONE;
+            conditional = true;
+        }
         if (answer == CompoundReply.Answer.YES && ReplyGuard.verdict(reply).vetoed() && remainder.isEmpty()) {
             answer = CompoundReply.Answer.NONE; // a vetoed reply with nothing split off is never a yes
         }

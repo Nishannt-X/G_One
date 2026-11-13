@@ -35,9 +35,9 @@ class CompoundReplyTest {
             "haan main Suresh hoon, bhav kya hai|YES|bhav kya hai",
             // A no, then a question: the no stands and the question is handled.
             "nahi, unka naam kya hai?|NO|unka naam kya hai?",
-            "no, but what is the price today?|NO|what is the price today?",
-            "नहीं, आज का भाव क्या है?|NO|आज का भाव क्या है?",
-            "না, আজকের দাম কত?|NO|আজকের দাম কত?",
+            "no, but what is the price?|NO|what is the price?",
+            "नहीं, भाव क्या है?|NO|भाव क्या है?",
+            "না, দাম কত?|NO|দাম কত?",
             // No answer, only a question: nothing recorded, the question is handled and the pending one asked again.
             "unka naam kya hai?|NONE|unka naam kya hai?",
             "who is the buyer?|NONE|who is the buyer?",
@@ -73,7 +73,7 @@ class CompoundReplyTest {
         assertThat(CompoundReply.confirmsDeal("haan, but who is he?")).isTrue();
         assertThat(CompoundReply.confirmsDeal("haan ji")).isTrue();
         assertThat(CompoundReply.parse("haan, kitne quintal the?").termsStated())
-                .as("any term beside a yes keeps a read-back from confirming").isTrue();
+                .as("a question never states terms").isFalse();
     }
 
     @Test
@@ -167,12 +167,14 @@ class CompoundReplyTest {
     }
 
     @Test
-    void aQuestionAboutThePriceBesideAYesIsAnsweredButNeverConfirmsADeal() {
-        Parsed p = CompoundReply.parse("haan, but aaj ka bhav kya hai?");
+    void aQuestionAboutThePriceBesideAYesIsAnsweredAndStillConfirms() {
+        Parsed p = CompoundReply.parse("haan, but bhav kya hai?");
         assertThat(p.answer()).isEqualTo(Answer.YES);
-        assertThat(p.remainder()).isEqualTo("aaj ka bhav kya hai?");
-        assertThat(p.termsStated()).as("price-bearing: a read-back treats it as a counter offer").isTrue();
-        assertThat(CompoundReply.confirmsDeal("haan, but aaj ka bhav kya hai?")).isFalse();
+        assertThat(p.remainder()).isEqualTo("bhav kya hai?");
+        assertThat(p.termsStated()).as("a question never states terms").isFalse();
+        assertThat(CompoundReply.confirmsDeal("haan, but bhav kya hai?")).isTrue();
+        assertThat(CompoundReply.parse("haan, but aaj ka bhav kya hai?").answer())
+                .as("a time word fails closed, even in a question").isEqualTo(Answer.NONE);
     }
 
     @Test
@@ -181,6 +183,157 @@ class CompoundReplyTest {
             Parsed p = CompoundReply.parse(turn);
             assertThat(p.answer()).as(turn).isEqualTo(Answer.YES);
             assertThat(p.conditional()).as(turn).isFalse();
+        }
+    }
+
+    // ---- round 3: default deny. The rest of the turn keeps the answer only when it is positively a question or a
+    // ---- plain request; any statement, time, condition or anything unrecognised means no answer.
+
+    /** Terra's 79-row table (round 2 review), with the intended strings for the rows its report could not print. */
+    @ParameterizedTest(name = "{0}: {1}")
+    @CsvSource(delimiter = '|', value = {
+            "1|yes when will he come?|YES|false|false|when will he come?",
+            "2|haan, unka naam kya hai?|YES|false|false|unka naam kya hai?",
+            "3|ha, but who is he?|YES|false|false|who is he?",
+            "4|yes but don't tell anyone|NONE|true|false|",
+            "5|haan par kisi ko mat batana|NONE|true|false|",
+            "6|yes if he pays now|NONE|true|false|",
+            "7|yes only if 2000|NONE|true|true|",
+            "8|yes but not today|NONE|true|false|",
+            "9|हाँ पर सिर्फ़ 1900 में|NONE|true|true|",
+            "10|yes provided he sends a truck|NONE|true|false|",
+            "11|haan jab tak gaadi na aaye|NONE|true|false|",
+            "12|yes when you pay 4500|NONE|true|true|",
+            "13|haan jab 4500 do|NONE|true|true|",
+            "14|yes after harvest|NONE|true|false|",
+            "15|yes 4500 per quintal|NONE|true|true|",
+            "16|हाँ कल तक|NONE|true|false|",
+            "17|no what is his name?|NO|false|false|what is his name?",
+            "18|no|NO|false|false|",
+            "19|yes|YES|false|false|",
+            "20|haan|YES|false|false|",
+            "21|नहीं|NO|false|false|",
+            "22|हाँ|YES|false|false|",
+            "23|koi baat nahi|YES|false|false|",
+            "24|zarur|YES|false|false|",
+            "25|rakh lo|YES|false|false|",
+            "26|chalega|YES|false|false|",
+            "27|why not|YES|false|false|",
+            "28|yes who is he?|YES|false|false|who is he?",
+            "29|yes what is his name?|YES|false|false|what is his name?",
+            "30|yes how much?|YES|false|false|how much?",
+            "31|yes when will he arrive?|YES|false|false|when will he arrive?",
+            "32|yes where is he?|YES|false|false|where is he?",
+            "33|yes tell me his name|YES|false|false|tell me his name",
+            "34|yes what is the price?|YES|false|false|what is the price?",
+            "35|yes 4500?|NONE|true|true|",
+            "36|yes but do not call|NONE|true|false|",
+            "37|yes without telling him|NONE|true|false|",
+            "38|yes unless he refuses|NONE|true|false|",
+            "39|yes if he comes|NONE|true|false|",
+            "40|yes only tomorrow|NONE|true|false|",
+            "41|yes tomorrow|NONE|true|false|",
+            "42|yes after payment|NONE|true|false|",
+            "43|yes on delivery|NONE|true|false|",
+            "44|yes provided payment arrives|NONE|true|false|",
+            "45|haan lekin aaj nahi|NONE|true|false|",
+            "46|हाँ लेकिन किसी को मत बताना|NONE|true|false|",
+            "47|हाँ अगर वो आए|NONE|true|false|",
+            "48|नहीं, उनका नाम क्या है?|NO|false|false|उनका नाम क्या है?",
+            "49|हाँ, उनका नाम क्या है?|YES|false|false|उनका नाम क्या है?",
+            "50|হ্যাঁ|YES|false|false|",
+            "51|না|NO|false|false|",
+            "52|হ্যাঁ, ওনার নাম কী?|YES|false|false|ওনার নাম কী?",
+            "53|হ্যাঁ, কিন্তু কাউকে বলবেন না|NONE|true|false|",
+            "54|হ্যাঁ, যদি টাকা দেয়|NONE|true|true|",
+            "55|ஆமா|YES|false|false|",
+            "56|இல்லை|NO|false|false|",
+            "57|ஆமா, அவர் யார்?|YES|false|false|அவர் யார்?",
+            "58|ஆமா, ஆனா யாரிடமும் சொல்லாதீங்க|NONE|true|false|",
+            "59|ஆமா, பணம் வந்தால்|NONE|true|false|",
+            "60|ಹೌದು|YES|false|false|",
+            "61|ಇಲ್ಲ|NO|false|false|",
+            "62|ಹೌದು, ಅವರು ಯಾರು?|YES|false|false|ಅವರು ಯಾರು?",
+            "63|ಹೌದು, ಆದರೆ ಯಾರಿಗೂ ಹೇಳಬೇಡಿ|NONE|true|false|",
+            "64|ಹೌದು ಹಣ ಬಂದರೆ|NONE|true|false|",
+            "65|yes um well I think it is fine and please tell me who is coming?|NONE|true|false|please tell me who is coming?",
+            "66|yes but I think perhaps if the buyer comes tomorrow we can talk|NONE|true|false|",
+            "67|haan haan ji uh unka naam kya hai|YES|false|false|unka naam kya hai",
+            "68|yes uh no wait|NONE|true|false|",
+            "69|yes 4 500 per quintal|NONE|true|true|",
+            "70|haan jab chaar hazaar paanch sau do|NONE|true|true|",
+            "71|yes but not now|NONE|true|false|",
+            "72|yes as long as he pays|NONE|true|false|",
+            "73|yes once he pays|NONE|true|false|",
+            "74|yes tell nobody|NONE|true|false|",
+            "75|yes do not tell him|NONE|true|false|",
+            "76|yes but keep it private|NONE|true|false|",
+            "77|yes I will think about it|NONE|true|false|",
+            "78|yes maybe|NONE|true|false|",
+            "79|yes actually no|NONE|true|false|"})
+    void terraTable(String row, String turn, Answer answer, boolean conditional, boolean terms, String remainder) {
+        expect(turn, answer, conditional, terms, remainder);
+    }
+
+    /** Adversarial rows of our own: statements after a yes in six languages, and the questions that must survive. */
+    @ParameterizedTest(name = "{0}: {1}")
+    @CsvSource(delimiter = '|', value = {
+            "a1|yes bring a truck|NONE|true|false|",
+            "a2|haan gaadi bhejna|NONE|true|false|",
+            "a3|ಹೌದು ನಾಳೆ|NONE|true|false|",
+            "a4|হ্যাঁ কাল|NONE|true|false|",
+            "a5|haan kal subah|NONE|true|false|",
+            "a6|haan aaj shaam ko|NONE|true|false|",
+            "a7|yes on Monday|NONE|true|false|",
+            "a8|haan somvar ko|NONE|true|false|",
+            "a9|हाँ, पैसे मिलने के बाद|NONE|true|false|",
+            "a10|हाँ, डिलीवरी पर|NONE|true|false|",
+            "a11|haan payment ke baad|NONE|true|false|",
+            "a12|haan delivery se pehle|NONE|true|false|",
+            "a13|yes, cash only|NONE|true|false|",
+            "a14|yes for the whole lot|NONE|true|false|",
+            "a15|হ্যাঁ, টাকা পেলে|NONE|true|true|",
+            "a16|হ্যাঁ, পরশু|NONE|true|false|",
+            "a17|ஆமா, நாளைக்கு|NONE|true|false|",
+            "a18|ஆமா, பணம் கொடுத்த பிறகு|NONE|true|false|",
+            "a19|ಹೌದು, ಸೋಮವಾರ|NONE|true|false|",
+            "a20|ಹೌದು, ಲಾರಿ ಕಳಿಸಿ|NONE|true|false|",
+            "a21|yes, 50 quintal|NONE|true|true|",
+            "a22|haan, do hazaar per quintal|NONE|true|true|",
+            "a23|ok fine my son will come|NONE|true|false|",
+            "a24|haan theek hai, mera beta aayega|NONE|true|false|",
+            "a25|haan ji, wo kab tak aayenge?|NONE|true|false|",
+            "a26|yes, paanch kilo?|NONE|true|true|",
+            "a27|हाँ कल आना|NONE|true|false|",
+            "a28|ஆமா, லாரி அனுப்புங்க|NONE|true|false|",
+            "a29|হ্যাঁ, গাড়ি পাঠান|NONE|true|false|",
+            "p1|haan, woh kab aayenge?|YES|false|false|woh kab aayenge?",
+            "p2|haan kya bhav hai?|YES|false|false|kya bhav hai?",
+            "p3|haan, kitne quintal the?|YES|false|false|kitne quintal the?",
+            "p4|হ্যাঁ, দাম কত?|YES|false|false|দাম কত?",
+            "p5|haan main Suresh hoon, bhav kya hai|YES|false|false|bhav kya hai",
+            "p6|haan, phone laga do|YES|false|false|",
+            "p7|haan ji, dhanyavaad|YES|false|false|",
+            "p8|haan, aur kuch nahi|YES|false|false|",
+            "p9|yes, is he coming?|YES|false|false|is he coming?",
+            "p10|ஆமா, விலை என்ன?|YES|false|false|விலை என்ன?",
+            "p11|ಹೌದು, ಬೆಲೆ ಎಷ್ಟು?|YES|false|false|ಬೆಲೆ ಎಷ್ಟು?"})
+    void adversarialTable(String row, String turn, Answer answer, boolean conditional, boolean terms, String remainder) {
+        expect(turn, answer, conditional, terms, remainder);
+    }
+
+    private static void expect(String turn, Answer answer, boolean conditional, boolean terms, String remainder) {
+        Parsed p = CompoundReply.parse(turn);
+        assertThat(p.answer()).as(turn + " answer").isEqualTo(answer);
+        assertThat(p.conditional()).as(turn + " conditional").isEqualTo(conditional);
+        assertThat(p.termsStated()).as(turn + " termsStated").isEqualTo(terms);
+        assertThat(p.remainder()).as(turn + " remainder").isEqualTo(remainder == null ? "" : remainder);
+        assertThat(p.decided()).as(turn + " decided").isTrue();
+        if (answer != Answer.YES || conditional) {
+            assertThat(CompoundReply.permitsYes(turn)).as(turn + " is never a yes").isFalse();
+        }
+        if (answer == Answer.YES && !conditional && !terms) {
+            assertThat(CompoundReply.confirmsDeal(turn)).as(turn + " confirms a read-back").isTrue();
         }
     }
 }

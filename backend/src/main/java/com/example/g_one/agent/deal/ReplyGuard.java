@@ -206,6 +206,12 @@ public final class ReplyGuard {
         return tokens.stream().anyMatch(NO::contains);
     }
 
+    /** A plain request to connect a call ("phone laga do", "unse baat karao") with nothing that vetoes it. */
+    static boolean asksToConnect(String text) {
+        if (text == null || text.isBlank() || verdict(text).vetoed()) return false;
+        return containsAny(" " + String.join(" ", tokens(text)) + " ", CONNECT_ASK);
+    }
+
     /** "kya?", "what?", "kya matlab": a question about the question, with nothing else in it. */
     static boolean bareQuestion(String text) {
         if (text == null) return false;

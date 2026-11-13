@@ -88,11 +88,14 @@ public final class CompoundReply {
     private static final Set<String> REQUEST = words("tell", "explain", "repeat", "batao", "bataiye", "bataie",
             "bataye", "bata", "samjhao", "samjhaiye", "बताओ", "बताइए", "बताइये", "बताएं", "बता",
             "समझाओ", "समझाइए", "বলুন", "বলো", "বলেন", "சொல்லுங்கள்", "சொல்லு", "ಹೇಳಿ", "ಹೇಳು");
-    /** Number words that state an amount or a quantity. */
-    private static final Set<String> AMOUNT = words("hundred", "thousand", "lakh", "lakhs", "rupees", "rupee", "rs",
-            "quintal", "quintals", "kilo", "kg", "ton", "tons", "sau", "hazaar", "hazar", "hajar", "lac", "rupaye",
-            "rupay", "rupye", "सौ", "हज़ार", "हजार", "लाख", "रुपये", "रुपए", "रुपया", "क्विंटल", "किलो", "टन", "শো", "হাজার",
-            "লাখ", "টাকা", "কুইন্টাল", "কেজি", "ஆயிரம்", "நூறு", "ரூபாய்", "ಸಾವಿರ", "ನೂರು", "ರೂಪಾಯಿ");
+    /** Number words that state a figure. A figure beside an answer is never a question to answer privately. */
+    private static final Set<String> NUMBER = words("hundred", "thousand", "lakh", "lakhs", "crore", "sau", "hazaar",
+            "hazar", "hajar", "lac", "सौ", "हज़ार", "हजार", "लाख", "करोड़", "শো", "হাজার", "লাখ", "ஆயிரம்", "நூறு", "ಸಾವಿರ",
+            "ನೂರು");
+    /** Units and currencies: in a statement beside the answer they state terms; in a question they only ask. */
+    private static final Set<String> UNIT = words("rupees", "rupee", "rs", "quintal", "quintals", "kilo", "kilos", "kg",
+            "ton", "tons", "tonne", "rupaye", "rupay", "rupye", "rupaiya", "रुपये", "रुपए", "रुपया", "क्विंटल", "किलो", "टन",
+            "টাকা", "কুইন্টাল", "কেজি", "ரூபாய்", "கிலோ", "ರೂಪಾಯಿ", "ಕೆಜಿ", "ಕಿಲೋ", "ಕ್ವಿಂಟಲ್");
     /** Words that name a price or a currency without a number: a clause with one bears on the deal's terms. */
     private static final Set<String> PRICE = words("price", "rate", "bhav", "bhaav", "daam", "keemat", "kimat", "dollar",
             "dollars", "usd", "taka", "takas", "भाव", "दाम", "रेट", "कीमत", "দাম", "দর", "விலை", "ಬೆಲೆ", "ದರ");
@@ -106,10 +109,32 @@ public final class CompoundReply {
             "இல்லாமல்", "ಯಾರಿಗೂ", "ಯಾರಿಗು", "ಇಲ್ಲದೆ");
     /** Conjunctions that tie the answer to a time or an event ("jab 4500 do", "after you pay"): always a qualification. */
     private static final Set<String> TEMPORAL = words("while", "after", "before", "once", "until", "till", "whenever",
-            "jab", "jabtak", "tab", "jis", "jaise", "baad", "जब", "तब", "जिस", "जैसे", "बाद", "যখন", "তখন", "পর", "போது",
+            "jab", "jabtak", "tab", "tak", "jis", "jaise", "baad", "जब", "तब", "तक", "जिस", "जैसे", "बाद", "যখন", "তখন", "পর", "போது",
             "பின்", "ஆனதும்", "ಆಗ", "ಮೇಲೆ");
     private static final List<String> TEMPORAL_PHRASES = List.of(" as long as ", " as soon as ", " so long as ",
             " provided that ");
+    /** A time: beside an answer it qualifies it ("yes tomorrow", "haan kal subah"), and it is never a plain question. */
+    private static final Set<String> TIME = words("today", "tomorrow", "tonight", "morning", "evening", "night", "noon",
+            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "week", "month", "aaj", "kal",
+            "parso", "parson", "subah", "shaam", "sham", "raat", "dopahar", "somvar", "mangalvar", "budhvar", "guruvar",
+            "shukravar", "shanivar", "ravivar", "hafte", "hafta", "mahine", "आज", "कल", "परसों", "सुबह", "शाम", "रात",
+            "दोपहर", "सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार", "रविवार", "हफ्ते", "আজকে", "আজ", "কাল",
+            "পরশু", "সকাল", "বিকেল", "সন্ধ্যা", "রাত", "সোমবার", "রবিবার", "இன்று", "நாளை", "நாளைக்கு", "காலை", "மாலை",
+            "திங்கள்", "ஞாயிறு", "ಇವತ್ತು", "ಇಂದು", "ನಾಳೆ", "ಬೆಳಿಗ್ಗೆ", "ಸಂಜೆ", "ಸೋಮವಾರ", "ಭಾನುವಾರ");
+    /** Words that say nothing about the answer: thanks and greetings. */
+    private static final Set<String> COURTESY = words("thanks", "thank", "you", "dhanyavaad", "dhanyawad", "dhanyavad",
+            "shukriya", "namaste", "namaskar", "धन्यवाद", "शुक्रिया", "नमस्ते", "ধন্যবাদ", "নমস্কার", "நன்றி", "வணக்கம்",
+            "ಧನ್ಯವಾದ", "ಧನ್ಯವಾದಗಳು", "ನಮಸ್ಕಾರ");
+    /** A copula left over after an answer phrase ("रख सकते | हैं", "theek | hai na"): it says nothing more. */
+    private static final Set<String> COPULA = words("hai", "hain", "ho", "hoon", "hun", "hu", "है", "हैं", "हो", "हूँ", "हूं",
+            "ache", "আছে", "it", "is", "that");
+    /** "main Suresh hoon", "I am Suresh", "আমি সুরেশ": who is speaking, which answers a name check and qualifies nothing. */
+    private static final Pattern IDENTITY = Pattern.compile("^(?:main|mai|मैं|i am|i'm|im|this is|ami|আমি|நான்|ನಾನು)"
+            + " [\\p{L}\\p{M}]+(?: [\\p{L}\\p{M}]+)?(?: (?:hoon|hun|hu|हूं|हू|bol raha hoon|bol rahi hoon|बोल रहा हूं"
+            + "|बोल रही हूं|bolchi|বলছি))?$");
+    /** STT noise that is no word at all: removed before the turn is read ("haan haan ji uh unka naam kya hai"). */
+    private static final Pattern NOISE = Pattern.compile("(?iu)(?<![\\p{L}\\p{M}])(?:u+h+|u+m+|e+r+m*|matlab|मतलब|उम्+|अं+)"
+            + "(?![\\p{L}\\p{M}])");
     /** "when" and "where" ask only as "when will...", "where is..."; otherwise they join a condition. */
     private static final Set<String> WHEN_LIKE = words("when", "where", "ಯಾವಾಗ");
     private static final Set<String> AUX = words("will", "would", "is", "are", "was", "were", "do", "does", "did", "can",
@@ -123,7 +148,7 @@ public final class CompoundReply {
             "எவ்வளவு", "எங்கே", "ஏன்", "எப்படி", "எந்த", "ಏನು", "ಯಾರು", "ಎಷ್ಟು", "ಎಲ್ಲಿ", "ಯಾಕೆ", "ಹೇಗೆ", "ಯಾವ");
     /** Words that open a clause without saying anything: the assistant's name, an honorific, a filler. */
     private static final Set<String> LEAD_SKIP = words("g", "one", "gone", "ji", "sir", "bhai", "bhaiya", "didi", "madam",
-            "sahab", "saab", "please", "hey", "so", "then", "acha", "accha", "achha");
+            "sahab", "saab", "please", "hey", "so", "then", "acha", "accha", "achha", "aap", "आप", "well", "okay", "ok");
     /** An emphatic "na" after a request ("batao na") asks; it does not refuse. Not the Bengali না, which can. */
     private static final Set<String> EMPHATIC = words("na", "naa", "ना");
     /** "Nothing else" beside a yes closes the conversation; its negation restricts nothing. */
@@ -148,10 +173,15 @@ public final class CompoundReply {
     /** Reads a turn by words alone. */
     public static Parsed parse(String text) {
         if (text == null || text.isBlank()) return Parsed.none("", true);
+        text = NOISE.matcher(text).replaceAll(" ").replaceAll("\\s+", " ").strip();
+        if (text.isEmpty()) return Parsed.none("", true);
         ReplyGuard.Verdict whole = ReplyGuard.verdict(text);
         boolean clear = whole.reading() != ReplyGuard.Reading.UNCLEAR && !whole.vetoed();
-        // Nothing but the answer ("haan ji", "theek hai 4500" with the figure as its only extra).
-        if (clear && ReplyGuard.answerOnly(text)) return new Parsed(answer(whole.reading()), false, terms(text), "", true);
+        if (clear && ReplyGuard.answerOnly(text)) {
+            // Nothing but the answer, unless a figure rides with it ("haan 4500"): never a plain yes.
+            if (figure(text)) return new Parsed(Answer.NONE, true, true, "", true);
+            return new Parsed(answer(whole.reading()), false, false, "", true);
+        }
         List<int[]> words = words(text);
         int clauseCut = clauseLead(text, words);
         int wordCut = wordLead(text, words);
@@ -179,23 +209,28 @@ public final class CompoundReply {
         FOLLOW_UP,
         /** A negation, restriction, condition, time clause, doubt or the opposite answer: never a yes. */
         QUALIFIER,
-        /** Says something else; after a "but" it is a qualifier. */
+        /**
+         * Says something else ("yes tomorrow", "yes bring a truck"). Beside an answer it qualifies it: default deny. With
+         * no answer in the turn it is left for the model to read.
+         */
         STATEMENT
     }
 
     private record Clause(Kind kind, boolean terms, boolean defer, boolean contrast) {}
 
-    /** The answer, checked against every clause beside it. Only positively questions become the remainder. */
+    /**
+     * The answer, checked against every clause beside it. Default deny: the answer stands only when every other clause
+     * says nothing more, or is positively a question or a plain request. Only those become the remainder, and only
+     * statements, never questions, state terms.
+     */
     private static Parsed assemble(Answer answer, String qualifier) {
         boolean conditional = false;
         boolean terms = false;
-        boolean afterContrast = false;
         List<String> follow = new ArrayList<>();
         for (String clause : clauses(qualifier)) {
             Clause c = classify(clause, answer);
-            afterContrast |= c.contrast();
             terms |= c.terms();
-            Kind kind = c.kind() == Kind.STATEMENT && afterContrast ? Kind.QUALIFIER : c.kind();
+            Kind kind = c.kind() == Kind.STATEMENT && answer != Answer.NONE ? Kind.QUALIFIER : c.kind();
             if (kind == Kind.QUALIFIER || c.defer()) conditional = true;
             if (kind == Kind.FOLLOW_UP) follow.add(stripLead(clause));
         }
@@ -205,9 +240,10 @@ public final class CompoundReply {
     }
 
     /**
-     * One clause beside the answer. It is a follow-up only when it is positively a question (a question mark, an English
-     * question word at its start, a Hindi, Bengali, Tamil or Kannada question word) or a plain request, with nothing in
-     * it that could qualify the answer. Anything that could fails closed.
+     * One clause beside the answer. It keeps the answer only when it says nothing more (answer words, a name, thanks,
+     * "nothing else", a request to connect) or is positively a question (an interrogative word, or a question mark on a
+     * clause with no figure, unit, price or currency) or a plain request to be told something, with no negation,
+     * restriction, condition, time or doubt in it. Everything else fails closed.
      */
     private static Clause classify(String clause, Answer answer) {
         List<String> t = new ArrayList<>(ReplyGuard.tokens(clause));
@@ -216,14 +252,18 @@ public final class CompoundReply {
             contrast |= CONTRAST.contains(t.get(0));
             t.remove(0);
         }
-        if (t.isEmpty()) return new Clause(Kind.SAME, false, false, contrast);
-        boolean terms = terms(clause);
+        boolean figure = figure(clause);
+        boolean termWords = figure || t.stream().anyMatch(w -> UNIT.contains(w) || PRICE.contains(w));
+        // A bare figure ("4500?") is never a question: it proposes terms.
+        if (t.isEmpty()) return new Clause(figure ? Kind.QUALIFIER : Kind.SAME, figure, false, contrast);
         String joined = String.join(" ", t);
-        if (NOTHING_ELSE.contains(joined)) return new Clause(Kind.SAME, false, false, contrast);
-        if (ReplyGuard.answerOnly(joined)) {
+        if (NOTHING_ELSE.contains(joined) || t.stream().allMatch(w -> COURTESY.contains(w) || COPULA.contains(w))) {
+            return new Clause(Kind.SAME, false, false, contrast);
+        }
+        if (ReplyGuard.answerOnly(joined) && !figure) {
             ReplyGuard.Reading said = ReplyGuard.read(joined);
             boolean opposite = said != ReplyGuard.Reading.UNCLEAR && answer(said) != answer;
-            return new Clause(opposite ? Kind.QUALIFIER : Kind.SAME, terms, false, contrast);
+            return new Clause(opposite ? Kind.QUALIFIER : Kind.SAME, false, false, contrast);
         }
         boolean marked = clause.strip().endsWith("?") || clause.strip().endsWith("？");
         if (t.size() >= 2 && EMPHATIC.contains(t.get(t.size() - 1)) && REQUEST.contains(t.get(t.size() - 2))) {
@@ -231,7 +271,8 @@ public final class CompoundReply {
         }
         String padded = " " + String.join(" ", t) + " ";
         boolean restricted = ReplyGuard.hasNoWord(t) || ReplyGuard.doubtful(clause)
-                || t.stream().anyMatch(w -> RESTRICT.contains(w) || CONDITION.contains(w) || TEMPORAL.contains(w))
+                || t.stream().anyMatch(w -> RESTRICT.contains(w) || CONDITION.contains(w) || TEMPORAL.contains(w)
+                        || TIME.contains(w))
                 || TEMPORAL_PHRASES.stream().anyMatch(padded::contains);
         boolean interrogativeWhen = false;
         for (int i = 0; i < t.size(); i++) {
@@ -241,12 +282,22 @@ public final class CompoundReply {
             if (asks) interrogativeWhen = true;
             else restricted = true; // "when you pay 4500": a condition, not a question
         }
-        if (restricted) return new Clause(Kind.QUALIFIER, terms, false, contrast);
+        boolean interrogative = interrogativeWhen || EN_WH.contains(t.get(0)) || t.stream().anyMatch(INDIC_WH::contains);
+        if (answer == Answer.NONE && (interrogative || marked) && !(figure && !interrogative)) {
+            // No answer to qualify: a question is a request of its own, time words and all ("pehle batao aaj ka bhav
+            // kya hai?"). What would have qualified an answer still marks the turn as no answer.
+            return new Clause(Kind.FOLLOW_UP, false, restricted || t.stream().anyMatch(DEFER::contains), contrast);
+        }
+        if (restricted || figure) return new Clause(Kind.QUALIFIER, termWords, false, contrast);
+        if (IDENTITY.matcher(String.join(" ", t)).matches() || ReplyGuard.asksToConnect(joined)) {
+            return new Clause(Kind.SAME, false, false, contrast); // "main Suresh hoon", "phone laga do"
+        }
         boolean defer = t.stream().anyMatch(DEFER::contains);
-        boolean question = marked || interrogativeWhen || EN_WH.contains(t.get(0)) || t.stream().anyMatch(INDIC_WH::contains);
+        boolean question = interrogative || (marked && !termWords);
         boolean request = t.stream().anyMatch(REQUEST::contains);
-        if (question || request) return new Clause(Kind.FOLLOW_UP, terms, defer, contrast);
-        return new Clause(Kind.STATEMENT, terms, defer, contrast);
+        // Questions and requests only ask: they never state terms ("yes, what is the price?").
+        if (question || request) return new Clause(Kind.FOLLOW_UP, false, defer, contrast);
+        return new Clause(Kind.STATEMENT, termWords, defer, contrast);
     }
 
     /**
@@ -309,6 +360,7 @@ public final class CompoundReply {
         });
         if (laterAnswer) return Parsed.none(text, false); // "who is he? haan connect karo": the model splits it
         // "haan?", "kya?", "kya matlab": nothing to answer but the question itself, which is asked again.
+        if (figure(text) && ReplyGuard.answerOnly(text)) return new Parsed(Answer.NONE, true, true, "", true); // "yes 4500?"
         if (ReplyGuard.answerOnly(text) || ReplyGuard.bareQuestion(text)) return Parsed.none("", true);
         Parsed read = assemble(Answer.NONE, text);
         if (read.hasRemainder()) {
@@ -404,13 +456,14 @@ public final class CompoundReply {
         }
     }
 
-    private static boolean amount(String clause) {
-        return DIGIT.matcher(clause).find() || ReplyGuard.tokens(clause).stream().anyMatch(AMOUNT::contains);
+    /** A figure: digits, or a number word ("do hazaar", "চার হাজার"). */
+    private static boolean figure(String clause) {
+        return DIGIT.matcher(clause).find() || ReplyGuard.tokens(clause).stream().anyMatch(NUMBER::contains);
     }
 
-    /** An amount, a number word, a unit, a price word or a currency: the clause bears on the deal's terms. */
+    /** A figure, a unit, a currency or a price word: words that bear on the deal's terms when stated. */
     private static boolean terms(String clause) {
-        return amount(clause) || ReplyGuard.tokens(clause).stream().anyMatch(PRICE::contains);
+        return figure(clause) || ReplyGuard.tokens(clause).stream().anyMatch(w -> UNIT.contains(w) || PRICE.contains(w));
     }
 
     private static List<int[]> words(String text) {

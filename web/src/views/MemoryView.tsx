@@ -78,9 +78,8 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">{t('memory_title')}</h1>
-          <p className="text-sm text-muted">Browse farmers this browser has seen by name, crop or district. Use a caller key here when you already have one.</p>
+          <p className="text-sm text-muted">Caller memory profile stored across synthetic calls.</p>
         </div>
-        <a href="#/farmers" className="btn-primary">Browse farmer memory</a>
       </header>
 
       {/* Caller Key Input Form */}
@@ -119,7 +118,7 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
       {error && (
         <ErrorNote
           title={t(error === 'unreachable' ? 'backend_unreachable' : 'sample_failed')}
-          onRetry={() => void load(callerKey || activeKey)}
+          onRetry={() => void load(activeKey)}
         >
           {error === 'unreachable' ? t('backend_unreachable_fix') : 'Could not fetch caller memory.'}
         </ErrorNote>

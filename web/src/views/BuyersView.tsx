@@ -6,38 +6,6 @@ import { useI18n } from '../lib/i18n'
 import { BuyersIcon, SearchIcon } from '../ui/icons'
 import { Card, Empty, ErrorNote, Skeleton } from '../ui/parts'
 
-export function BuyerCard({ buyer: b }: { buyer: Buyer }) {
-  return (
-    <Card className="flex flex-col justify-between">
-      <div>
-        <header className="flex items-start justify-between gap-2">
-          <h2 className="text-lg font-bold">{b.name} <span className="badge badge-warn align-middle text-xs">Synthetic</span></h2>
-          {b.district && <span className="chip bg-sunk text-muted">{b.district}</span>}
-        </header>
-        <p className="mt-1 text-sm text-muted">Language: {b.language || 'Hindi / English'}</p>
-        <div className="mt-3">
-          <p className="text-xs font-semibold text-muted">Crops Wanted</p>
-          <div className="mt-1 flex flex-wrap gap-1.5">
-            {b.crops.map((crop) => <span key={crop} className="chip bg-farmer-soft text-farmer">{crop}</span>)}
-          </div>
-        </div>
-      </div>
-      <div className="mt-4 border-t border-line pt-3">
-        <p className="text-xs font-semibold text-muted">Invented price range</p>
-        <p className="text-lg font-bold">
-          {b.priceMin != null && b.priceMax != null
-            ? `${rupees(b.priceMin)} – ${rupees(b.priceMax)} / ${b.unit}`
-            : b.priceMin != null
-              ? `From ${rupees(b.priceMin)} / ${b.unit}`
-              : b.priceMax != null
-                ? `Up to ${rupees(b.priceMax)} / ${b.unit}`
-                : 'On inquiry'}
-        </p>
-      </div>
-    </Card>
-  )
-}
-
 export default function BuyersView() {
   const { t } = useI18n()
   const [buyers, setBuyers] = useState<Buyer[]>([])
@@ -81,9 +49,9 @@ export default function BuyersView() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold md:text-3xl">{t('buyers_title')}</h1>
-          <p className="text-sm text-muted">Every buyer, name and price range here is invented for this demo. These are not real traders or market quotes.</p>
+          <p className="text-sm text-muted">Synthetic buyer directory for mandi traders and aggregators.</p>
         </div>
-        <a href="#/call" className="btn-quiet">
+        <a href="#/simulator" className="btn-quiet">
           <BuyersIcon /> {t('open_simulator')}
         </a>
       </header>
@@ -185,7 +153,46 @@ export default function BuyersView() {
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((b) => <BuyerCard key={b.id} buyer={b} />)}
+          {filtered.map((b) => (
+            <Card key={b.id} className="flex flex-col justify-between">
+              <div>
+                <header className="flex items-start justify-between gap-2">
+                  <h2 className="text-lg font-bold">{b.name}</h2>
+                  {b.district && (
+                    <span className="chip bg-sunk text-muted">{b.district}</span>
+                  )}
+                </header>
+
+                <p className="mt-1 text-sm text-muted">
+                  Language: {b.language || 'Hindi / English'}
+                </p>
+
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-muted">Crops Wanted</p>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {b.crops.map((crop) => (
+                      <span key={crop} className="chip bg-farmer-soft text-farmer">
+                        {crop}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-line pt-3">
+                <p className="text-xs font-semibold text-muted">Indicative Price Range</p>
+                <p className="text-lg font-bold">
+                  {b.priceMin != null && b.priceMax != null
+                    ? `${rupees(b.priceMin)} – ${rupees(b.priceMax)} / ${b.unit}`
+                    : b.priceMin != null
+                      ? `From ${rupees(b.priceMin)} / ${b.unit}`
+                      : b.priceMax != null
+                        ? `Up to ${rupees(b.priceMax)} / ${b.unit}`
+                        : 'On inquiry'}
+                </p>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
     </div>

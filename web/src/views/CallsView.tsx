@@ -109,7 +109,7 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
           {tools.length > 0 && <p>Tools: {tools.map(([tool, n]) => <span key={tool} className="font-mono font-semibold break-all text-ink">{tool} ({n}) </span>)}</p>}
         </div>
       )}
-      <p className="text-xs text-muted">Figures cover stored calls only. A call is stored only when a party says yes to remembering it. Scripted samples do not appear here; no audio recordings are kept.</p>
+      <p className="text-xs text-muted">Figures cover stored calls only. A call is stored only when a party says yes to remembering it.</p>
     </section>
   )
 }
@@ -117,7 +117,7 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
 /** The stored calls table with filters and sort. */
 export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; filter: CallFilter; onFilter: (f: CallFilter) => void }) {
   if (calls.length === 0) {
-    return <Card><Empty title="No calls stored yet" action={<a className="btn-primary" href="#/call">Try a browser call</a>}>A call is stored only when a party says yes to remembering it. Scripted samples and calls where nobody said yes leave nothing behind. No audio recordings are kept.</Empty></Card>
+    return <Card><Empty title="No calls stored yet">A call is stored only when a party says yes to remembering it. Calls where nobody said yes leave nothing behind.</Empty></Card>
   }
   const shown = filterCalls(calls, filter)
   const languages = languagesOf(calls)
@@ -304,10 +304,6 @@ export default function CallsView({ callId }: { callId: string | null }) {
   return (
     <div className="space-y-4">
       {notice && <p role="status" className="rounded-xl bg-ok-soft px-4 py-3 font-semibold text-ok">{notice}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted">Finished calls appear when a consenting side can be kept. This list contains summaries, not recordings.</p>
-        <button type="button" className="btn-quiet btn-sm" onClick={() => setReload((r) => r + 1)}>Refresh stored calls</button>
-      </div>
       {summary ? <KpiStrip summary={summary} /> : <Skeleton className="h-24 w-full" />}
       {calls ? <CallsTable calls={calls} filter={filter} onFilter={setFilter} /> : <Skeleton className="h-64 w-full" />}
     </div>

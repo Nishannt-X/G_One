@@ -107,11 +107,6 @@ export type MessageKey =
   | 'tools_title'
   | 'tools_empty'
   | 'tools_result'
-  | 'sample_play'
-  | 'sample_starting'
-  | 'sample_off'
-  | 'sample_off_fix'
-  | 'sample_unreachable'
   | 'sample_failed'
   | 'backend_unreachable'
   | 'backend_unreachable_fix'
@@ -261,11 +256,6 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     tools_title: 'AI Tools & Lookups',
     tools_empty: 'No tools called yet.',
     tools_result: 'Result',
-    sample_play: 'Run Sample Demo Call',
-    sample_starting: 'Starting demo call…',
-    sample_off: 'Demo Replay Disabled',
-    sample_off_fix: 'Enable demo replay with',
-    sample_unreachable: 'Backend unreachable',
     sample_failed: 'Failed to start demo',
     backend_unreachable: 'Backend Unreachable',
     backend_unreachable_fix: 'Ensure Spring Boot backend is running on port 8080.',
@@ -412,11 +402,6 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     tools_title: 'उपकरण व जांच',
     tools_empty: 'अभी तक कोई उपकरण उपयोग नहीं हुआ।',
     tools_result: 'परिणाम',
-    sample_play: 'नमूना कॉल चलाएं',
-    sample_starting: 'शुरू हो रहा है…',
-    sample_off: 'रीप्ले बंद है',
-    sample_off_fix: 'डेमो रीप्ले चालू करें:',
-    sample_unreachable: 'बैकएंड से संपर्क नहीं',
     sample_failed: 'डेमो शुरू करने में विफल',
     backend_unreachable: 'बैकएंड अनुपलब्ध',
     backend_unreachable_fix: 'जांचें कि पोर्ट 8080 पर बैकएंड चल रहा है।',

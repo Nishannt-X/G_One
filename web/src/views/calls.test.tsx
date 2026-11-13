@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { callCode, filterCalls, keyPoints, languagesOf, NO_FILTER, tabOf, toCallView, type CallRecordView, type CallSummary } from '../lib/analytics'
+import { rupees } from '../lib/format'
 import { CallDetail, CallsTable, KpiStrip } from './CallsView'
 
 // Synthetic records only.
@@ -221,6 +222,23 @@ describe('a stored call in the list', () => {
     expect(html).toContain('Information only')
     expect(html).toContain('1:00')
     expect(html).toContain('Hindi ⇄ Tamil')
+  })
+})
+
+describe('deal price text', () => {
+  it('keeps the approved per-unit wording in the list and the key points', () => {
+    const list = renderToStaticMarkup(<CallsTable calls={[summary('call-x')]} filter={NO_FILTER} onFilter={() => {}} />)
+    expect(list).toContain(`onion · 10 quintal · ${rupees(2100)}/quintal · Lasalgaon`)
+    const outcome = keyPoints(record()).find((p) => p.id === 'outcome')!
+    expect(outcome.text).toBe(`Deal agreed: onion, 10 quintal, at ${rupees(2100)} per quintal (about ${rupees(21000)} in all).`)
+  })
+
+  it('shows a total as a total and never multiplies it', () => {
+    const totalDeal = { ...summary('t').deal!, quantity: '10 kg', price: 2000, unit: 'total' }
+    const list = renderToStaticMarkup(<CallsTable calls={[summary('call-t', { deal: totalDeal })]} filter={NO_FILTER} onFilter={() => {}} />)
+    expect(list).toContain(`onion · 10 kg · ${rupees(2000)} total · Lasalgaon`)
+    const outcome = keyPoints(record({ deal: totalDeal })).find((p) => p.id === 'outcome')!
+    expect(outcome.text).toBe(`Deal agreed: onion, 10 kg, at ${rupees(2000)} total.`)
   })
 })
 

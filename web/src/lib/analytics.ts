@@ -279,7 +279,7 @@ function cropOf(deal: StoredDeal): string | null {
 }
 
 function termsLine(deal: StoredDeal): string {
-  const price = deal.price !== null ? dealPrice(deal.price, deal.unit) : null
+  const price = deal.price !== null ? dealPrice(deal.price, deal.unit, ' per ') : null
   const value = dealValue(deal.quantity, deal.price, deal.unit)
   const parts = [cropOf(deal), deal.quantity, price ? `at ${price}` : null].filter(Boolean).join(', ')
   return value !== null && deal.unit !== 'total' ? `${parts} (about ${rupees(Math.round(value))} in all)` : parts

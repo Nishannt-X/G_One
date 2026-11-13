@@ -47,7 +47,7 @@ function pairLabel(languages: CallSummary['languages']): string {
 function dealLine(deal: CallSummary['deal']): string {
   if (!deal) return ''
   const crop = [deal.variety, deal.commodity].filter(Boolean).join(' ')
-  const parts = [crop, deal.quantity, deal.price !== null ? dealPrice(deal.price, deal.unit) : null, deal.market]
+  const parts = [crop, deal.quantity, deal.price !== null ? dealPrice(deal.price, deal.unit, '/') : null, deal.market]
   return parts.filter(Boolean).join(' · ')
 }
 

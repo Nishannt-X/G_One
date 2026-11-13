@@ -48,9 +48,12 @@ export function rupees(amount: number): string {
   return RUPEES.format(amount)
 }
 
-/** A deal price with its explicit basis. */
-export function dealPrice(amount: number, unit: string | null): string {
-  return `${rupees(amount)}${unit === 'total' ? ' total' : unit ? ` / ${unit}` : ''}`
+/**
+ * A deal price with its explicit basis. A per-unit price keeps the wording each screen already used, joined by
+ * {@code separator} (" / ", " per " or "/"); only a total reads differently, as "₹2,000 total".
+ */
+export function dealPrice(amount: number, unit: string | null, separator = ' / '): string {
+  return `${rupees(amount)}${unit === 'total' ? ' total' : unit ? `${separator}${unit}` : ''}`
 }
 
 const DATES = {

@@ -2,25 +2,56 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { parseRoute } from '../lib/route'
 import LandingPage from '../views/LandingPage'
-import Shell from './Shell'
+import Shell, { MobileMenu } from './Shell'
 
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])
 const texts = (html: string) => html.replace(/<[^>]+>/g, '\n').split('\n').map((t) => t.trim()).filter(Boolean)
 
-describe('Shell navigation', () => {
-  const html = renderToStaticMarkup(<Shell route={parseRoute('#/farmers')}><p>page</p></Shell>)
+const PAGES = ['Demo', 'Try a call', 'Farmers', 'Analytics', 'Buyer directory', 'Memory lookup']
+const shell = (hash: string) => renderToStaticMarkup(<Shell route={parseRoute(hash)}><p>page</p></Shell>)
+const navBlock = (html: string, label: string) => {
+  const start = html.search(new RegExp(`<nav[^>]* aria-label="${label}"`))
+  expect(start).toBeGreaterThanOrEqual(0)
+  return html.slice(start, html.indexOf('</nav>', start) + 6)
+}
 
-  it('shows Demo, Try a call and Farmers, then the Advanced menu, and no How it works item', () => {
-    const nav = html.slice(html.indexOf('<nav aria-label="Main"'), html.indexOf('</nav>') + 6)
-    expect(texts(nav).slice(0, 4)).toEqual(['Demo', 'Try a call', 'Farmers', 'Advanced'])
+describe('Shell navigation', () => {
+  const html = shell('#/farmers')
+
+  it('shows all six pages in the top bar, in order, and no How it works item', () => {
+    expect(texts(navBlock(html, 'Main'))).toEqual(PAGES)
+    expect(hrefs(navBlock(html, 'Main'))).toEqual(['#/demo', '#/call', '#/farmers', '#/analytics', '#/buyers', '#/memory'])
     expect(html).not.toContain('How it works')
     expect(hrefs(html)).not.toContain('#/how')
   })
 
-  it('marks the current page', () => {
+  it('has no Advanced menu, heading or note anywhere', () => {
+    expect(html).not.toMatch(/advanced/i)
+    expect(html).not.toContain('aria-haspopup')
+  })
+
+  it('lists the same six pages, in order, in the mobile menu, with no Advanced heading', () => {
+    const menu = renderToStaticMarkup(<MobileMenu route={parseRoute('#/buyers')} onClose={() => {}} />)
+    expect(texts(navBlock(menu, 'Mobile'))).toEqual([...PAGES, 'Try the demo'])
+    expect(menu).not.toMatch(/advanced/i)
+    expect(menu).toContain('href="#/buyers" aria-current="page"')
+  })
+
+  it('marks the current page, including the pages that used to sit under a menu', () => {
     expect(html).toContain('href="#/farmers" aria-current="page"')
-    const call = renderToStaticMarkup(<Shell route={parseRoute('#/call')}><p>page</p></Shell>)
-    expect(call).toContain('href="#/call" aria-current="page"')
+    expect(shell('#/call')).toContain('href="#/call" aria-current="page"')
+    for (const view of ['analytics', 'buyers', 'memory']) {
+      const page = shell(`#/${view}`)
+      expect(navBlock(page, 'Main')).toContain(`href="#/${view}" aria-current="page"`)
+      expect(page.match(/aria-current="page"/g)).toHaveLength(1)
+    }
+  })
+
+  it('keeps the Try the demo button, the theme button, and the language button on the translated pages', () => {
+    expect(html).toContain('Try the demo')
+    expect(html).toMatch(/Switch to (dark|light) theme/)
+    expect(html).not.toContain('Switch console language')
+    for (const view of ['analytics', 'buyers', 'memory', 'simulator']) expect(shell(`#/${view}`)).toContain('Switch console language')
   })
 })
 

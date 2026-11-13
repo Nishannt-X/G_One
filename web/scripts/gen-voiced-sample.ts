@@ -329,8 +329,8 @@ const RAW = process.env.TTS_CACHE_DIR ?? join(tmpdir(), 'g-one-voiced-sample-raw
 const MAX_CALLS = Number(process.env.MAX_TTS_CALLS ?? 40)
 /** Writes the manifest to this path without touching Timbre or the audio folder, so the text can be checked first. */
 const DRY_OUT = process.env.DRY_OUT
-const CLIP_GAP_MS = 340
-const BEAT_GAP_MS = 480
+const CLIP_GAP_MS = 220
+const BEAT_GAP_MS = 320
 const PAN = { farmer: -0.75, buyer: 0.75, whisper: -1 }
 
 let calls = 0

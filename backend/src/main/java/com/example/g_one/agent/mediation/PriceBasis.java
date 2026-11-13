@@ -18,8 +18,22 @@ import java.util.regex.Pattern;
  * the caller holds it and asks. All matching runs on text whose numbers {@link NumberGuard} wrote as digits.
  */
 final class PriceBasis {
-    /** The currency the words name: rupees, another currency, or none at all. */
-    enum Currency { RUPEE, FOREIGN, NONE }
+    /**
+     * The currency the words name. The policy, for a product whose callers are in India:
+     * <ul>
+     *   <li>FOREIGN: another currency is named anywhere (words in six languages, any currency symbol but ₹, or a rupee
+     *       of another country such as "Pakistani rupees"), or a weak word (won, rand) sits beside the price. Never a
+     *       rupee offer.</li>
+     *   <li>UNRESOLVED: currency-like text that is not clearly rupees: Latin "taka", "tk", "BDT", "Bangladeshi", a word
+     *       the code does not know right after the price ("2000 zorkmids"), or a three-letter code before it. A rupee
+     *       offer then needs an explicit yes or "rupees"; a bare basis such as "per kg" does not settle it.</li>
+     *   <li>RUPEE: a rupee word or ₹, and Bengali-script টাকা, which Bengali speakers in India say for rupees. Only when
+     *       nothing FOREIGN or UNRESOLVED contradicts it.</li>
+     *   <li>NONE: no currency text at all. The amount is held and the question names rupees, so a plain answer settles
+     *       it.</li>
+     * </ul>
+     */
+    enum Currency { RUPEE, FOREIGN, UNRESOLVED, NONE }
 
     /** A short reply to the basis or currency question. {@code basis} is null when the reply named none. */
     record Answer(String basis, boolean affirmed) {}
@@ -45,14 +59,33 @@ final class PriceBasis {
     /** Tamil and Kannada say "for a kilo" with a case ending on the unit word itself. */
     private static final String DATIVE = "(?:கிலோவுக்கு|கிலோக்கு|குவிண்டாலுக்கு|டன்னுக்கு|ಕಿಲೋಗೆ|ಕೆಜಿಗೆ|ಕ್ವಿಂಟಲ್‌?ಗೆ"
             + "|ಕ್ವಿಂಟಾಲ್‌?ಗೆ|ಟನ್‌?ಗೆ|ಟನ್ನಿಗೆ)";
-    private static final String RUPEE_LATIN = "(?:rupees?|rupaiya|rupaiye|rupaye|rupaya|rupay|rupya|rupiya|rupiye|rs|inr|taka)";
+    private static final String RUPEE_LATIN = "(?:rupees?|rupaiya|rupaiye|rupaye|rupaya|rupay|rupya|rupiya|rupiye|rs|inr)";
     private static final String RUPEE_STEM = "(?:रुपये|रुपए|रुपया|रुपैया|रुपइया|रुपयों|টাকা|ரூபாய|ರೂಪಾಯ)";
     private static final String MONEY = "(?:₹|" + B + RUPEE_LATIN + "\\.?" + E + "|" + B + RUPEE_STEM + "[\\p{L}\\p{M}]*|" + B
             + "(?:रु|ரூ|ರೂ)\\.?" + E + ")";
     private static final Pattern MONEY_RE = Pattern.compile("(?iu)" + MONEY);
-    private static final Pattern FOREIGN_RE = Pattern.compile("(?iu)(?:[$€£¥]|" + B + "(?:dollars?|dolar|usd|euros?|eur|pounds?"
-            + "|gbp|yen|jpy|dirhams?|aed|riyals?|dinars?|yuan|rmb|cents?|bucks?)" + E + "|" + B + "(?:डॉलर|डालर|यूरो|पाउंड|पौंड"
-            + "|दिरहम|रियाल|ডলার|ইউরো|পাউন্ড|দিরহাম|டாலர|யூரோ|பவுண்ட|திர்ஹாம|ಡಾಲರ|ಯೂರೋ|ಪೌಂಡ|ದಿರ್ಹಾಮ)[\\p{L}\\p{M}]*)");
+    private static final Pattern FOREIGN_RE = Pattern.compile("(?iu)(?:[\\p{Sc}&&[^₹]]|" + B + "(?:dollars?|dolar|usd|euros?|eur"
+            + "|cents?|bucks?|pesos?|yen|jpy|yuan|renminbi|rmb|cny|dirhams?|dhs|aed|riyals?|rials?|ringgits?|myr|baht|thb"
+            + "|rubles?|roubles?|liras?|lire|kroner|krone|krona|kronor|nok|sek|dkk|shekels?|ils|dinars?|francs?|chf|rupiah"
+            + "|idr|pounds?|sterling|quid|gbp|sgd|aud|cad|nzd|hkd|zar|krw|pkr|npr|lkr|pakistani|nepali|nepalese"
+            + "|sri\\s*lankan|lankan|mauritian)" + E + "|" + B + "(?:डॉलर|डालर|यूरो|पाउंड|पौंड|दिरहम|रियाल|पेसो|युआन|रूबल"
+            + "|ডলার|ইউরো|পাউন্ড|দিরহাম|পেসো|டாலர|யூரோ|பவுண்ட|திர்ஹாம|ಡಾಲರ|ಯೂರೋ|ಪೌಂಡ|ದಿರ್ಹಾಮ)[\\p{L}\\p{M}]*)");
+    /** Currency text that may not mean Indian rupees: the Latin spellings of Bangladesh's taka. */
+    /** A rupee word, or currency text that may not be rupees: either one may sit between an amount and its basis. */
+    private static final String CURRENCY_WORD = "(?:" + MONEY + "|" + B + "(?:takas?|tk|bdt)" + E + ")";
+    private static final Pattern UNRESOLVED_RE = Pattern.compile("(?iu)" + B + "(?:takas?|tk|bdt|bangladeshi|bangladesh)" + E);
+    /** Short words that name a currency only when they sit right beside the price. */
+    private static final Set<String> WEAK_FOREIGN = Set.of("won", "rand", "rands");
+    /** Latin words that may follow a price without naming a currency. Anything else there leaves the currency unresolved. */
+    private static final Set<String> AFTER_PRICE = Set.of(("rupee rupees rupaiya rupaiye rupaye rupaya rupay rupya rupiya rupiye "
+            + "rs inr per a an each total only for at to and or the is it its of in on from with plus more less max maximum "
+            + "minimum min final fixed flat last best ok okay then now today tomorrow cash advance deal offer rate price bhav "
+            + "bhaav daam dam sir ji bhai bhaiya hai hain ho h tak se ka ke ki me mein mai par pe de du dunga dungi doonga "
+            + "denge dega degi dedo dena deta dete lunga lenge loonga lo le chalega chahiye milega hoga tha thi karo kar "
+            + "kardo wala wale hi bhi sirf bas sab poora pura lakh lakhs lac hazaar hazar hajar thousand hundred crore crores "
+            + "k l cr will would can could i we you my our your this that please am pm kg kgs kilo kilos kilogram kilograms "
+            + "quintal quintals qtl qtls ton tons tonne tonnes bag bags bori boris piece pieces dozen dozens rice onion onions "
+            + "wheat potato potatoes tomato tomatoes chawal pyaaz pyaz gehun aloo tamatar maal crop").split(" "));
     private static final Pattern CONDITIONAL = Pattern.compile("(?iu)(?<![\\p{L}])(?:if|unless|only|except|not|no|agar|sirf|nahi|nahin|mat|अगर|यदि|सिर्फ|नहीं|मत|যদি|শুধু|না|என்றால்|மட்டும்|ಇದ್ದರೆ|ಮಾತ್ರ)(?![\\p{L}])");
 
     private static final Pattern TOTAL_RE = Pattern.compile("(?iu)" + TOTAL);
@@ -76,10 +109,40 @@ final class PriceBasis {
 
     private PriceBasis() {}
 
+    /** The currency the words name anywhere, without looking at which number is the price. */
     static Currency currency(String text) {
+        return currency(text, null, null);
+    }
+
+    /** The currency the words name, also reading the words right beside {@code price} (see {@link Currency}). */
+    static Currency currency(String text, String code, BigDecimal price) {
         if (text == null) return Currency.NONE;
         if (FOREIGN_RE.matcher(text).find()) return Currency.FOREIGN;
+        Currency beside = price == null ? Currency.NONE : besidePrice(NumberGuard.digitized(text, code), plain(price));
+        if (beside == Currency.FOREIGN) return Currency.FOREIGN;
+        if (beside == Currency.UNRESOLVED || UNRESOLVED_RE.matcher(text).find()) return Currency.UNRESOLVED;
         return MONEY_RE.matcher(text).find() ? Currency.RUPEE : Currency.NONE;
+    }
+
+    private static final Pattern WORD_AFTER = Pattern.compile("^\\s*([A-Za-z]+)");
+    private static final Pattern WORD_BEFORE = Pattern.compile("([A-Za-z]+)\\s*$");
+
+    private static Currency besidePrice(String d, String price) {
+        Matcher m = Pattern.compile("(?<![\\d.])" + Pattern.quote(price) + "(?![\\d.])").matcher(d);
+        Currency out = Currency.NONE;
+        while (m.find()) {
+            Matcher after = WORD_AFTER.matcher(d.substring(m.end()));
+            Matcher before = WORD_BEFORE.matcher(d.substring(0, m.start()));
+            String next = after.find() ? after.group(1) : null;
+            String prev = before.find() ? before.group(1) : null;
+            if ((next != null && WEAK_FOREIGN.contains(next.toLowerCase(Locale.ROOT)))
+                    || (prev != null && WEAK_FOREIGN.contains(prev.toLowerCase(Locale.ROOT)))) {
+                return Currency.FOREIGN;
+            }
+            if (next != null && !AFTER_PRICE.contains(next.toLowerCase(Locale.ROOT))) out = Currency.UNRESOLVED;
+            if (prev != null && prev.matches("[A-Z]{3}") && !prev.equals("INR")) out = Currency.UNRESOLVED;
+        }
+        return out;
     }
 
     static boolean conditional(String text) {
@@ -114,7 +177,9 @@ final class PriceBasis {
      */
     static boolean faithful(String source, String fromCode, String translation, String toCode, BigDecimal price, String basis) {
         if (translation == null) return true;
-        if (currency(translation) == Currency.FOREIGN) return false;
+        if (currency(translation, toCode, price) != Currency.NONE && currency(translation, toCode, price) != Currency.RUPEE) {
+            return false;
+        }
         if (!NumberGuard.check(source, fromCode, translation, toCode).ok()) return false;
         Map<String, Set<String>> from = bindings(source, fromCode);
         String p = plain(price);
@@ -162,6 +227,13 @@ final class PriceBasis {
         return new Answer(basis, rupees || yes);
     }
 
+    /** Whether the words state a price: a number tied to rupees, a rate, a total or a lot. */
+    static boolean priceStatement(String text, String code) {
+        if (text == null) return false;
+        return bindings(text, code).values().stream().flatMap(Set::stream)
+                .anyMatch(b -> b.equals("money") || b.equals("total") || b.startsWith("rate:") || b.startsWith("lot:"));
+    }
+
     /** Every number in the text and what its neighbours make it: money, a rate, a total, a lot, a quantity, or none. */
     private static Map<String, Set<String>> bindings(String text, String code) {
         String d = NumberGuard.digitized(text, code);
@@ -182,7 +254,7 @@ final class PriceBasis {
         String before = d.substring(0, start);
         if (startsWith(after, "\\s*" + FOREIGN_RE.pattern()) || endsWith(before, FOREIGN_RE.pattern() + "\\s*")) return "foreign";
         for (Expr x : exprs) {
-            if (x.start() >= end && d.substring(end, x.start()).matches("(?iu)\\s*(?:" + MONEY + ")?\\s*(?:[,-]\\s*)?")) {
+            if (x.start() >= end && d.substring(end, x.start()).matches("(?iu)\\s*(?:" + CURRENCY_WORD + ")?\\s*(?:[,-]\\s*)?")) {
                 return bindingOf(x.basis());
             }
             if (x.end() <= start && x.lotStart() < 0

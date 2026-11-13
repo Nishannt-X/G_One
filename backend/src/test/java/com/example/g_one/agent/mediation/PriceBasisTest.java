@@ -95,4 +95,31 @@ class PriceBasisTest {
         assertThat(PriceBasis.faithful("2000 rupees total", "en-IN", "दो हज़ार रुपये प्रति किलो", "hi-IN", TWO_THOUSAND, "total"))
                 .isFalse();
     }
+
+    @Test
+    void currencyTextThatIsNotClearlyRupeesIsNeverTakenAsRupees() {
+        BigDecimal p = TWO_THOUSAND;
+        for (String foreign : new String[] {"I offer 2000 pesos", "2000 ringgit per kg", "2000 baht", "2000 francs", "2000 kroner",
+                "2000 shekels", "2000 yen", "2000 yuan", "2000 dirhams", "2000 riyals", "2000 rubles", "2000 lira",
+                "2000 Pakistani rupees", "2000 won per kg", "₱2000 per kg", "฿2000", "2000 pounds"}) {
+            assertThat(PriceBasis.currency(foreign, "en-IN", p)).as(foreign).isEqualTo(PriceBasis.Currency.FOREIGN);
+        }
+        for (String unresolved : new String[] {"I offer 2000 zorkmids", "2000 taka per kg", "2000 BDT", "2000 tk",
+                "প্রতি কেজি ২০০০ টাকা, Bangladeshi", "PHP 2000 per kg"}) {
+            assertThat(PriceBasis.currency(unresolved, "en-IN", p)).as(unresolved).isEqualTo(PriceBasis.Currency.UNRESOLVED);
+        }
+        assertThat(PriceBasis.currency("প্রতি কেজি ২০০০ টাকা", "bn-IN", p)).isEqualTo(PriceBasis.Currency.RUPEE);
+        assertThat(PriceBasis.currency("We won the lot, I will pay 2000 rupees per kg", "en-IN", p)).isEqualTo(PriceBasis.Currency.RUPEE);
+        for (String none : new String[] {"main 2000 dunga", "I will pay 2000 per kg", "2000 final", "2000 for all of it"}) {
+            assertThat(PriceBasis.currency(none, "hi-IN", p)).as(none).isEqualTo(PriceBasis.Currency.NONE);
+        }
+    }
+
+    @Test
+    void anUnresolvedCurrencyWordMayStillSitBetweenTheAmountAndItsBasis() {
+        assertThat(PriceBasis.evidence("I will pay 2000 taka per kg", "en-IN", TWO_THOUSAND)).isEqualTo("kg");
+        assertThat(PriceBasis.priceStatement("मुझे पच्चीस सौ रुपये प्रति किलो चाहिए", "hi-IN")).isTrue();
+        assertThat(PriceBasis.priceStatement("acha, theek hai", "hi-IN")).isFalse();
+        assertThat(PriceBasis.priceStatement("mere paas 10 quintal hai", "hi-IN")).isFalse();
+    }
 }

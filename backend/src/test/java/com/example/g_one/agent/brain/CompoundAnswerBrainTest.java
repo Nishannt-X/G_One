@@ -122,6 +122,16 @@ class CompoundAnswerBrainTest {
         assertThat(systemPrompt(0)).doesNotContain(LlmAgentBrain.CONNECT_YES_AND_MORE);
     }
 
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"yes tomorrow", "yes on delivery", "haan kal", "ಹೌದು ನಾಳೆ"})
+    void aQualifiedYesIsNeverRecordedAsConsentToConnect(String turn) {
+        f.llm.replyText("ठीक है।");
+        f.brain.respond(ctx, asked(), said(ctx, turn));
+        assertThat(f.consent.allowed(ctx.callId(), "mehta-agro")).as(turn).isFalse();
+        f.consent.heard(ctx.callId(), turn);
+        assertThat(f.consent.allowed(ctx.callId(), "mehta-agro")).as(turn + " (consent's own reading)").isFalse();
+    }
+
     @Test
     void anIdentityQuestionAfterTheYesStillConnects() {
         f.llm.replyToolCall("connect_buyer", "{\"buyerId\":\"mehta-agro\"}");

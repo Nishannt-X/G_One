@@ -150,4 +150,13 @@ class YesNoReaderTest {
         assertThat(new YesNoReader(null).readCompound(SAVE_Q, "aap yaad rakhiyega bhai").answer())
                 .isEqualTo(CompoundReply.Answer.NONE);
     }
+
+    @Test
+    void theOneWordReaderFollowsTheParserNotTheBareLexicon() {
+        for (String turn : List.of("yes tomorrow", "yes on delivery", "haan kal", "ಹೌದು ನಾಳೆ")) {
+            assertThat(reader.read(SAVE_Q, turn)).as(turn).isEqualTo(Reading.UNCLEAR);
+        }
+        assertThat(reader.read(SAVE_Q, "sure thing")).isEqualTo(Reading.YES);
+        assertThat(llm.requests()).isEmpty();
+    }
 }

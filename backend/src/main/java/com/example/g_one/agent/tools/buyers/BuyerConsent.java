@@ -1,7 +1,6 @@
 package com.example.g_one.agent.tools.buyers;
 
 import com.example.g_one.agent.deal.CompoundReply;
-import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.core.CallId;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +31,7 @@ public class BuyerConsent {
 
     /** The farmer finished a turn. The brain calls this before the model runs. */
     public void heard(CallId callId, String farmerTurn) {
-        heard(callId, farmerTurn, ReplyGuard.isConsent(farmerTurn)
-                || CompoundReply.parse(farmerTurn).answer() == CompoundReply.Answer.YES);
+        heard(callId, farmerTurn, CompoundReply.consents(farmerTurn));
     }
 
     /**
@@ -45,15 +43,8 @@ public class BuyerConsent {
         Call c = call(callId);
         synchronized (c) {
             c.turn++;
-            c.yes = yes && (CompoundReply.permitsYes(farmerTurn) || connectFirst(farmerTurn));
+            c.yes = yes && (CompoundReply.permitsYes(farmerTurn) || CompoundReply.consents(farmerTurn));
         }
-    }
-
-    /** "phone laga do, unka naam kya hai?": a plain request to connect, then a question, with no condition. */
-    private static boolean connectFirst(String farmerTurn) {
-        if (CompoundReply.parse(farmerTurn).conditional()) return false;
-        List<String> clauses = CompoundReply.clauses(farmerTurn);
-        return clauses.size() > 1 && ReplyGuard.isConsent(clauses.get(0));
     }
 
     /** These buyers were just suggested to the farmer, for this crop, quantity and district. */

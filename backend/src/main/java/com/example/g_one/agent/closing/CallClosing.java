@@ -156,9 +156,9 @@ public final class CallClosing {
         return new Step(asks, false, null);
     }
 
-    /** A turn of {@code role} while {@link #active}, read by words alone ({@link ReplyGuard}). */
+    /** A turn of {@code role} while {@link #active}, read by words alone (the compound parse). */
     public synchronized Step heard(LegRole role, String text) {
-        return heard(role, ReplyGuard.read(text));
+        return heard(role, com.example.g_one.agent.deal.CompoundReply.parse(text).reading());
     }
 
     /**

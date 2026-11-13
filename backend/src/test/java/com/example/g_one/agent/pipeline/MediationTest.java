@@ -1010,6 +1010,19 @@ class MediationTest {
                 && d.price().compareTo(new java.math.BigDecimal("3900")) == 0);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"yes tomorrow", "haan kal", "yes on delivery", "ಹೌದು ನಾಳೆ"})
+    void aQualifiedYesNeverAcceptsAnOfferIntoAReadBack(String said) {
+        buyerJoinsAndAgrees();
+        buyerOffers(4000);
+        llm.replyText(reading("Yes", NO_OFFER, NO_CAUTION, "yes")); // a model that reads it as a yes is not believed
+        session(LegRole.FARMER).say(said);
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).as(said)
+                .noneMatch(d -> d.state() == DealState.READBACK || d.state() == DealState.CONFIRMING);
+    }
+
     @Test
     void aConditionalYesIsUnclearAndNeverConfirms() {
         toConfirming();

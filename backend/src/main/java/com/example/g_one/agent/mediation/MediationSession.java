@@ -460,6 +460,11 @@ public final class MediationSession {
         // "no", and "yes, and G-One what..." is not a "yes".
         ReplyGuard.Reading quick = !named && turn.text().strip().split("[\\s,.!?।]+").length <= SHORT_REPLY_WORDS
                 ? ReplyGuard.read(turn.text()) : ReplyGuard.Reading.UNCLEAR;
+        // The lexicon's short yes or no counts only when the compound parse agrees: "yes tomorrow" is no answer.
+        CompoundReply.Parsed words = CompoundReply.parse(turn.text());
+        if (quick != ReplyGuard.Reading.UNCLEAR && (words.conditional() || words.reading() != quick)) {
+            quick = ReplyGuard.Reading.UNCLEAR;
+        }
         if (closingTurn(turn, heardAt, named)) return;
         LegRole listener = speaker.other();
         Language to = language(listener);
@@ -794,7 +799,7 @@ public final class MediationSession {
         if (!awaited) return DealDesk.Heard.NONE;
         if (quick == ReplyGuard.Reading.YES) return DealDesk.Heard.YES;
         if (quick == ReplyGuard.Reading.NO) return DealDesk.Heard.NO;
-        if (model == DealDesk.Heard.YES) return ReplyGuard.permitsYes(text) ? DealDesk.Heard.YES : DealDesk.Heard.UNCLEAR;
+        if (model == DealDesk.Heard.YES) return CompoundReply.permitsYes(text) ? DealDesk.Heard.YES : DealDesk.Heard.UNCLEAR;
         return model;
     }
 

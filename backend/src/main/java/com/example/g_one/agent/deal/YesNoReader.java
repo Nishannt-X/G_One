@@ -71,10 +71,11 @@ public final class YesNoReader {
      * @param reply what they said
      */
     public Reading read(String question, String reply) {
-        ReplyGuard.Verdict v = ReplyGuard.verdict(reply);
-        if (v.reading() != Reading.UNCLEAR || v.vetoed() || !worthAsking(reply)) return v.reading();
+        // The compound parse decides first: a lexicon yes beside a qualification ("yes tomorrow") is no answer.
+        CompoundReply.Parsed words = CompoundReply.parse(reply);
+        if (words.decided() || !worthAsking(reply)) return words.reading();
         Reading model = ask(question, reply);
-        if (model == Reading.YES && !ReplyGuard.permitsYes(reply)) return Reading.UNCLEAR;
+        if (model == Reading.YES && !CompoundReply.permitsYes(reply)) return Reading.UNCLEAR;
         log.info("yes_no_model reading={}", model);
         return model;
     }

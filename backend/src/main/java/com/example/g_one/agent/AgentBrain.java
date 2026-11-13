@@ -52,12 +52,12 @@ public interface AgentBrain {
     /**
      * Reads the farmer's answer to a yes or no question G-One asked outside the conversation (the end-of-call questions).
      * Blocks for at most a few seconds, so call it off the audio thread. Never throws; unclear when unsure. The default
-     * reads words only ({@link ReplyGuard}).
+     * reads words only ({@link CompoundReply}).
      *
      * @param question the question as the farmer heard it
      */
     default ReplyGuard.Reading readYesNo(CallId callId, String question, String reply) {
-        return ReplyGuard.read(reply);
+        return CompoundReply.parse(reply).reading();
     }
 
     /**

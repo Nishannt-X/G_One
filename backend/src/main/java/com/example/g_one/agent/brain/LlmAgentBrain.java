@@ -290,15 +290,15 @@ public class LlmAgentBrain implements AgentBrain {
         boolean pending = suggested && CALL_QUESTION.matcher(asked).find();
         // "haan, but unka naam kya hai?": the yes counts, and the question is still answered by the model below.
         CompoundReply.Parsed parsed = CompoundReply.parse(text);
-        boolean plain = ReplyGuard.isConsent(text);
-        boolean yes = plain || parsed.answer() == CompoundReply.Answer.YES || leadConsent(text, parsed);
+        // The parse decides: a lexicon yes beside a qualification ("yes tomorrow", "haan kal") is never consent.
+        boolean yes = CompoundReply.consents(text);
         if (!yes && pending && !parsed.decided() && !aboutBusiness(latest)) {
             // Only an answer to "shall I call them?" is worth the small model call, never a new request.
             yes = yesNo.read(asked, text) == ReplyGuard.Reading.YES;
         }
         consent.heard(ctx.callId(), text, yes);
         if (!pending) return;
-        if (yes && !plain) {
+        if (yes && parsed.hasRemainder()) {
             memo.compoundYes = true;
             memo.turnNote = CONNECT_YES_AND_MORE;
         } else if (!yes && parsed.answer() == CompoundReply.Answer.NONE && parsed.hasRemainder() && !memo.connectReasked) {
@@ -306,13 +306,6 @@ public class LlmAgentBrain implements AgentBrain {
             memo.connectReasked = true;
             memo.turnNote = CONNECT_STILL_OPEN;
         }
-    }
-
-    /** "phone laga do, unka naam kya hai?": a request to connect in the first clause, with no condition anywhere. */
-    private static boolean leadConsent(String text, CompoundReply.Parsed parsed) {
-        if (parsed.conditional()) return false;
-        List<String> clauses = CompoundReply.clauses(text);
-        return clauses.size() > 1 && ReplyGuard.isConsent(clauses.get(0));
     }
 
     /** What the assistant said last on this call, or empty. */

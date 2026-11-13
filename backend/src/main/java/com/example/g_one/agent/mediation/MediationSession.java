@@ -336,8 +336,7 @@ public final class MediationSession {
         long heardAt = clock.millis();
         enqueue(() -> {
             if (askingBuyer()) {
-                recordHeard(current, heardAt);
-                buyerAnswered(current);
+                buyerAnswered(current, heardAt);
             } else if (live()) {
                 process(current, n, heardAt);
             } else {
@@ -370,8 +369,24 @@ public final class MediationSession {
         }
     }
 
-    private void buyerAnswered(Turn turn) {
-        ReplyGuard.Reading reading = ReplyGuard.read(turn.text());
+    /**
+     * The buyer's answer to "may I connect you to the farmer?". A yes with a question ("haan, kitna maal hai?") joins the
+     * buyer and the question is answered privately; a question instead of an answer is answered, then asked once more
+     * (the one re-ask), after which no answer declines as before. Only the answer reaches the shared record.
+     */
+    private void buyerAnswered(Turn turn, long heardAt) {
+        CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+        Turn question = null;
+        if (parsed.hasRemainder() && (parsed.answer() == CompoundReply.Answer.NONE
+                || CompoundReply.followUp(parsed.remainder()))) {
+            String answer = parsed.answer() == CompoundReply.Answer.NONE ? ""
+                    : CompoundReply.answerOf(turn.text(), parsed.remainder());
+            if (!answer.isBlank()) recordHeard(withText(turn, answer), heardAt);
+            question = withText(turn, parsed.remainder());
+        } else {
+            recordHeard(turn, heardAt);
+        }
+        ReplyGuard.Reading reading = parsed.reading();
         String buyerCode = buyer.language().code();
         if (reading == ReplyGuard.Reading.YES) {
             Language farmerCode = language(LegRole.FARMER);
@@ -394,9 +409,13 @@ public final class MediationSession {
             bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), farmer.farmerLeg().id(),
                     LegRole.FARMER, farmerCode.code(), joined));
             side.note(Speaker.ASSISTANT, joined);
-            if (live()) sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
+            if (live()) {
+                sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
+                if (question != null) aside(question, "compound");
+            }
             return;
         }
+        if (question != null) aside(question, "compound");
         boolean retry;
         synchronized (lock) {
             if (phase != Phase.ASKING || buyerLegEnded) return;

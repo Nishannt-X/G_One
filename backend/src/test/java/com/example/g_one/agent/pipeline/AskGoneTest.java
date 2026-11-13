@@ -164,9 +164,249 @@ class AskGoneTest {
 
     private void buyerOffers(int price) {
         llm.replyText(reading("चार हज़ार रुपये प्रति क्विंटल", clearOffer(price), "none", false));
-        session(LegRole.BUYER).say("I can pay " + price + " per quintal");
+        session(LegRole.BUYER).say("I can pay " + price + " rupees per quintal");
         executor.runAll();
         finishAll();
+    }
+
+    // ---- price basis and currency: the code, not the model, decides what a spoken amount means ----
+
+    private void buyerSays(String text, String translation, String offerJson) {
+        llm.replyText(reading(translation, offerJson, "none", false));
+        session(LegRole.BUYER).say(text);
+        executor.runAll();
+        finishAll();
+    }
+
+    private void buyerAnswers(String text) {
+        session(LegRole.BUYER).say(text);
+        executor.runAll();
+        finishAll();
+    }
+
+    private void farmerAgrees() {
+        llm.replyText(reading("Yes, agreed", NO_OFFER, "yes", false));
+        session(LegRole.FARMER).say("haan theek hai");
+        executor.runAll();
+        finishAll();
+    }
+
+    private static String kgOffer(int price) {
+        return clearOffer(price).replace("\"quintal\"", "\"kg\"");
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> foreignCurrencySpeech() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("en-IN", "I offer 2000 dollars per kg", "दो हज़ार डॉलर"),
+                org.junit.jupiter.params.provider.Arguments.of("en-IN", "I offer 2000 USD per kg", "दो हज़ार डॉलर"),
+                org.junit.jupiter.params.provider.Arguments.of("en-IN", "I offer $2000 per kg", "दो हज़ार डॉलर"),
+                org.junit.jupiter.params.provider.Arguments.of("en-IN", "I offer 2000 euros per kg", "दो हज़ार यूरो"),
+                org.junit.jupiter.params.provider.Arguments.of("en-IN", "do hazaar dollar per kilo", "दो हज़ार डॉलर"),
+                org.junit.jupiter.params.provider.Arguments.of("hi-IN", "दो हज़ार डॉलर प्रति किलो", "दो हज़ार डॉलर"),
+                org.junit.jupiter.params.provider.Arguments.of("bn-IN", "প্রতি কেজি ২০০০ ডলার", "दो हज़ार डॉलर"));
+    }
+
+    /**
+     * The model reports rupees (its old default) and its translation drops the basis, the buyer said another currency: no
+     * rupee offer, now or after "per kg". Same-language buyers hear their own words, so the farmer hears the currency said.
+     */
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("foreignCurrencySpeech")
+    void aForeignCurrencyNeverBecomesARupeeOfferEvenAfterABasisClarification(String code, String speech, String translation) {
+        buyerJoinsAndAgrees("10 kg");
+        if (!code.equals("en-IN")) buyer.switchLanguage(new Language(code, code, "test"));
+        buyerSays(speech, translation, kgOffer(2000));
+        buyerAnswers("per kg");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).noneMatch(t -> t.text().contains("रुपये"));
+    }
+
+    @Test
+    void aForeignCurrencyCounterofferAfterARupeeOfferClosesTheOldDraftAndOpensNothing() {
+        buyerJoinsAndAgrees();
+        buyerOffers(4000);
+        int deals = eventsOf(ConsoleEvent.DealUpdated.class).size();
+        buyerSays("I offer 2000 dollars per kg", "दो हज़ार डॉलर प्रति किलो", kgOffer(2000));
+        buyerAnswers("per kg");
+        assertThat(lastDeal().state()).isEqualTo(DealState.CLOSED);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class).subList(deals, eventsOf(ConsoleEvent.DealUpdated.class).size()))
+                .noneMatch(d -> d.price() != null && d.price().compareTo(new java.math.BigDecimal("2000")) == 0);
+    }
+
+    @Test
+    void anAmountWithNoCurrencyIsHeldAndTheQuestionNamesRupees() {
+        buyerJoinsAndAgrees("10 kg");
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        buyerSays("I will pay 2000 per kg", "दो हज़ार प्रति किलो", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(spokenTo(buyer).getLast()).isEqualTo("Is that two thousand rupees per kg?");
+        int calls = llm.requests().size();
+        buyerAnswers("yes");
+        assertThat(llm.requests()).hasSize(calls); // the short answer is read by code, not by the model
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void aNoToTheCurrencyQuestionOpensNothingAndAsksForThePriceAgain() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 per kg", "दो हज़ार प्रति किलो", kgOffer(2000));
+        buyerAnswers("no");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).startsWith("Please say the full price again in rupees");
+    }
+
+    @Test
+    void aClarifiedBasisThatContradictsTheSpokenOneOpensNothing() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 per kg", "दो हज़ार प्रति किलो", kgOffer(2000));
+        buyerAnswers("per quintal");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).startsWith("Please say the full price again in rupees");
+        buyerAnswers("per quintal"); // nothing is held any more, so a bare basis now carries no amount
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void aYesToTheBasisQuestionIsAskedAgainNotGuessed() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your rice at 2000", "मैं आपका चावल दो हज़ार में खरीदूँगा", kgOffer(2000));
+        buyerAnswers("yes");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).contains("total in rupees");
+        buyerAnswers("per kg");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void aCurrencyAnswerInAnotherCurrencyOpensNothing() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 per kg", "दो हज़ार प्रति किलो", kgOffer(2000));
+        llm.replyText(reading("डॉलर", NO_OFFER, "none", false));
+        buyerAnswers("dollars");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void spokenRupeeWordsInAnyFormConfirmTheCurrency() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 rupaiya per kg", "दो हज़ार रुपये प्रति किलो", kgOffer(2000));
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void anOrdinaryExplicitRupeeOfferStillCostsOneModelCall() {
+        buyerJoinsAndAgrees("10 kg");
+        int before = llm.requests().size();
+        buyerSays("I will pay 2000 rupees per kg", "दो हज़ार रुपये प्रति किलो", kgOffer(2000));
+        assertThat(llm.requests()).hasSize(before + 1);
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void swappedNumbersWithoutAnyBasisInTheTranslationNeverReachTheFarmer() {
+        buyerJoinsAndAgrees("10 kg");
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        buyerSays("10 kg onion, 2000 rupees per kg", "दो हज़ार किलो प्याज़, दस रुपये", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void aTranslationThatChangesTheQuantityUnitNeverCarriesAPricedOffer() {
+        buyerJoinsAndAgrees("10 quintal");
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        buyerSays("10 quintal onion, 2000 rupees per kg", "दस किलो प्याज़, दो हज़ार रुपये", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void aFaithfulTranslationWithoutTheBasisIsDeliveredWithTheVerifiedPrice() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("10 kg onion, 2000 rupees per kg", "दस किलो प्याज़, दो हज़ार रुपये", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class).getLast().text()).contains("दो हज़ार रुपये प्रति किलो");
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+    }
+
+    @Test
+    void anExplicitPerKiloOfferStaysPerKiloAndTheReadbackMultiplies() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 rupees per kg", "दो हज़ार रुपये प्रति किलो", kgOffer(2000));
+        farmerAgrees();
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+        assertThat(spokenTo(buyer)).anyMatch(l -> l.contains("rupees per kg") && l.contains("twenty thousand"));
+    }
+
+    @Test
+    void aPerQuintalOfferForKilosIsConvertedNotMultipliedAsKilos() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 rupees per quintal", "दो हज़ार रुपये प्रति क्विंटल", clearOffer(2000));
+        farmerAgrees();
+        assertThat(lastDeal().unit()).isEqualTo("quintal");
+        assertThat(spokenTo(buyer)).anyMatch(l -> l.contains("per quintal") && l.contains("two hundred rupees in total"))
+                .noneMatch(l -> l.contains("twenty thousand"));
+    }
+
+    @Test
+    void anExplicitRupeeTotalStaysATotalAndIsNeverMultiplied() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will pay 2000 rupees total", "कुल दो हज़ार रुपये", kgOffer(2000));
+        farmerAgrees();
+        assertThat(lastDeal().unit()).isEqualTo("total");
+        assertThat(spokenTo(buyer)).anyMatch(l -> l.contains("two thousand rupees total"))
+                .noneMatch(l -> l.contains("twenty thousand"));
+    }
+
+    @Test
+    void aBareAmountHeldAsTotalIsReadBackAsTheTotal() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your rice at 2000", "मैं आपका चावल दो हज़ार में खरीदूँगा", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+        assertThat(spokenTo(buyer).getLast()).containsIgnoringCase("rupees").containsIgnoringCase("total");
+        buyerAnswers("total");
+        farmerAgrees();
+        assertThat(lastDeal().unit()).isEqualTo("total");
+        assertThat(spokenTo(buyer)).noneMatch(l -> l.contains("twenty thousand"));
+    }
+
+    @Test
+    void aHeldAmountGivesNoEstimatedValueToAnAskingParty() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your rice at 2000", "मैं आपका चावल दो हज़ार में खरीदूँगा", kgOffer(2000));
+        llm.replyText(intent("value"));
+        session(LegRole.BUYER).say("G-One, what is the total value?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer).getLast()).doesNotContain("twenty thousand").doesNotContain("two thousand rupees per");
+    }
+
+    @Test
+    void hindiRateFirstPerKiloIsReadAsPerKilo() {
+        buyerJoinsAndAgrees("10 kg");
+        buyer.switchLanguage(new Language("hi-IN", "Hindi", "test"));
+        buyerSays("किलो के दो हज़ार रुपये", "किलो के दो हज़ार रुपये", kgOffer(2000));
+        assertThat(lastDeal().unit()).isEqualTo("kg");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+    }
+
+    @Test
+    void hindiPriceForAStatedLotIsNeverReadAsPerKilo() {
+        buyerJoinsAndAgrees("10 kg");
+        buyer.switchLanguage(new Language("hi-IN", "Hindi", "test"));
+        buyerSays("दस किलो के दो हज़ार रुपये", "दस किलो के दो हज़ार रुपये", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
+    }
+
+    @Test
+    void aTranslationThatTurnsARateIntoALotPriceIsNotDelivered() {
+        buyerJoinsAndAgrees("10 kg");
+        int translated = eventsOf(ConsoleEvent.TurnTranslated.class).size();
+        buyerSays("10 kg onion, 2000 rupees per kg", "दस किलो के दो हज़ार रुपये", kgOffer(2000));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).hasSize(translated);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).isEmpty();
     }
 
     @Test
@@ -272,7 +512,7 @@ class AskGoneTest {
     void explicitSpokenBasisOverridesAnInventedModelUnit() {
         buyerJoinsAndAgrees("10 kg");
         llm.replyText(reading("दो हज़ार रुपये प्रति किलो", clearOffer(2000), "none", false));
-        session(LegRole.BUYER).say("I will pay 2000 per kg");
+        session(LegRole.BUYER).say("I will pay 2000 rupees per kg");
         executor.runAll();
         finishAll();
         assertThat(lastDeal().unit()).isEqualTo("kg");
@@ -295,7 +535,7 @@ class AskGoneTest {
     void explicitTotalIsNeverConvertedToAPerUnitPrice() {
         buyerJoinsAndAgrees("10 kg");
         llm.replyText(reading("कुल दो हज़ार रुपये", clearOffer(2000), "none", false));
-        session(LegRole.BUYER).say("I will pay 2000 total");
+        session(LegRole.BUYER).say("I will pay 2000 rupees total");
         executor.runAll();
         finishAll();
         assertThat(lastDeal().unit()).isEqualTo("total");

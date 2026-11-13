@@ -106,7 +106,7 @@ public final class MediationSession {
     private String buyerEndReason = "hangup";
     private BigDecimal lastWhispered;
     /** Unpriced offer held on this call's serial mediation lane until its speaker states a basis. */
-    private record PendingBasis(Offer offer, String translation, String speech) {}
+    private record PendingBasis(Offer offer, String translation, String speech, String basis, boolean remember, int asks) {}
     private PendingBasis pendingBasis;
     private SttSession buyerSession;
     /** Answers a party who speaks to G-One directly. */
@@ -458,36 +458,59 @@ public final class MediationSession {
             return; // never sent to the model, and never translated for the buyer
         }
         if (speaker == LegRole.BUYER && pendingBasis != null) {
-            String basis = PriceBasis.clarification(turn.text());
-            if (basis != null) {
-                PendingBasis held = pendingBasis;
-                pendingBasis = null;
+            PendingBasis held = pendingBasis;
+            pendingBasis = null; // A different buyer turn supersedes this pending amount.
+            PriceBasis.Answer answer = PriceBasis.answer(turn.text(), language(speaker).code());
+            if (answer != null) {
                 recordHeard(turn, heardAt);
-                publishPricedOffer(turn, to, withBasis(held.offer(), basis), held.translation(),
+                // The question named rupees, so a plain answer to it settles the currency. A basis that contradicts the
+                // one already said leaves the held words unsafe to relay: the buyer says the whole price again.
+                if (answer.basis() != null && held.basis() != null && !held.basis().equals(answer.basis())) {
+                    sayAssistant(speaker, priceAgain(language(speaker)), false, null);
+                    return;
+                }
+                String basis = answer.basis() != null ? answer.basis() : held.basis();
+                if (basis == null) {
+                    if (held.asks() < 1) {
+                        pendingBasis = new PendingBasis(held.offer(), held.translation(), held.speech(), null, held.remember(),
+                                held.asks() + 1);
+                        sayAssistant(speaker, basisQuestion(language(speaker)), false, null);
+                    } else {
+                        sayAssistant(speaker, priceAgain(language(speaker)), false, null);
+                    }
+                    return;
+                }
+                if (held.remember()) remember(held.speech());
+                publishPricedOffer(turn, to, priced(held.offer(), basis), held.translation(), held.speech(),
                         held.speech() + " " + turn.text(), n);
                 return;
             }
-            pendingBasis = null; // A different buyer turn supersedes this pending amount.
+            if (quick == ReplyGuard.Reading.NO) {
+                recordHeard(turn, heardAt);
+                sayAssistant(speaker, priceAgain(language(speaker)), false, null);
+                return;
+            }
         }
         boolean replying = awaiting.isPresent() && quick != ReplyGuard.Reading.UNCLEAR;
 
         TurnReader.Reading read = reader.read(speaker, turn.text(), language(speaker), to, recent(),
                 awaiting.map(a -> a.name().toLowerCase(Locale.ROOT)).orElse("none"));
 
+        // The currency comes from the words: a model that reports rupees for "2000 dollars" is not believed, and one that
+        // reports another currency is not overruled.
+        PriceBasis.Currency saidCurrency = PriceBasis.currency(turn.text());
+        boolean foreign = read.offer() != null && read.offer().price() != null && (saidCurrency == PriceBasis.Currency.FOREIGN
+                || (read.offer().currency() != null && !"INR".equalsIgnoreCase(read.offer().currency())));
         if (speaker == LegRole.BUYER && !read.addressed() && PriceBasis.conditional(turn.text())
                 && read.offer() != null && read.offer().price() != null) {
             desk.unpricedOffer();
-            pendingBasis = null;
         }
         if (speaker == LegRole.BUYER && !read.addressed() && read.offer() != null
                 && "clear".equals(read.offer().status()) && read.offer().price() != null
-                && (read.withheld() || (!sameLanguage && read.translation() == null)
-                    || !"INR".equalsIgnoreCase(read.offer().currency()))) {
+                && (read.withheld() || (!sameLanguage && read.translation() == null) || foreign)) {
             desk.unpricedOffer();
-            pendingBasis = null;
         }
-        if (read.offer() != null && (read.withheld() || (!sameLanguage && read.translation() == null)
-                || (read.offer().price() != null && !"INR".equalsIgnoreCase(read.offer().currency()))
+        if (read.offer() != null && (read.withheld() || (!sameLanguage && read.translation() == null) || foreign
                 || (speaker == LegRole.BUYER && PriceBasis.conditional(turn.text())))) {
             read = new TurnReader.Reading(read.translation(), null, read.cautions(), read.reply(), read.withheld(), read.toAssistant());
         }
@@ -528,14 +551,17 @@ public final class MediationSession {
         if (speaker == LegRole.BUYER && extracted != null && "clear".equals(extracted.status())
                 && extracted.price() != null && !read.withheld()) {
             String basis = PriceBasis.evidence(turn.text(), language(speaker).code(), extracted.price());
-            if (basis == null) {
+            String carried = sameLanguage ? turn.text() : read.translation();
+            if (basis == null || saidCurrency != PriceBasis.Currency.RUPEE) {
+                // Neither the basis nor the currency is ever assumed: hold the amount and ask the buyer, once and briefly.
                 desk.unpricedOffer();
-                pendingBasis = new PendingBasis(extracted, sameLanguage ? turn.text() : read.translation(), turn.text());
-                sayAssistant(speaker, basisQuestion(language(speaker)), false, null);
+                pendingBasis = new PendingBasis(extracted, carried, turn.text(), basis, cautions.isEmpty(), 0);
+                sayAssistant(speaker, basis == null ? basisQuestion(language(speaker))
+                        : currencyQuestion(language(speaker), extracted.price(), basis), false, null);
                 return;
             }
-            pendingBasis = null;
-            publishPricedOffer(turn, to, withBasis(extracted, basis), sameLanguage ? turn.text() : read.translation(), turn.text(), n);
+            if (cautions.isEmpty()) remember(turn.text());
+            publishPricedOffer(turn, to, priced(extracted, basis), carried, turn.text(), turn.text(), n);
             return;
         }
         // A line that earned a caution stays out of the context, so it cannot colour the next turn.
@@ -544,7 +570,8 @@ public final class MediationSession {
         // Cleaned once here, so the console, the transcript and the voice all get the same text without model thinking.
         String spoken = withoutThinking(read.translation());
         if (spoken == null && sameLanguage) spoken = withoutThinking(turn.text());
-        if (read.withheld()) {
+        if (read.withheld() || (foreign && !sameLanguage && PriceBasis.currency(spoken) != PriceBasis.Currency.FOREIGN)) {
+            // A foreign amount whose translation lost the currency would reach the farmer as rupees: never voiced.
             sayAssistant(speaker, lines.get("unsafeTranslation", language(speaker).code()), false, null);
         } else if (spoken == null) {
             sayAssistant(speaker, lines.get("repeat", language(speaker).code()), false, null);
@@ -567,12 +594,18 @@ public final class MediationSession {
         }
     }
 
-    private static Offer withBasis(Offer o, String basis) {
-        return new Offer(o.status(), o.commodity(), o.variety(), o.market(), o.price(), o.currency(), basis,
+    /** The offer with the basis and the rupee currency that the buyer's own words established. */
+    private static Offer priced(Offer o, String basis) {
+        return new Offer(o.status(), o.commodity(), o.variety(), o.market(), o.price(), "INR", basis,
                 o.quantity(), o.pickup(), o.payment());
     }
 
-    private void publishPricedOffer(Turn turn, Language to, Offer offer, String translation, String speech, long n) {
+    /**
+     * Relays a verified offer with its price stated in fixed words. {@code source} is the buyer's offer turn that the
+     * translation was made from; {@code speech} is everything the buyer said for it, clarification included.
+     */
+    private void publishPricedOffer(Turn turn, Language to, Offer offer, String translation, String source, String speech,
+            long n) {
         String code = lineCode(to);
         String amount = SpokenNumbers.words(offer.price(), code);
         String unit = CropNames.unit(offer.unit(), code);
@@ -581,8 +614,11 @@ public final class MediationSession {
                 : code.startsWith("bn") ? (total ? "মোট " + amount + " টাকা" : "প্রতি " + unit + " " + amount + " টাকা")
                 : amount + (total ? " rupees total for all of it" : " rupees per " + unit);
         String voiced = withoutThinking(translation);
-        String saidBasis = PriceBasis.read(voiced);
-        if (voiced != null && (PriceBasis.conflicting(voiced) || PriceBasis.conditional(voiced)
+        String saidBasis = PriceBasis.read(voiced, to.code());
+        // The amount-to-basis check runs whether or not the translation names a basis: a translation that moves the
+        // price onto the quantity, or changes a unit, is never voiced next to a priced line.
+        if (voiced != null && (PriceBasis.conflicting(voiced, to.code()) || PriceBasis.conditional(voiced)
+                || !PriceBasis.faithful(source, language(turn.role()).code(), voiced, to.code(), offer.price(), offer.unit())
                 || (saidBasis != null && (!saidBasis.equals(offer.unit())
                     || !offer.unit().equals(PriceBasis.evidence(voiced, to.code(), offer.price())))))) {
             desk.unpricedOffer();
@@ -599,13 +635,36 @@ public final class MediationSession {
         }
     }
 
+    /** Asked when the basis is missing: it names rupees, so a plain answer settles the currency too. */
     private static String basisQuestion(Language language) {
         String code = language.code().toLowerCase(Locale.ROOT);
-        if (code.startsWith("hi")) return "यह रकम पूरे माल के लिए है या प्रति इकाई?";
-        if (code.startsWith("bn")) return "এই দাম পুরো মালটির জন্য, নাকি প্রতি এককের জন্য?";
-        if (code.startsWith("ta")) return "இந்த விலை மொத்தத்திற்கா அல்லது ஒரு அலகுக்கா?";
-        if (code.startsWith("kn")) return "ಈ ಬೆಲೆ ಒಟ್ಟು ಸರಕಿಗಾ ಅಥವಾ ಪ್ರತಿ ಘಟಕಕ್ಕಾ?";
-        return "Is that the total price for all of it, or a price per unit?";
+        if (code.startsWith("hi")) return "यह रकम रुपये में पूरे माल की कुल कीमत है, या रुपये प्रति किलो या प्रति क्विंटल?";
+        if (code.startsWith("bn")) return "এই দাম কি টাকায় পুরো মালটির মোট দাম, নাকি প্রতি কেজি বা প্রতি কুইন্টাল টাকা?";
+        if (code.startsWith("ta")) return "இந்த விலை ரூபாயில் மொத்தத்திற்கா, அல்லது ஒரு கிலோ அல்லது ஒரு குவிண்டாலுக்கா?";
+        if (code.startsWith("kn")) return "ಈ ಬೆಲೆ ರೂಪಾಯಿಯಲ್ಲಿ ಒಟ್ಟು ಸರಕಿಗಾ, ಅಥವಾ ಪ್ರತಿ ಕಿಲೋ ಅಥವಾ ಪ್ರತಿ ಕ್ವಿಂಟಲ್‌ಗಾ?";
+        return "Is that the total in rupees for all of it, or rupees per kilo or per quintal?";
+    }
+
+    /** Asked when the basis is clear but no currency was said: the price is read back in rupees for a yes or no. */
+    private String currencyQuestion(Language language, BigDecimal price, String basis) {
+        String code = lineCode(language);
+        String amount = SpokenNumbers.words(price, code);
+        boolean total = "total".equals(basis);
+        String unit = total ? null : CropNames.unit(basis, code);
+        if (code.startsWith("hi")) return total ? "क्या यह पूरे माल के लिए कुल " + amount + " रुपये है?"
+                : "क्या यह " + amount + " रुपये प्रति " + unit + " है?";
+        if (code.startsWith("bn")) return total ? "এটা কি পুরো মালটির মোট " + amount + " টাকা?"
+                : "এটা কি প্রতি " + unit + " " + amount + " টাকা?";
+        return total ? "Is that " + amount + " rupees in total for all of it?" : "Is that " + amount + " rupees per " + unit + "?";
+    }
+
+    private static String priceAgain(Language language) {
+        String code = language.code().toLowerCase(Locale.ROOT);
+        if (code.startsWith("hi")) return "कृपया पूरा भाव फिर से बोलिए, रुपये में, और बताइए कि यह कुल है या प्रति किलो या प्रति क्विंटल।";
+        if (code.startsWith("bn")) return "দয়া করে পুরো দামটা আবার বলুন, টাকায়, আর বলুন এটা মোট নাকি প্রতি কেজি বা প্রতি কুইন্টাল।";
+        if (code.startsWith("ta")) return "தயவுசெய்து விலையை ரூபாயில் மீண்டும் சொல்லுங்கள், மொத்தமா அல்லது ஒரு கிலோவுக்கா என்றும் சொல்லுங்கள்.";
+        if (code.startsWith("kn")) return "ದಯವಿಟ್ಟು ಬೆಲೆಯನ್ನು ರೂಪಾಯಿಯಲ್ಲಿ ಮತ್ತೆ ಹೇಳಿ, ಅದು ಒಟ್ಟು ಬೆಲೆಯೋ ಪ್ರತಿ ಕಿಲೋಗೋ ಎಂದೂ ಹೇಳಿ.";
+        return "Please say the full price again in rupees, and whether it is a total or per kilo or per quintal.";
     }
 
     /** A model's yes counts only when the words pass the guard; the code's own reading comes first. */

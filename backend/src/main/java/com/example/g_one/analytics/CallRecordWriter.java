@@ -8,15 +8,14 @@ import java.time.Clock;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Listens to the console events of every call, keeps what a record may need while the call runs, and at
- * {@code call_ended} stores a {@link CallRecord} according to the parties' consent ({@link CallAccumulator}). Calls
- * with nobody's yes leave nothing behind: their collected data is dropped at the end of the call. The synthetic sample
- * replay ({@code replay-} call ids) is never stored.
+ * {@code call_ended} stores a {@link CallRecord} for it ({@link CallAccumulator}). Every ended call is recorded; the
+ * parties' consent decides only the conversation-derived fields, and a call without the farmer's yes is anonymous (no
+ * caller key). The synthetic sample replay ({@code replay-} call ids) is never stored.
  */
 public final class CallRecordWriter implements AutoCloseable {
     /** Bounds memory if a call never ends: the oldest open call is dropped beyond this many. */
@@ -63,9 +62,10 @@ public final class CallRecordWriter implements AutoCloseable {
                 // The farmer asked to be forgotten: their earlier records go too.
                 call.farmerKey().ifPresent(store::deleteByFarmerKey);
             }
-            Optional<CallRecord> record = call.toRecord(json, clock.millis());
-            record.ifPresent(store::save);
-            log.info("Call {} ended: {}", call.callId(), record.isPresent() ? "record stored" : "nothing stored (no consent)");
+            CallRecord record = call.toRecord(json, clock.millis());
+            store.save(record);
+            log.info("Call {} ended: record stored (consent: {}{})", call.callId(), record.consentScope(),
+                    record.termsOnly() ? ", terms only" : record.farmerKey() == null ? ", anonymous" : "");
         } catch (RuntimeException e) {
             log.warn("Could not store the record of call {}", call.callId(), e);
         }

@@ -7,16 +7,19 @@ import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * Figures over the stored records only. {@code medianMs} holds the measured median per stage across every stored
- * turn: {@code transcript} (end of speech to transcript), {@code translation} and {@code reply} (transcript to the
- * assistant's answer); a stage with no measurement is absent.
+ * Figures over the stored records, which since schema version 3 means every call. {@code medianMs} holds the measured
+ * median per stage across every stored turn: {@code transcript} (end of speech to transcript), {@code translation} and
+ * {@code reply} (transcript to the assistant's answer); a stage with no measurement is absent. {@code callsWithYes}
+ * counts calls at least one party said yes to; {@code callsWithoutYes} the rest, kept as terms only.
+ * {@code bothYesDeals} counts deals both parties confirmed on the call (not the remembering question).
  */
 public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDurationMs,
                                Map<String, Integer> languagePairs, Map<String, Long> medianMs,
-                               Map<String, Integer> toolCounts) {
+                               Map<String, Integer> toolCounts, int callsWithYes, int callsWithoutYes) {
 
     static AnalyticsSummary of(List<CallRecord> records) {
         int agreed = 0;
+        int withYes = 0;
         long total = 0;
         Map<String, Integer> pairs = new TreeMap<>();
         Map<String, Integer> tools = new TreeMap<>();
@@ -28,6 +31,7 @@ public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDu
             if (deal.path("farmerYes").asBoolean() && deal.path("buyerYes").asBoolean()) {
                 agreed++;
             }
+            if (!r.termsOnly()) withYes++;
             total += r.durationMs();
             pairs.merge(pair(r.languages()), 1, Integer::sum);
             for (String role : List.of("farmer", "buyer")) {
@@ -51,7 +55,7 @@ public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDu
         putMedian(medians, "translation", translation);
         putMedian(medians, "reply", reply);
         return new AnalyticsSummary(records.size(), agreed, records.isEmpty() ? 0 : total / records.size(), pairs,
-                medians, tools);
+                medians, tools, withYes, records.size() - withYes);
     }
 
     /** "hi-IN ⇄ ta-IN" when both languages are stored, else the one stored, else "unknown". */

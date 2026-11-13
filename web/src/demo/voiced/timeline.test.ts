@@ -189,4 +189,21 @@ describe('voiced sample timeline', () => {
     const files = readdirSync(AUDIO).filter((f) => f.endsWith('.wav')).sort()
     expect(files).toEqual(clips.map((c) => c.file).sort())
   })
+
+  it('speaks Bengali to the buyer once the buyer chooses Bengali', () => {
+    const disclose = sample.beats.find((b) => b.id === 'disclose')!
+    expect(disclose.clips.map((c) => [c.language, c.voice, c.pan, c.to])).toEqual([['bn-IN', 'Kirra', 0.75, 'buyer'], ['bn-IN', 'Kirra', 0.75, 'buyer']])
+    const chosen = sample.beats.findIndex((b) => b.id === 'buyer-language-confirm')
+    const own = sample.beats.slice(chosen).flatMap((b) => b.clips).filter((c) => c.kind === 'said' && c.to === 'buyer')
+    expect(own.length).toBeGreaterThan(5)
+    for (const clip of own) expect(clip.language).toBe('bn-IN')
+  })
+
+  it('keeps short, clear gaps and runs no longer than 4:11 at the default speed', () => {
+    for (const clip of sample.beats.flatMap((b) => b.clips)) {
+      expect(clip.pauseAfterMs).toBeGreaterThanOrEqual(200)
+      expect(clip.pauseAfterMs).toBeLessThanOrEqual(320)
+    }
+    expect(plan.total).toBeLessThanOrEqual(251)
+  })
 })

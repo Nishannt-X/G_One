@@ -120,7 +120,8 @@ const BEATS: Beat[] = [
     deal: { market: 'Kolkata' },
     lines: [
       { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'নমস্কার, আমি জি-ওয়ান, একটা এআই সহকারী। কর্ণাটকের এক চাষির হয়ে ফোন করছি। ওঁর চল্লিশ কুইন্টাল পেঁয়াজ বিক্রি আছে।', gloss: 'Namaskar, I am G-One, an AI assistant. I am calling on behalf of a farmer in Karnataka. He has forty quintals of onion for sale.' },
-      { kind: 'own', lang: 'hi-IN', to: 'buyer', text: 'क्या मैं आपको उनसे जोड़ दूँ?', gloss: 'Shall I connect you with him?' },
+      // The product's own question to a buyer (bn-IN buyerIntro in backend/src/main/resources/prompts/mediation-lines.json).
+      { kind: 'own', lang: 'bn-IN', to: 'buyer', text: 'এখন কথা বলা যাবে? হ্যাঁ বা না বলুন।', gloss: 'Can you talk now? Please say yes or no.' },
     ],
   },
   {
@@ -328,8 +329,8 @@ const RAW = process.env.TTS_CACHE_DIR ?? join(tmpdir(), 'g-one-voiced-sample-raw
 const MAX_CALLS = Number(process.env.MAX_TTS_CALLS ?? 40)
 /** Writes the manifest to this path without touching Timbre or the audio folder, so the text can be checked first. */
 const DRY_OUT = process.env.DRY_OUT
-const CLIP_GAP_MS = 340
-const BEAT_GAP_MS = 480
+const CLIP_GAP_MS = 220
+const BEAT_GAP_MS = 320
 const PAN = { farmer: -0.75, buyer: 0.75, whisper: -1 }
 
 let calls = 0

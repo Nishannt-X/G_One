@@ -1040,17 +1040,28 @@ public final class MediationSession {
         boolean starts = deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text());
         // Taken here, the turn never reaches the relay's check: a term it changes still drops the buyer's held amount.
         if (closing.active() || starts) dropHeldOnFarmerTerms(turn);
-        if (closing.active() && named) {
-            // A question for G-One during the check: answered privately, never taken as the answer, and the pending
-            // question is asked once more on a fresh token, which neither counts as nor uses up the re-ask.
-            aside(turn, "name");
-            closing.repeat(speaker).ifPresent(ask -> sayClosing(ask.role(),
-                    ClosingLines.ask(ask.question(), language(ask.role()).code()), o -> waitForAnswer(ask.role(), ask.token())));
-            return true;
-        }
         if (closing.active()) {
+            // Words only here: a turn during the check costs no model call beyond a private answer.
+            CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+            boolean answered = parsed.answer() != CompoundReply.Answer.NONE;
+            if (named || (parsed.hasRemainder() && (!answered || CompoundReply.followUp(parsed.remainder())))) {
+                // A question for G-One during the check ("G-One, ...", "haan, lekin kitna maal tha?"): the answer, if
+                // any, is recorded and only it reaches the shared record; the question is answered privately. A turn
+                // that answered nothing is asked once more, and a second such question ends the wait (CallClosing#aside),
+                // so a party who keeps asking is never asked for ever.
+                Turn question = turn;
+                if (answered && parsed.hasRemainder()) {
+                    String answer = CompoundReply.answerOf(turn.text(), parsed.remainder());
+                    if (!answer.isBlank()) recordHeard(withText(turn, answer), heardAt);
+                    question = withText(turn, parsed.remainder());
+                }
+                aside(question, named ? "name" : "compound");
+                closingStep(answered && parsed.hasRemainder() ? closing.heard(speaker, parsed.reading())
+                        : closing.aside(speaker));
+                return true;
+            }
             recordHeard(turn, heardAt);
-            closingStep(closing.heard(speaker, turn.text()));
+            closingStep(closing.heard(speaker, parsed.reading()));
             return true;
         }
         if (starts) {

@@ -794,15 +794,17 @@ public final class CallPipeline {
         /**
          * A turn heard while an end-of-call question waits: its answer (if any) is recorded, and anything else it said
          * ("haan, but what was the price?") is answered by the brain before the next closing line. A turn that answers
-         * nothing but asks something is answered, then the question is asked once more (that uses up the one re-ask, so
-         * it never loops).
+         * nothing but asks something is answered, then the question is asked once more; a second such turn ends the wait,
+         * so it never loops.
          */
         private void answerClosing(long turnGeneration, CallContext ctx, List<Line> history, Turn turn, String asked) {
             CompoundReply.Parsed answer = readAnswer(asked, turn.text());
             if (generation.get() != turnGeneration) {
                 return; // a newer turn arrived while the answer was read; it is the one that counts
             }
-            CallClosing.Step step = closing.heard(LegRole.FARMER, answer.reading());
+            // A question instead of an answer is asked once more, and a second one ends the wait (CallClosing#aside).
+            CallClosing.Step step = answer.answer() == CompoundReply.Answer.NONE && answer.hasRemainder()
+                    ? closing.aside(LegRole.FARMER) : closing.heard(LegRole.FARMER, answer.reading());
             if (!answer.hasRemainder()) {
                 closingStep(turnGeneration, step);
                 return;

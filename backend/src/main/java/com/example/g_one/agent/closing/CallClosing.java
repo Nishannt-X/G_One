@@ -90,6 +90,8 @@ public final class CallClosing {
     private final Map<LegRole, Consent> consent = new EnumMap<>(LegRole.class);
     private final Map<LegRole, Integer> cooldown = new EnumMap<>(LegRole.class);
     private final Set<LegRole> reasked = EnumSet.noneOf(LegRole.class);
+    /** Parties already asked again after a question instead of an answer, for the question now waiting. */
+    private final Set<LegRole> asideRepeated = EnumSet.noneOf(LegRole.class);
     private final Map<LegRole, Long> tokens = new EnumMap<>(LegRole.class);
     private Phase phase = Phase.IDLE;
     private long nextToken;
@@ -148,6 +150,7 @@ public final class CallClosing {
         phase = Phase.END;
         endAnswers.clear();
         reasked.clear();
+        asideRepeated.clear();
         List<Ask> asks = new ArrayList<>();
         for (LegRole r : present) asks.add(ask(r, Question.END, false));
         return new Step(asks, false, null);
@@ -194,6 +197,20 @@ public final class CallClosing {
         return java.util.Optional.of(ask(role, phase == Phase.END ? Question.END : Question.SAVE, false));
     }
 
+    /**
+     * {@code role} asked something instead of answering, and was answered. The first time per question, the question is
+     * asked once more on a fresh token, which does not use up the re-ask an unclear answer gets. A second question
+     * instead of an answer ends the wait: not ready to end the call (the conversation resumes), or no consent. So a
+     * party who keeps asking is never asked for ever. Empty when {@code role} is not waiting to answer.
+     */
+    public synchronized Step aside(LegRole role) {
+        if (!active() || !tokens.containsKey(role)) return Step.NOTHING;
+        Question q = phase == Phase.END ? Question.END : Question.SAVE;
+        if (asideRepeated.add(role)) return new Step(List.of(ask(role, q, true)), false, null);
+        tokens.remove(role);
+        return q == Question.END ? resume() : record(role, Consent.NONE);
+    }
+
     /** The question asked with {@code token} got no answer in {@link #ANSWER_WAIT_MS}. Stale tokens do nothing. */
     public synchronized Step timeout(LegRole role, long token) {
         Long current = tokens.get(role);
@@ -234,6 +251,7 @@ public final class CallClosing {
         tokens.clear();
         endAnswers.clear();
         reasked.clear();
+        asideRepeated.clear();
         return new Step(List.of(), true, null);
     }
 
@@ -243,6 +261,7 @@ public final class CallClosing {
         }
         phase = Phase.SAVE;
         reasked.clear();
+        asideRepeated.clear();
         List<Ask> asks = new ArrayList<>();
         for (LegRole r : present) {
             if (notAskedToSave.contains(r)) consent.put(r, Consent.NONE);

@@ -1395,6 +1395,73 @@ class AskGoneTest {
     }
 
     @Test
+    void aFarmerWhoKeepsAskingGOneDuringTheEndOfCallCheckIsAskedOnceMoreThenTheCallGoesOn() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        String endQuestion = ClosingLines.ask(CallClosing.Question.END, FakeLeg.HINDI.code());
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("G-One, kitna maal bataya tha maine?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer).stream().filter(endQuestion::equals)).as("answered, then asked once more").hasSize(2);
+        llm.replyText(intent("pickup"));
+        session(LegRole.FARMER).say("G-One, pickup kab hai?");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("pickup"));
+        session(LegRole.FARMER).say("G-One, aur payment kab?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer).stream().filter(endQuestion::equals)).as("never asked for ever").hasSize(2);
+        assertThat(spokenTo(farmer)).contains(ClosingLines.carryOn(FakeLeg.HINDI.code()));
+        assertThat(farmer.isEnded()).isFalse();
+    }
+
+    @Test
+    void aYesToEndingWithAQuestionToGOneIsRecordedAndAnsweredPrivately() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
+        llm.replyText(intent("pickup"));
+        session(LegRole.BUYER).say("yes, and G-One what is the pickup?");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last().satisfies(e -> {
+            assertThat(e.role()).isEqualTo(LegRole.BUYER);
+            assertThat(e.question()).contains("what is the pickup");
+        });
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class).subList(heard, eventsOf(ConsoleEvent.TurnHeard.class).size()))
+                .extracting(ConsoleEvent.TurnHeard::text).containsExactly("yes");
+        session(LegRole.FARMER).say("haan");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).as("both said yes: the save question follows")
+                .contains(ClosingLines.ask(CallClosing.Question.SAVE, FakeLeg.ENGLISH.code()));
+    }
+
+    @Test
+    void aFarmersYesToEndingWithAPlainQuestionIsRecordedAndAnswered() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("haan, lekin kitna maal tha?");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last()
+                .satisfies(e -> assertThat(e.question()).isEqualTo("kitna maal tha?"));
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).contains(ClosingLines.ask(CallClosing.Question.SAVE, FakeLeg.HINDI.code()));
+    }
+
+    @Test
     void aQuestionToGOneDuringTheEndOfCallCheckIsAnsweredPrivatelyThenTheQuestionIsAskedAgain() {
         buyerJoinsAndAgrees();
         session(LegRole.FARMER).say("bye");

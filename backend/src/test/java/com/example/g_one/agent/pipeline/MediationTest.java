@@ -832,6 +832,89 @@ class MediationTest {
         });
     }
 
+    // ---- a read-back answered with a yes and something else (CompoundReply) ----
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"haan, but who is he?", "हाँ, लेकिन वो कौन है?",
+            "হ্যাঁ, কিন্তু উনি কে?", "ஆமா, ஆனா அவர் யார்?", "ಹೌದು, ಆದರೆ ಅವರು ಯಾರು?", "yes, and when is the pickup?"})
+    void aYesWithAFollowUpQuestionConfirmsTheReadBackAndTheQuestionStaysPrivate(String said) {
+        toConfirming();
+        now.addAndGet(1000);
+        int before = llm.requests().size();
+        session(LegRole.FARMER).say(said);
+        executor.runAll();
+        assertThat(lastDeal().farmerYes()).as("the yes is recorded").isTrue();
+        String question = said.substring(said.indexOf(said.contains(",") ? "," : " ") + 1).strip();
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).as("the question is answered privately").last()
+                .satisfies(e -> assertThat(e.role()).isEqualTo(LegRole.FARMER));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).noneMatch(e -> e.text().contains(question.substring(0, 3)));
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class)).as("never in a shared record")
+                .noneMatch(e -> e.text().contains("?"));
+        assertThat(llm.requests().size() - before).as("one model call at most: the private answer").isLessThanOrEqualTo(1);
+    }
+
+    @Test
+    void aYesWithAnIndependentQuestionStillConfirmsTheReadback() {
+        toConfirming();
+        now.addAndGet(1000);
+        session(LegRole.BUYER).say("Yes, G-One, what quantity did we discuss?");
+        executor.runAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class))
+                .as("the explicit yes is recorded even with an independent question")
+                .anySatisfy(d -> assertThat(d.buyerYes()).isTrue());
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last()
+                .satisfies(e -> assertThat(e.question()).contains("what quantity"));
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class))
+                .noneMatch(e -> e.text().contains("what quantity"));
+    }
+
+    @Test
+    void aConditionalQuestionDoesNotConfirmTheReadback() {
+        toConfirming();
+        now.addAndGet(1000);
+        session(LegRole.BUYER).say("Yes, G-One, only if the farmer agrees to 2000?");
+        executor.runAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.buyerYes());
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"theek hai lekin 4500 mein", "4500 mein theek hai",
+            "haan but only at 4500", "हाँ, पर साढ़े चार हज़ार में"})
+    void aYesWithDifferentTermsIsACounterOfferNeverAConfirmation(String said) {
+        toConfirming();
+        now.addAndGet(1000);
+        llm.replyText(reading("ठीक है पर पैंतालीस सौ में", NO_OFFER, NO_CAUTION, "yes"));
+        session(LegRole.FARMER).say(said);
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).as(said).noneMatch(d -> d.farmerYes());
+        assertThat(lastDeal().state()).as("the read-back of the old terms is void").isNotEqualTo(DealState.CONFIRMING);
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).as("relayed to the buyer as a counter offer")
+                .anySatisfy(e -> assertThat(e.role()).isEqualTo(LegRole.FARMER));
+        // The old terms can no longer be confirmed by plain yeses that follow.
+        session(LegRole.FARMER).say("haan");
+        executor.runAll();
+        session(LegRole.BUYER).say("Yes");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.state() == DealState.AGREED);
+    }
+
+    @Test
+    void aBuyersYesWithANewAmountIsHeldForItsBasisNeverConfirmed() {
+        toConfirming();
+        now.addAndGet(1000);
+        llm.replyText(reading("हाँ, पर तीन हज़ार नौ सौ", clearOffer(3900).replace(",\"unit\":\"quintal\"", ",\"unit\":null"),
+                NO_CAUTION, "yes"));
+        session(LegRole.BUYER).say("Yes, but 3900");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.buyerYes());
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.state() == DealState.AGREED);
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null
+                && d.price().compareTo(new java.math.BigDecimal("3900")) == 0);
+    }
+
     @Test
     void aConditionalYesIsUnclearAndNeverConfirms() {
         toConfirming();

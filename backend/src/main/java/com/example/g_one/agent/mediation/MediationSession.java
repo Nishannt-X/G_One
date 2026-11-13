@@ -6,6 +6,7 @@ import com.example.g_one.agent.closing.CallClosing;
 import com.example.g_one.agent.closing.ClosingLines;
 import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.Terms;
 import com.example.g_one.agent.language.LanguageFlow;
@@ -444,6 +445,29 @@ public final class MediationSession {
         LegRole listener = speaker.other();
         Language to = language(listener);
         var awaiting = desk.awaiting(speaker);
+        if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent()) {
+            CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+            if (!named && (parsed.termsStated()
+                    || (parsed.conditional() && PriceBasis.mentionsTerms(turn.text(), language(speaker).code())))) {
+                // "theek hai lekin 4500 mein", "4500 mein theek hai": other terms are a counter offer, never a yes. The
+                // read-back of the old terms is void, and the turn goes on like any other: translated, its amount read,
+                // held for a basis when the buyer gave none, and any older held amount replaced.
+                log.info("readback_counter call={} role={}", callId, speaker.wire());
+                desk.heard(speaker, DealDesk.Heard.CHANGED, n, turn.startedMs());
+                awaiting = desk.awaiting(speaker);
+                quick = ReplyGuard.Reading.UNCLEAR;
+            } else if (parsed.answer() != CompoundReply.Answer.NONE && !parsed.conditional() && parsed.hasRemainder()
+                    && (named || CompoundReply.followUp(parsed.remainder()))) {
+                // "yes, but who is he?": the answer goes to the read-back, the question to G-One alone. Only the answer
+                // reaches the shared record; the question is classified as private before any shared sink sees it.
+                String answered = CompoundReply.answerOf(turn.text(), parsed.remainder());
+                if (!answered.isBlank()) recordHeard(withText(turn, answered), heardAt);
+                aside(withText(turn, parsed.remainder()), "compound");
+                desk.heard(speaker, parsed.answer() == CompoundReply.Answer.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO,
+                        n, turn.startedMs());
+                return;
+            }
+        }
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent() && quick != ReplyGuard.Reading.UNCLEAR) {
             recordHeard(turn, heardAt);
             desk.heard(speaker, quick == ReplyGuard.Reading.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO, n, turn.startedMs());
@@ -730,6 +754,10 @@ public final class MediationSession {
         if (code.startsWith("ta")) return "தயவுசெய்து விலையை ரூபாயில் மீண்டும் சொல்லுங்கள், மொத்தமா அல்லது ஒரு கிலோவுக்கா என்றும் சொல்லுங்கள்.";
         if (code.startsWith("kn")) return "ದಯವಿಟ್ಟು ಬೆಲೆಯನ್ನು ರೂಪಾಯಿಯಲ್ಲಿ ಮತ್ತೆ ಹೇಳಿ, ಅದು ಒಟ್ಟು ಬೆಲೆಯೋ ಪ್ರತಿ ಕಿಲೋಗೋ ಎಂದೂ ಹೇಳಿ.";
         return "Please say the full price again in rupees, and whether it is a total or per kilo or per quintal.";
+    }
+
+    private static Turn withText(Turn t, String text) {
+        return new Turn(t.legId(), t.role(), t.language(), text, t.startedMs(), t.endedMs());
     }
 
     /** A model's yes counts only when the words pass the guard; the code's own reading comes first. */

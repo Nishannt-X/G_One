@@ -1376,16 +1376,22 @@ class AskGoneTest {
     }
 
     @Test
-    void aYesThatAlsoAsksGOneIsAQuestionNotAConfirmation() {
+    void aYesThatAlsoAsksGOneConfirmsAndTheQuestionIsAnsweredPrivately() {
         toConfirming();
         llm.replyText(intent("pickup"));
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
 
         session(LegRole.BUYER).say("yes, and G-One what is the pickup?");
         executor.runAll();
         finishAll();
 
-        assertThat(lastDeal().buyerYes()).as("a mixed turn never counts as the yes").isFalse();
-        assertThat(spokenTo(buyer)).last().isEqualTo("Pickup: Monday at the farm.");
+        // The owner's rule since compound answers: the yes counts, and the question to G-One is still answered.
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).anySatisfy(d -> assertThat(d.buyerYes()).isTrue());
+        assertThat(spokenTo(buyer)).contains("Pickup: Monday at the farm.");
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class).subList(heard, eventsOf(ConsoleEvent.TurnHeard.class).size()))
+                .as("only the answer reaches the shared feed").extracting(ConsoleEvent.TurnHeard::text)
+                .containsExactly("yes");
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).noneMatch(e -> e.text().contains("pickup"));
     }
 
     @Test

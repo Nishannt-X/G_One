@@ -113,7 +113,8 @@ public final class ReplyGuard {
     /** A turn starting with or made of these asks something back, even without a question mark. */
     private static final Set<String> QUESTION = words("what", "why", "how", "who", "which", "when", "kya", "kyun", "kyon",
             "kaise", "kaun", "kitna", "kitne", "kab", "क्या", "क्यों", "कैसे", "कौन", "कितना", "कितने", "कब", "কী", "কি",
-            "কেন", "কীভাবে", "কে", "কত", "என்ன", "ஏன்", "எப்படி", "ಏನು", "ಯಾಕೆ", "ಹೇಗೆ");
+            "কেন", "কীভাবে", "কে", "কত", "কখন", "என்ன", "ஏன்", "எப்படி", "யார்", "எப்போது", "எவ்வளவு", "ಏನು", "ಯಾಕೆ",
+            "ಹೇಗೆ", "ಯಾರು", "ಯಾವಾಗ", "ಎಷ್ಟು");
     /** Honorifics and filler: never an answer on their own, except "जी" alone, which is a yes. */
     private static final Set<String> FILLER = words("जी", "ji", "jee", "sir", "saab", "sahab", "साहब", "साब", "bhai",
             "bhaiya", "भैया", "भाई", "didi", "दीदी", "madam", "मैडम", "plz", "arey", "are", "अरे", "toh", "to", "तो",

@@ -172,6 +172,29 @@ public final class CompoundReply {
         return p.answer() == Answer.YES && !p.termsStated();
     }
 
+    /**
+     * The words of a turn before its {@code remainder}, without the punctuation and joining words between them: "yes"
+     * from "yes, and G-One what is the pickup?". Empty when the remainder is not the end of the turn.
+     */
+    public static String answerOf(String text, String remainder) {
+        int at = text.lastIndexOf(remainder);
+        if (at <= 0) return "";
+        String out = text.substring(0, at);
+        while (true) {
+            String before = out;
+            out = out.replaceAll("[\\p{P}\\s]+$", "");
+            int space = Math.max(out.lastIndexOf(' '), -1);
+            String last = ReplyGuard.normalized(out.substring(space + 1));
+            if (space > 0 && (CONTRAST.contains(last) || AND.contains(last))) out = out.substring(0, space);
+            if (out.equals(before)) return out.strip();
+        }
+    }
+
+    /** True when the rest of a turn asks something or asks G-One to say something: a follow-up, not a statement. */
+    public static boolean followUp(String remainder) {
+        return ReplyGuard.asks(remainder) || ReplyGuard.tokens(remainder).stream().anyMatch(REQUEST::contains);
+    }
+
     /** No answer at the start of the turn. A question is a request of its own; anything else may need a model. */
     private static Parsed noLead(String text, ReplyGuard.Verdict whole) {
         List<String> clauses = clauses(text);

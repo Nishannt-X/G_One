@@ -256,7 +256,7 @@ class CompoundReplyTest {
             "62|ಹೌದು, ಅವರು ಯಾರು?|YES|false|false|ಅವರು ಯಾರು?",
             "63|ಹೌದು, ಆದರೆ ಯಾರಿಗೂ ಹೇಳಬೇಡಿ|NONE|true|false|",
             "64|ಹೌದು ಹಣ ಬಂದರೆ|NONE|true|false|",
-            "65|yes um well I think it is fine and please tell me who is coming?|NONE|true|false|please tell me who is coming?",
+            "65|yes um well I think it is fine and please tell me who is coming?|YES|false|false|please tell me who is coming?",
             "66|yes but I think perhaps if the buyer comes tomorrow we can talk|NONE|true|false|",
             "67|haan haan ji uh unka naam kya hai|YES|false|false|unka naam kya hai",
             "68|yes uh no wait|NONE|true|false|",
@@ -335,5 +335,49 @@ class CompoundReplyTest {
         if (answer == Answer.YES && !conditional && !terms) {
             assertThat(CompoundReply.confirmsDeal(turn)).as(turn + " confirms a read-back").isTrue();
         }
+    }
+
+    // ---- round 4: a small closed list of benign acceptance tails, and the qualified family still denied ----
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"sure thing", "ಹೌದು ಇಟ್ಕೊಳ್ಳಿ", "yes please proceed", "yes please", "yes pls", "yes kindly proceed",
+            "yes go ahead", "yes do it", "yes carry on", "yes sir", "yes madam", "haan ji", "haan saheb", "yes of course",
+            "yes absolutely", "yes fine", "yes good", "yes okay", "yes ok", "haan theek hai", "haan bilkul", "haan laga do",
+            "haan kar do", "haan rakh lo", "haan rakh lijiye", "haan rakh sakte hain", "ಹೌದು ಮಾಡಿ", "ಹೌದು ಆಗಲಿ",
+            "হ্যাঁ রাখতে পারেন", "হ্যাঁ রাখুন", "হ্যাঁ করুন", "হ্যাঁ ঠিক আছে", "ஆமா வைத்துக்கொள்ளுங்கள்", "ஆமா செய்யுங்கள்",
+            "ஆமா சரி", "yes I think it is fine", "yes well I think it is fine", "yes um okay", "haan ji bilkul theek hai sir",
+            "हाँ जी, ठीक है", "sure, go ahead please"})
+    void aBenignAcceptanceTailKeepsThePlainYes(String turn) {
+        expect(turn, Answer.YES, false, false, "");
+        assertThat(CompoundReply.consents(turn)).as(turn).isTrue();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {
+            "yes tomorrow", "yes on delivery", "yes after payment", "yes only if he pays", "yes but not today",
+            "haan kal", "haan delivery pe", "haan payment ke baad", "haan sirf agar woh de", "haan lekin aaj nahi",
+            "हाँ कल", "हाँ डिलीवरी पर", "हाँ पेमेंट के बाद", "हाँ सिर्फ़ अगर वो दें", "हाँ लेकिन आज नहीं",
+            "হ্যাঁ কাল", "হ্যাঁ ডেলিভারির সময়", "হ্যাঁ টাকা দেওয়ার পরে", "হ্যাঁ শুধু যদি দেয়", "হ্যাঁ কিন্তু আজ না",
+            "ஆமா நாளைக்கு", "ஆமா டெலிவரி போது", "ஆமா பணம் கொடுத்த பிறகு", "ஆமா கொடுத்தால் மட்டும்", "ஆமா ஆனா இன்று இல்லை",
+            "ಹೌದು ನಾಳೆ", "ಹೌದು ಡೆಲಿವರಿ ಆದಾಗ", "ಹೌದು ಹಣ ಕೊಟ್ಟ ನಂತರ", "ಹೌದು ಕೊಟ್ಟರೆ ಮಾತ್ರ", "ಹೌದು ಆದರೆ ಇವತ್ತು ಅಲ್ಲ",
+            // A benign tail never launders a qualification beside it.
+            "yes please, tomorrow", "sure thing, on delivery", "ಹೌದು ಇಟ್ಕೊಳ್ಳಿ ನಾಳೆ", "theek hai kal", "yes go ahead after payment",
+            "haan laga do kal", "yes fine but only if he pays", "yes I think it is fine tomorrow"})
+    void theQualifiedFamilyStillFailsClosed(String turn) {
+        Parsed p = CompoundReply.parse(turn);
+        assertThat(p.answer()).as(turn).isEqualTo(Answer.NONE);
+        assertThat(p.conditional()).as(turn).isTrue();
+        assertThat(CompoundReply.permitsYes(turn)).as(turn).isFalse();
+        assertThat(CompoundReply.consents(turn)).as(turn + ": never consent, whatever the lexicon says").isFalse();
+    }
+
+    @Test
+    void termsAndConservativeQuestionsStayAsTheyWere() {
+        assertThat(CompoundReply.parse("yes 4500 per quintal").termsStated()).isTrue();
+        assertThat(CompoundReply.confirmsDeal("yes please, 4500 per quintal")).isFalse();
+        assertThat(CompoundReply.parse("yes what happens if he refuses?").answer()).isEqualTo(Answer.NONE);
+        assertThat(CompoundReply.consents("unse baat karao")).as("a plain request to connect").isTrue();
+        assertThat(CompoundReply.consents("phone laga do, unka naam kya hai?")).isTrue();
+        assertThat(CompoundReply.consents("unse baat karao kal")).isFalse();
     }
 }

@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Reads a turn spoken while a yes or no question is pending as two parts: the answer to that question, and whatever
@@ -125,6 +126,31 @@ public final class CompoundReply {
     private static final Set<String> COURTESY = words("thanks", "thank", "you", "dhanyavaad", "dhanyawad", "dhanyavad",
             "shukriya", "namaste", "namaskar", "धन्यवाद", "शुक्रिया", "नमस्ते", "ধন্যবাদ", "নমস্কার", "நன்றி", "வணக்கம்",
             "ಧನ್ಯವಾದ", "ಧನ್ಯವಾದಗಳು", "ನಮಸ್ಕಾರ");
+    /**
+     * A small closed list of acceptance tails that never qualify a yes ("sure thing", "yes please proceed", "ಹೌದು
+     * ಇಟ್ಕೊಳ್ಳಿ", "I think it is fine"), matched as whole words or whole phrases. A clause with any other word stays
+     * default deny.
+     */
+    private static final Set<String> BENIGN = words("please", "pls", "plz", "kindly", "proceed", "thing", "sir", "madam",
+            "ji", "saheb", "sahab", "absolutely", "fine", "good", "okay", "ok", "bilkul", "theek", "i", "think", "it", "is",
+            "its", "it's", "well", "sure", "ಇಟ್ಕೊಳ್ಳಿ", "ಮಾಡಿ", "ಆಗಲಿ", "রাখুন", "করুন", "சரி", "செய்யுங்கள்",
+            "வைத்துக்கொள்ளுங்கள்");
+    private static final List<String> BENIGN_PHRASES = Stream.of("go ahead", "do it", "carry on", "of course",
+            "theek hai", "thik hai", "ठीक है", "laga do", "kar do", "rakh lo", "rakh lijiye", "rakh sakte hain",
+            "रख लो", "रख लीजिए", "रख सकते हैं", "कर दो", "लगा दो", "রাখতে পারেন", "ঠিক আছে", "i think it is fine",
+            "i think its fine").map(p -> " " + String.join(" ", ReplyGuard.tokens(p)) + " ")
+            .sorted(java.util.Comparator.comparingInt(String::length).reversed()).toList();
+
+    /** True when every word of the clause is a benign acceptance tail. */
+    private static boolean benign(List<String> t) {
+        String rest = " " + String.join(" ", t) + " ";
+        for (String phrase : BENIGN_PHRASES) {
+            while (rest.contains(phrase)) rest = rest.replace(phrase, " ");
+        }
+        return Arrays.stream(rest.strip().split(" +")).filter(w -> !w.isEmpty())
+                .allMatch(w -> BENIGN.contains(w) || ReplyGuard.answerOnly(w));
+    }
+
     /** A copula left over after an answer phrase ("रख सकते | हैं", "theek | hai na"): it says nothing more. */
     private static final Set<String> COPULA = words("hai", "hain", "ho", "hoon", "hun", "hu", "है", "हैं", "हो", "हूँ", "हूं",
             "ache", "আছে", "it", "is", "that");
@@ -289,6 +315,7 @@ public final class CompoundReply {
             return new Clause(Kind.FOLLOW_UP, false, restricted || t.stream().anyMatch(DEFER::contains), contrast);
         }
         if (restricted || figure) return new Clause(Kind.QUALIFIER, termWords, false, contrast);
+        if (benign(t)) return new Clause(Kind.SAME, false, false, contrast); // "sure thing", "please proceed"
         if (IDENTITY.matcher(String.join(" ", t)).matches() || ReplyGuard.asksToConnect(joined)) {
             return new Clause(Kind.SAME, false, false, contrast); // "main Suresh hoon", "phone laga do"
         }
@@ -310,6 +337,20 @@ public final class CompoundReply {
         // Words with no answer in them ("unse baat karao", "aap yaad rakhiyega") may still be a yes, read by a model or
         // as a request to connect; anything the words decided against, or that qualifies, never is.
         return !p.decided() && !p.conditional() && ReplyGuard.permitsYes(text);
+    }
+
+    /**
+     * Consent to an action such as calling the buyer: an unconditional yes by the parse, or a plain request to connect
+     * ("unse baat karao", "phone laga do, unka naam kya hai?") with nothing that qualifies it. The bare lexicon never
+     * decides alone: "yes tomorrow" reads as a yes word, but the parse qualifies it, so it is never consent.
+     */
+    public static boolean consents(String text) {
+        Parsed p = parse(text);
+        if (p.answer() == Answer.YES) return true;
+        if (p.conditional() || p.answer() == Answer.NO) return false;
+        List<String> clauses = clauses(text);
+        if (!clauses.isEmpty() && ReplyGuard.asksToConnect(clauses.get(0))) return true;
+        return !p.decided() && ReplyGuard.isConsent(text);
     }
 
     /**

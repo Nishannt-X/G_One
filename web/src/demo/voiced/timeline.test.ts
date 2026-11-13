@@ -81,6 +81,10 @@ describe('voiced sample timeline', () => {
     expect(early.deal).toMatchObject({ state: 'draft', price: null, farmerYes: false })
     expect(early.memory?.gists).toHaveLength(1)
     expect(callViewAt(sample, -1, 1_000, false).memory).toBeNull()
+    const confirmed = sample.beats.findIndex((b) => b.id === 'name-yes')
+    expect(callViewAt(sample, confirmed - 1, 1_000, false).memory).toBeNull()
+    expect(callViewAt(sample, confirmed, 1_000, false).memory?.gists).toHaveLength(1)
+    expect(callViewAt(sample, 0, 1_000, false).memory).toBeNull()
   })
 
   it('says the same amounts in every language', () => {

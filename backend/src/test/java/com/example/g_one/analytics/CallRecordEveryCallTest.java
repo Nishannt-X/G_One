@@ -333,6 +333,33 @@ class CallRecordEveryCallTest {
         assertThat(store.count()).isEqualTo(2);
     }
 
+    /** Ask G-One: a private question leaves no timing either, and a stated "name" that is a long number is dropped. */
+    @Test
+    void anAsideLeavesNoTimingAndANumberIsNeverKeptAsAStatedName() {
+        CallId c = CallId.of("call-aside");
+        LegId f = LegId.of("call-aside-f");
+        bus.publish(new ConsoleEvent.CallStarted(c, T0, "hi-IN"));
+        bus.publish(new ConsoleEvent.LegJoined(c, T0, f, LegRole.FARMER, LegSource.TWILIO, "hi-IN"));
+        bus.publish(new ConsoleEvent.MemoryLoaded(c, T0 + 10, FakeLeg.FARMER_KEY, false, List.of(), List.of()));
+        bus.publish(new ConsoleEvent.TurnHeard(c, T0 + 2000, f, LegRole.FARMER, "hi-IN", "CANARY-shared", T0 + 1000,
+                T0 + 1500));
+        bus.publish(new ConsoleEvent.TurnHeard(c, T0 + 4000, f, LegRole.FARMER, "hi-IN", "CANARY-aside", T0 + 3000,
+                T0 + 3500));
+        bus.publish(new ConsoleEvent.AsideAnswered(c, T0 + 4500, f, LegRole.FARMER, "hi-IN", "CANARY-aside",
+                "CANARY-answer", T0 + 3000));
+        bus.publish(new ConsoleEvent.ToolCalled(c, T0 + 5000, "save_profile_fact",
+                JSON.createObjectNode().put("field", "name").put("value", "98765 43210"), true, "x", 1));
+        bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.FARMER, "YES", T0 + 6000));
+        bus.publish(new ConsoleEvent.CallEnded(c, T0 + 6000, 6000, "hangup"));
+        CallRecord r = store.get("call-aside").orElseThrow();
+        JsonNode farmerSide = r.data().get("farmer");
+        assertThat(farmerSide.get("timings")).hasSize(1);
+        assertThat(farmerSide.get("timings").get(0).get("startedMs").asLong()).isEqualTo(T0 + 1000);
+        assertThat(farmerSide.has("statedName")).isFalse();
+        assertThat(r.farmerKey()).isEqualTo(FakeLeg.FARMER_KEY.value());
+        assertThat(r.data().toString()).doesNotContain("98765").doesNotContain("CANARY");
+    }
+
     @Test
     void theRetentionCapStillEvictsTheOldestRecordedCalls() {
         try (CallRecordStore small = new CallRecordStore("jdbc:sqlite::memory:", 2);

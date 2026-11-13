@@ -6,7 +6,7 @@ import com.example.g_one.agent.AgentBrain.Reply;
 import com.example.g_one.agent.AgentBrain.Speaker;
 import com.example.g_one.agent.closing.CallClosing;
 import com.example.g_one.agent.closing.ClosingLines;
-import com.example.g_one.agent.deal.ReplyGuard;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.language.LanguageFlow;
 import com.example.g_one.agent.language.LanguageLines;
 import com.example.g_one.agent.llm.ReasoningText;
@@ -666,11 +666,8 @@ public final class CallPipeline {
             }
             if (answering != null) {
                 // The farmer was answering the end-of-call question mediation asked them.
-                ReplyGuard.Reading reading = readYesNo(ClosingLines.ask(answering, ctx.language().code()), turn.text());
-                if (generation.get() != replyGeneration) {
-                    return;
-                }
-                closingStep(replyGeneration, closing.heard(LegRole.FARMER, reading));
+                answerClosing(replyGeneration, ctx, history, withLanguage(turn, ctx.language()),
+                        ClosingLines.ask(answering, ctx.language().code()));
                 return;
             }
             Turn heard = withLanguage(turn, ctx.language());
@@ -745,6 +742,8 @@ public final class CallPipeline {
             long turnGeneration;
             boolean wasSpeaking;
             Synthesis toCancel;
+            CallContext stepCtx;
+            List<Line> before;
             synchronized (lock) {
                 if (ended || context == null) {
                     return false;
@@ -768,6 +767,8 @@ public final class CallPipeline {
                     closing.turnTaken(LegRole.FARMER);
                     return false;
                 }
+                stepCtx = context;
+                before = List.copyOf(lines);
                 lines.add(new Line(Speaker.FARMER, turn.text()));
                 turnGeneration = generation.incrementAndGet();
                 wasSpeaking = speaking;
@@ -786,24 +787,49 @@ public final class CallPipeline {
             }
             CallClosing.Question question = answering;
             String asked = question == null ? "" : ClosingLines.ask(question, answerLanguage.code());
-            submit("closing", () -> {
-                ReplyGuard.Reading reading = readYesNo(asked, turn.text());
-                if (generation.get() != turnGeneration) {
-                    return; // a newer turn arrived while the answer was read; it is the one that counts
-                }
-                closingStep(turnGeneration, closing.heard(LegRole.FARMER, reading));
-            });
+            submit("closing", () -> answerClosing(turnGeneration, stepCtx, before, turn, asked));
             return true;
         }
 
-        /** The layered yes/no reading; on any failure, the words alone. */
-        private ReplyGuard.Reading readYesNo(String question, String reply) {
+        /**
+         * A turn heard while an end-of-call question waits: its answer (if any) is recorded, and anything else it said
+         * ("haan, but what was the price?") is answered by the brain before the next closing line. A turn that answers
+         * nothing but asks something is answered, then the question is asked once more; a second such turn ends the wait,
+         * so it never loops.
+         */
+        private void answerClosing(long turnGeneration, CallContext ctx, List<Line> history, Turn turn, String asked) {
+            CompoundReply.Parsed answer = readAnswer(asked, turn.text());
+            if (generation.get() != turnGeneration) {
+                return; // a newer turn arrived while the answer was read; it is the one that counts
+            }
+            // A question instead of an answer is asked once more, and a second one ends the wait (CallClosing#aside).
+            CallClosing.Step step = answer.answer() == CompoundReply.Answer.NONE && answer.hasRemainder()
+                    ? closing.aside(LegRole.FARMER) : closing.heard(LegRole.FARMER, answer.reading());
+            if (!answer.hasRemainder()) {
+                closingStep(turnGeneration, step);
+                return;
+            }
+            log.info("closing_compound call={} answer={} conditional={} remainder=true", callId, answer.answer(),
+                    answer.conditional());
+            Turn rest = withText(turn, answer.remainder());
+            Reply reply = askBrain("respond", () -> brain.respond(ctx, history, rest), ctx.language());
+            // The end of the call is decided here, never by this reply: it is said, then the next closing line.
+            Reply said = new Reply(reply.text(), reply.language(), false);
+            if (step.resumed()) {
+                deliver(turnGeneration, said); // "not yet": the answer itself carries the conversation on
+            } else {
+                deliver(turnGeneration, said, () -> closingStep(turnGeneration, step));
+            }
+        }
+
+        /** The layered reading of an answer and the rest of the turn; on any failure, the words alone. */
+        private CompoundReply.Parsed readAnswer(String question, String reply) {
             try {
-                ReplyGuard.Reading reading = brain.readYesNo(callId, question, reply);
-                return reading == null ? ReplyGuard.Reading.UNCLEAR : reading;
+                CompoundReply.Parsed answer = brain.readAnswer(callId, question, reply);
+                return answer == null ? CompoundReply.parse(reply) : answer;
             } catch (RuntimeException e) {
                 log.warn("Reading a yes or no failed on call {}; using the words alone", callId, e);
-                return ReplyGuard.read(reply);
+                return CompoundReply.parse(reply);
             }
         }
 

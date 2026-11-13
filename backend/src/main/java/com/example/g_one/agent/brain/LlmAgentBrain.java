@@ -1,6 +1,7 @@
 package com.example.g_one.agent.brain;
 
 import com.example.g_one.agent.AgentBrain;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.YesNoReader;
 import com.example.g_one.agent.llm.ChatClient;
@@ -110,6 +111,14 @@ public class LlmAgentBrain implements AgentBrain {
     private static final Pattern CALL_QUESTION = Pattern.compile("(?iu)कॉल|फ़ोन|फोन|जोड़|जोड|मिला|बात करा|\\bcall|connect|phone"
             + "|\\bdial|ফোন|কল|জুড়ে|কথা বলিয়ে|அழை|ಕರೆ");
     /** A quantity in a turn: a number or a unit. */
+    /** For the model, on a turn that said yes to calling the offered buyer and also said something else. */
+    static final String CONNECT_YES_AND_MORE = "The farmer's latest turn says yes to calling the buyer you offered and "
+            + "also asks or says something else. Call connect_buyer for that buyer now, and in the same short reply "
+            + "answer the rest of what they said.";
+    /** For the model, on a turn that did not answer "shall I call them?" but asked something instead. */
+    static final String CONNECT_STILL_OPEN = "The farmer has not yet answered whether to call the buyer you offered; "
+            + "their latest turn asks or says something else. Answer that briefly, then ask once more whether to call "
+            + "the buyer. Do not call connect_buyer on this turn.";
     private static final Pattern QUANTITY = Pattern.compile("(?iu)\\d|क्विंटल|quintal|किलो|kilo|\\bkg\\b|टन|\\btons?\\b|কুইন্টাল|কেজি"
             + "|तीन|चार|पाँच|पांच|दस|बीस|पचास|सौ|\\b(one|two|three|five|ten|twenty|fifty|hundred|teen|das|bees|pachas|sau)\\b");
     /** Six or more digits in a row (spaces and dashes allowed): what a phone number looks like. */
@@ -118,7 +127,6 @@ public class LlmAgentBrain implements AgentBrain {
     private static final Pattern ELSEWHERE = Pattern.compile("(?iu)निर्देशिका|डायरेक्टरी|directory|वेबसाइट|website|ऑनलाइन|online"
             + "|\\bapp\\b|ऐप|এপ|ওয়েবসাইট|অনলাইন|ডিরেক্টরি");
     /** Where the first clause of an answer ends: "हाँ, ...", "नहीं। ...". */
-    private static final Pattern LEAD = Pattern.compile("[,،।.!?;]\\s*");
     /** Languages with price wording in code. */
     private static final Set<String> WORDED = Set.of("hi", "en", "bn");
     private static final Set<String> NUMERIC_TOOLS = Set.of(ToolDiet.MANDI, ToolDiet.WEATHER, ToolDiet.FIND, ToolDiet.CONNECT);
@@ -224,7 +232,9 @@ public class LlmAgentBrain implements AgentBrain {
         CallMemo memo = memo(ctx.callId());
         Reply reply;
         try {
-            if (latest != null && !latest.text().isBlank()) consentHeard(ctx, past, latest);
+            memo.compoundYes = false;
+            memo.turnNote = null;
+            if (latest != null && !latest.text().isBlank()) consentHeard(ctx, past, latest, memo);
             reply = direct(ctx, past, latest, memo);
             if (reply != null) {
                 turn.handler = "local";
@@ -264,19 +274,38 @@ public class LlmAgentBrain implements AgentBrain {
         return yesNo.read(question, reply);
     }
 
+    @Override
+    public CompoundReply.Parsed readAnswer(CallId callId, String question, String reply) {
+        return yesNo.readCompound(question, reply);
+    }
+
     /**
      * Records whether this turn is the farmer's yes to calling a suggested buyer. Words decide first; only when buyers
      * were suggested and the last line asked something does an unclear reply get the layered reading.
      */
-    private void consentHeard(CallContext ctx, List<Line> past, Turn latest) {
+    private void consentHeard(CallContext ctx, List<Line> past, Turn latest, CallMemo memo) {
         String text = latest.text();
-        boolean yes = ReplyGuard.isConsent(text);
-        if (!yes && !consent.suggested(ctx.callId()).isEmpty() && !aboutBusiness(latest)) {
+        boolean suggested = !consent.suggested(ctx.callId()).isEmpty();
+        String asked = suggested ? lastQuestion(past) : "";
+        boolean pending = suggested && CALL_QUESTION.matcher(asked).find();
+        // "haan, but unka naam kya hai?": the yes counts, and the question is still answered by the model below.
+        CompoundReply.Parsed parsed = CompoundReply.parse(text);
+        // The parse decides: a lexicon yes beside a qualification ("yes tomorrow", "haan kal") is never consent.
+        boolean yes = CompoundReply.consents(text);
+        if (!yes && pending && !parsed.decided() && !aboutBusiness(latest)) {
             // Only an answer to "shall I call them?" is worth the small model call, never a new request.
-            String asked = lastQuestion(past);
-            if (CALL_QUESTION.matcher(asked).find()) yes = yesNo.read(asked, text) == ReplyGuard.Reading.YES;
+            yes = yesNo.read(asked, text) == ReplyGuard.Reading.YES;
         }
         consent.heard(ctx.callId(), text, yes);
+        if (!pending) return;
+        if (yes && parsed.hasRemainder()) {
+            memo.compoundYes = true;
+            memo.turnNote = CONNECT_YES_AND_MORE;
+        } else if (!yes && parsed.answer() == CompoundReply.Answer.NONE && parsed.hasRemainder() && !memo.connectReasked) {
+            // Not an answer: their words are answered, then the question is asked once more, never again after that.
+            memo.connectReasked = true;
+            memo.turnNote = CONNECT_STILL_OPEN;
+        }
     }
 
     /** What the assistant said last on this call, or empty. */
@@ -299,6 +328,8 @@ public class LlmAgentBrain implements AgentBrain {
     /** Questions with one truthful answer, answered without a model. Null when the model should take the turn. */
     private Reply direct(CallContext ctx, List<Line> past, Turn latest, CallMemo memo) {
         if (latest == null || latest.text().isBlank() || TurnIntent.noWords(latest.text())) return didNotHear(ctx, memo);
+        // A yes to calling the buyer that also asks something: the model takes both, so the yes is acted on.
+        if (memo.compoundYes) return null;
         Set<TurnIntent.Kind> intents = TurnIntent.of(latest.text());
         Language lang = ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages);
         if (intents.contains(TurnIntent.Kind.NAME_SOURCE)) {
@@ -334,8 +365,11 @@ public class LlmAgentBrain implements AgentBrain {
         Optional<String> given = TurnIntent.introducedName(text);
         boolean otherName = given.isPresent() && NameMatch.differs(given.get(), remembered);
         boolean business = aboutBusiness(latest) || TurnIntent.wantsConnection(text);
-        ReplyGuard.Reading answer = leadAnswer(text);
-        if (answer == ReplyGuard.Reading.UNCLEAR && !business && !otherName && !TurnIntent.deniesIdentity(text)) {
+        CompoundReply.Parsed parsed = CompoundReply.parse(text);
+        ReplyGuard.Reading answer = parsed.reading();
+        boolean qualified = parsed.decided() && parsed.conditional();
+        if (answer == ReplyGuard.Reading.UNCLEAR && !qualified && !business && !otherName
+                && !TurnIntent.deniesIdentity(text)) {
             answer = yesNo.read(lastAssistantLine(past), text);
         }
         if (answer == ReplyGuard.Reading.NO || TurnIntent.deniesIdentity(text) || otherName) {
@@ -352,22 +386,12 @@ public class LlmAgentBrain implements AgentBrain {
             String welcome = local.greeting(lang.code(), remembered);
             return continueHeld(ctx, past, latest, memo, welcome.substring(0, firstSentenceEnd(welcome)), lang, turn);
         }
-        if (!business) return null;
-        if (memo.held == null) memo.held = text;
+        // "haan kal", "yes tomorrow": a qualified yes never unlocks memory, and no model is asked to read it as one.
+        if (!business && !qualified) return null;
+        if (business && memo.held == null) memo.held = text;
         turn.handler = "local";
         if (memo.nameChecksAsked++ == 0) return local(local.line(lang.code(), "nameCheckFirst", remembered), lang);
         return otherSpeaker(ctx, past, latest, memo, Optional.empty(), false, lang, turn);
-    }
-
-    /** The reading of an answer, or of its first clause when the rest goes on ("हाँ, मैं सुरेश हूँ। प्याज़ का क्या हुआ?"). */
-    private static ReplyGuard.Reading leadAnswer(String text) {
-        ReplyGuard.Verdict whole = ReplyGuard.verdict(text);
-        if (whole.reading() != ReplyGuard.Reading.UNCLEAR) return whole.reading();
-        String[] parts = LEAD.split(text.strip(), 2);
-        if (parts.length < 2 || parts[0].isBlank()) return ReplyGuard.Reading.UNCLEAR;
-        ReplyGuard.Reading lead = ReplyGuard.read(parts[0]);
-        if (lead == ReplyGuard.Reading.YES && ReplyGuard.read(parts[1]) == ReplyGuard.Reading.NO) return ReplyGuard.Reading.UNCLEAR;
-        return lead;
     }
 
     /** Records the name check answer through {@code confirm_name}, so the console shows it like any tool call. */
@@ -947,6 +971,8 @@ public class LlmAgentBrain implements AgentBrain {
             memory += nameKnown ? " Their own name from this call is statedThisCall.name; use only that one."
                     : " Their name is unknown; do not ask for it again.";
         }
+        String note = memo.turnNote;
+        if (note != null) memory += " " + note;
         return system.render(Map.of(
                 "language", ctx.language().label(),
                 "lastturn", written(ReplyLanguage.ofTurn(latest.text(), ctx.language(), languages)),
@@ -1081,6 +1107,12 @@ public class LlmAgentBrain implements AgentBrain {
         /** The crop named on this call, which wins over the remembered one. */
         volatile String crop;
         volatile int nameChecksAsked;
+        /** A line about this turn for the system prompt (a compound answer to "shall I call them?"); null for none. */
+        volatile String turnNote;
+        /** This turn said yes to calling the buyer and also asked something. */
+        volatile boolean compoundYes;
+        /** The call question was already asked once more after a turn that did not answer it. */
+        volatile boolean connectReasked;
         volatile boolean quantityHeard;
         /** The console no longer shows the remembered profile as this caller's. */
         volatile boolean memoryHidden;

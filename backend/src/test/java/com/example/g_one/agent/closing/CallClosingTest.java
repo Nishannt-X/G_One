@@ -190,4 +190,25 @@ class CallClosingTest {
         assertThat(fixed.languages()).contains("hi-IN", "en-IN", "hi-en", "bn-IN", "bn-en", "ta-IN", "kn-IN");
         assertThat(ClosingLines.ask(Question.END, "en-IN")).isEqualTo("Would you like to end the call? Please say yes or no.");
     }
+
+    @org.junit.jupiter.api.Test
+    void aQuestionInsteadOfAnAnswerIsAskedOnceMoreThenTheWaitEnds() {
+        CallClosing c = new CallClosing(false);
+        c.start();
+        CallClosing.Step first = c.aside(LegRole.FARMER);
+        org.assertj.core.api.Assertions.assertThat(first.asks()).singleElement()
+                .satisfies(a -> org.assertj.core.api.Assertions.assertThat(a.question()).isEqualTo(CallClosing.Question.END));
+        // An unclear answer after it still gets its own one re-ask.
+        org.assertj.core.api.Assertions.assertThat(c.heard(LegRole.FARMER, "hmm").asks()).hasSize(1);
+        CallClosing.Step second = c.aside(LegRole.FARMER);
+        org.assertj.core.api.Assertions.assertThat(second.resumed()).as("not ready to end: never asked for ever").isTrue();
+
+        CallClosing save = new CallClosing(false);
+        save.start();
+        save.heard(LegRole.FARMER, "haan");
+        save.aside(LegRole.FARMER);
+        org.assertj.core.api.Assertions.assertThat(save.aside(LegRole.FARMER).consent()).containsEntry(LegRole.FARMER,
+                CallClosing.Consent.NONE);
+        org.assertj.core.api.Assertions.assertThat(new CallClosing(false).aside(LegRole.FARMER).asks()).isEmpty();
+    }
 }

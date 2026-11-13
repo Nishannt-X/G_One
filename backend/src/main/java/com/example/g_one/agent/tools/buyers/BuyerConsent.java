@@ -1,6 +1,6 @@
 package com.example.g_one.agent.tools.buyers;
 
-import com.example.g_one.agent.deal.ReplyGuard;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.core.CallId;
 import java.util.List;
 import java.util.Map;
@@ -31,18 +31,19 @@ public class BuyerConsent {
 
     /** The farmer finished a turn. The brain calls this before the model runs. */
     public void heard(CallId callId, String farmerTurn) {
-        heard(callId, farmerTurn, ReplyGuard.isConsent(farmerTurn));
+        heard(callId, farmerTurn, CompoundReply.consents(farmerTurn));
     }
 
     /**
      * The farmer finished a turn that was already read: {@code yes} is the layered reading of an explicit yes. A turn
-     * that {@link ReplyGuard#permitsYes} vetoes is never a yes, whatever {@code yes} says.
+     * that {@link CompoundReply#permitsYes} vetoes (a condition, doubt, a no) is never a yes, whatever {@code yes} says;
+     * a yes followed by a question ("haan, but unka naam kya hai?") still is one.
      */
     public void heard(CallId callId, String farmerTurn, boolean yes) {
         Call c = call(callId);
         synchronized (c) {
             c.turn++;
-            c.yes = yes && ReplyGuard.permitsYes(farmerTurn);
+            c.yes = yes && (CompoundReply.permitsYes(farmerTurn) || CompoundReply.consents(farmerTurn));
         }
     }
 

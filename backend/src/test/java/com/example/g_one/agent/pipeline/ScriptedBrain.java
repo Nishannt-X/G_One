@@ -66,6 +66,22 @@ final class ScriptedBrain implements AgentBrain {
         return modelReads.apply(reply);
     }
 
+    @Override
+    public com.example.g_one.agent.deal.CompoundReply.Parsed readAnswer(com.example.g_one.core.CallId callId,
+                                                                        String question, String reply) {
+        yesNoQuestions.add(question);
+        // The contract of the real reader: words first, and only a turn they cannot settle reaches a model.
+        var words = com.example.g_one.agent.deal.CompoundReply.parse(reply);
+        if (words.decided() || modelReads == null) return words;
+        var reading = modelReads.apply(reply);
+        var answer = switch (reading) {
+            case YES -> com.example.g_one.agent.deal.CompoundReply.Answer.YES;
+            case NO -> com.example.g_one.agent.deal.CompoundReply.Answer.NO;
+            case UNCLEAR -> com.example.g_one.agent.deal.CompoundReply.Answer.NONE;
+        };
+        return new com.example.g_one.agent.deal.CompoundReply.Parsed(answer, false, false, "", true);
+    }
+
     static String replyTo(String turn) {
         return "reply to " + turn;
     }

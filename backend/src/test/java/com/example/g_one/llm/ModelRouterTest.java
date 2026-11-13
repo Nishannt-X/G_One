@@ -94,6 +94,74 @@ class ModelRouterTest {
     private static final ChatRequest REQUEST = ChatRequest.of(List.of(ChatMessage.user("hello")), List.of());
 
     @Test
+    void mixedBrainRoutesPlainOnlyAndSkipsItsBudget() {
+        GOneProperties.Llm cfg = new GOneProperties.Llm("http://gemini", "gemini-key", "gemini", 5, "",
+                List.of(), List.of(), 0, "", "", List.of(), "http://plain", "plain-key",
+                List.of("fast"), 300);
+        ModelRouter r = new ModelRouter(cfg, clock::get, ms -> sleeps.add(ms));
+        assertThat(r.chain(ModelRouter.Task.CHAT, true)).containsExactly("fast", "gemini");
+        assertThat(r.chain(ModelRouter.Task.CHAT, false)).containsExactly("gemini");
+        assertThat(r.chain(ModelRouter.Task.NUMERIC, true)).containsExactly("gemini");
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, true, 250, s -> s.model())).isEqualTo("fast");
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, true, 250, s -> s.model())).isEqualTo("gemini");
+        assertThat(sleeps).isEmpty();
+    }
+
+    @Test
+    void mixedEndpointsKeepKeysSeparateAndFallBackAfterFailures() throws IOException {
+        HttpServer plain = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        List<String> plainAuth = new CopyOnWriteArrayList<>();
+        List<String> primaryAuth = new CopyOnWriteArrayList<>();
+        List<Integer> statuses = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(200, 429, 500, 201, 202));
+        plain.createContext("/chat/completions", x -> {
+            plainAuth.add(x.getRequestHeaders().getFirst("Authorization"));
+            int status = statuses.remove(0);
+            if (status == 202) {
+                try { Thread.sleep(1_500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                status = 200;
+            }
+            String value = status == 201 ? "{\"choices\":[{\"message\":{\"content\":\"\"}}]}" : status == 200 ? """
+                    {"choices":[{"message":{"content":"plain"}}]}
+                    """ : "{}";
+            byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+            x.sendResponseHeaders(status, bytes.length);
+            try { x.getResponseBody().write(bytes); } catch (IOException ignored) { }
+            x.close();
+        });
+        plain.start();
+        try {
+            server.removeContext("/chat/completions");
+            server.createContext("/chat/completions", x -> {
+                primaryAuth.add(x.getRequestHeaders().getFirst("Authorization"));
+                byte[] bytes = "{\"choices\":[{\"message\":{\"content\":\"gemini\"}}]}".getBytes(StandardCharsets.UTF_8);
+                x.sendResponseHeaders(200, bytes.length);
+                x.getResponseBody().write(bytes);
+                x.close();
+            });
+            GOneProperties.Llm cfg = new GOneProperties.Llm("http://127.0.0.1:" + server.getAddress().getPort(),
+                    "gemini-key", "gemini", 1, "", List.of(), List.of(), 0, "", "", List.of(),
+                    "http://127.0.0.1:" + plain.getAddress().getPort(), "plain-key", List.of("fast"), 8000);
+            GOneProperties props = new GOneProperties(List.of(), "", null, null, cfg);
+            ChatClient chat = new ChatClient(props, JSON);
+            assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("fast");
+            assertThat(chat.complete(REQUEST.numeric()).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(new ChatRequest(REQUEST.messages(), List.of(), 0.3, 300,
+                    ModelRouter.Task.CHAT)).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("gemini");
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(2);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(3);
+            for (int i = 0; i < 3; i++) {
+                ChatClient fresh = new ChatClient(props, JSON);
+                assertThat(fresh.complete(REQUEST).usage().model()).isEqualTo("gemini");
+            }
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(5);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(6);
+        } finally {
+            plain.stop(0);
+        }
+    }
+
+    @Test
     void aRateLimitedModelFallsToTheNextAndIsNotAskedDuringItsCooldown() {
         ModelRouter r = router(0);
         List<String> tried = new ArrayList<>();

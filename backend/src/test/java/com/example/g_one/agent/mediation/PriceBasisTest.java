@@ -122,4 +122,14 @@ class PriceBasisTest {
         assertThat(PriceBasis.priceStatement("acha, theek hai", "hi-IN")).isFalse();
         assertThat(PriceBasis.priceStatement("mere paas 10 quintal hai", "hi-IN")).isFalse();
     }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.CsvSource(delimiter = '|', value = {
+            "ab sirf paanch kilo hai|hi-IN|true", "nahi, ab 5 kilo|hi-IN|true", "do hazaar chahiye|hi-IN|true",
+            "अब सिर्फ़ पाँच किलो है|hi-IN|true", "ab pyaz nahi, aloo dunga|hi-IN|true", "I want 2000 rupees|en-IN|true",
+            "nahi|hi-IN|false", "haan theek hai|hi-IN|false", "G-One, what is the mandi rate?|en-IN|false",
+            "G-One, how much did I say I have?|en-IN|false", "acha|hi-IN|false"})
+    void aFarmerTurnTouchesTheTermsOnlyWithFiguresOrAStatedPriceOrCrop(String text, String code, boolean touches) {
+        assertThat(PriceBasis.mentionsTerms(text, code)).as(text).isEqualTo(touches);
+    }
 }

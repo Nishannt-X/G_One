@@ -6,6 +6,7 @@ import com.example.g_one.agent.closing.CallClosing;
 import com.example.g_one.agent.closing.ClosingLines;
 import com.example.g_one.agent.deal.DealDesk;
 import com.example.g_one.agent.deal.Offer;
+import com.example.g_one.agent.deal.CompoundReply;
 import com.example.g_one.agent.deal.ReplyGuard;
 import com.example.g_one.agent.deal.Terms;
 import com.example.g_one.agent.language.LanguageFlow;
@@ -335,8 +336,7 @@ public final class MediationSession {
         long heardAt = clock.millis();
         enqueue(() -> {
             if (askingBuyer()) {
-                recordHeard(current, heardAt);
-                buyerAnswered(current);
+                buyerAnswered(current, heardAt);
             } else if (live()) {
                 process(current, n, heardAt);
             } else {
@@ -369,8 +369,24 @@ public final class MediationSession {
         }
     }
 
-    private void buyerAnswered(Turn turn) {
-        ReplyGuard.Reading reading = ReplyGuard.read(turn.text());
+    /**
+     * The buyer's answer to "may I connect you to the farmer?". A yes with a question ("haan, kitna maal hai?") joins the
+     * buyer and the question is answered privately; a question instead of an answer is answered, then asked once more
+     * (the one re-ask), after which no answer declines as before. Only the answer reaches the shared record.
+     */
+    private void buyerAnswered(Turn turn, long heardAt) {
+        CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+        Turn question = null;
+        if (parsed.hasRemainder() && (parsed.answer() == CompoundReply.Answer.NONE
+                || CompoundReply.followUp(parsed.remainder()))) {
+            String answer = parsed.answer() == CompoundReply.Answer.NONE ? ""
+                    : CompoundReply.answerOf(turn.text(), parsed.remainder());
+            if (!answer.isBlank()) recordHeard(withText(turn, answer), heardAt);
+            question = withText(turn, parsed.remainder());
+        } else {
+            recordHeard(turn, heardAt);
+        }
+        ReplyGuard.Reading reading = parsed.reading();
         String buyerCode = buyer.language().code();
         if (reading == ReplyGuard.Reading.YES) {
             Language farmerCode = language(LegRole.FARMER);
@@ -393,9 +409,13 @@ public final class MediationSession {
             bus.publish(new ConsoleEvent.AssistantSaid(callId, clock.millis(), farmer.farmerLeg().id(),
                     LegRole.FARMER, farmerCode.code(), joined));
             side.note(Speaker.ASSISTANT, joined);
-            if (live()) sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
+            if (live()) {
+                sayAssistant(LegRole.BUYER, lines.get("buyerAccepted", buyerCode), false, null);
+                if (question != null) aside(question, "compound");
+            }
             return;
         }
+        if (question != null) aside(question, "compound");
         boolean retry;
         synchronized (lock) {
             if (phase != Phase.ASKING || buyerLegEnded) return;
@@ -440,10 +460,48 @@ public final class MediationSession {
         // "no", and "yes, and G-One what..." is not a "yes".
         ReplyGuard.Reading quick = !named && turn.text().strip().split("[\\s,.!?।]+").length <= SHORT_REPLY_WORDS
                 ? ReplyGuard.read(turn.text()) : ReplyGuard.Reading.UNCLEAR;
+        // The lexicon's short yes or no counts only when the compound parse agrees: "yes tomorrow" is no answer.
+        CompoundReply.Parsed words = CompoundReply.parse(turn.text());
+        if (quick != ReplyGuard.Reading.UNCLEAR && (words.conditional() || words.reading() != quick)) {
+            quick = ReplyGuard.Reading.UNCLEAR;
+        }
         if (closingTurn(turn, heardAt, named)) return;
         LegRole listener = speaker.other();
         Language to = language(listener);
         var awaiting = desk.awaiting(speaker);
+        if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent()) {
+            CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+            if (!named && (parsed.termsStated()
+                    || (parsed.conditional() && PriceBasis.mentionsTerms(turn.text(), language(speaker).code())))) {
+                // "theek hai lekin 4500 mein", "4500 mein theek hai": other terms are a counter offer, never a yes. The
+                // read-back of the old terms is void, and the turn goes on like any other: translated, its amount read,
+                // held for a basis when the buyer gave none, and any older held amount replaced.
+                log.info("readback_counter call={} role={}", callId, speaker.wire());
+                desk.heard(speaker, DealDesk.Heard.CHANGED, n, turn.startedMs());
+                awaiting = desk.awaiting(speaker);
+                quick = ReplyGuard.Reading.UNCLEAR;
+            } else if (parsed.answer() != CompoundReply.Answer.NONE && !parsed.conditional() && !parsed.termsStated()
+                    && parsed.hasRemainder() && (named || CompoundReply.followUp(parsed.remainder()))) {
+                // Never with a price or another term beside the yes: that turn is not a confirmation, even said to G-One.
+                // "yes, but who is he?": the answer goes to the read-back, the question to G-One alone. Only the answer
+                // reaches the shared record; the question is classified as private before any shared sink sees it.
+                String answered = CompoundReply.answerOf(turn.text(), parsed.remainder());
+                if (!answered.isBlank()) recordHeard(withText(turn, answered), heardAt);
+                aside(withText(turn, parsed.remainder()), "compound");
+                desk.heard(speaker, parsed.answer() == CompoundReply.Answer.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO,
+                        n, turn.startedMs());
+                return;
+            } else if (!named && parsed.decided() && (parsed.conditional()
+                    || (parsed.answer() == CompoundReply.Answer.NONE && quick != ReplyGuard.Reading.UNCLEAR))) {
+                // Default deny: "yes tomorrow", "yes on delivery", "हाँ कल तक" qualify the yes, so the read-back is
+                // asked again. Decided by words, so it never reaches a model that could read it as a yes.
+                recordHeard(turn, heardAt);
+                desk.heard(speaker, DealDesk.Heard.UNCLEAR, n, turn.startedMs());
+                return;
+            }
+            // Only the parsed answer can confirm: a short turn the plain lexicon calls a yes is no longer enough.
+            if (parsed.answer() == CompoundReply.Answer.NONE || parsed.conditional()) quick = ReplyGuard.Reading.UNCLEAR;
+        }
         if (awaiting.filter(a -> a == DealDesk.Awaiting.CONFIRM).isPresent() && quick != ReplyGuard.Reading.UNCLEAR) {
             recordHeard(turn, heardAt);
             desk.heard(speaker, quick == ReplyGuard.Reading.YES ? DealDesk.Heard.YES : DealDesk.Heard.NO, n, turn.startedMs());
@@ -732,13 +790,34 @@ public final class MediationSession {
         return "Please say the full price again in rupees, and whether it is a total or per kilo or per quintal.";
     }
 
+    private static Turn withText(Turn t, String text) {
+        return new Turn(t.legId(), t.role(), t.language(), text, t.startedMs(), t.endedMs());
+    }
+
     /** A model's yes counts only when the words pass the guard; the code's own reading comes first. */
     private static DealDesk.Heard guarded(DealDesk.Heard model, ReplyGuard.Reading quick, String text, boolean awaited) {
         if (!awaited) return DealDesk.Heard.NONE;
         if (quick == ReplyGuard.Reading.YES) return DealDesk.Heard.YES;
         if (quick == ReplyGuard.Reading.NO) return DealDesk.Heard.NO;
-        if (model == DealDesk.Heard.YES) return ReplyGuard.permitsYes(text) ? DealDesk.Heard.YES : DealDesk.Heard.UNCLEAR;
+        if (model == DealDesk.Heard.YES) return CompoundReply.permitsYes(text) ? DealDesk.Heard.YES : DealDesk.Heard.UNCLEAR;
         return model;
+    }
+
+    /**
+     * A farmer turn that touches the deal's terms (a number, a unit, money, a price word or a crop) makes the buyer's
+     * held amount stale, wherever the turn is taken: the normal relay, the end-of-call check or a private question to
+     * G-One. The amount is dropped and the buyer is told once. A plain yes or no, or a private question without any of
+     * these, keeps it. True when an amount was dropped.
+     */
+    private boolean dropHeldOnFarmerTerms(Turn turn) {
+        if (turn.role() != LegRole.FARMER || pendingBasis == null) return false;
+        String code = language(LegRole.FARMER).code();
+        if (!PriceBasis.mentionsTerms(turn.text(), code)) return false;
+        pendingBasis = null;
+        boolean priced = PriceBasis.priceStatement(turn.text(), code);
+        sayAssistant(LegRole.BUYER, priced ? farmerPriced(language(LegRole.BUYER))
+                : farmerChangedTerms(language(LegRole.BUYER)), false, null);
+        return true;
     }
 
     /** The listener learns the turn and its terms only once it played to the end on their leg. */
@@ -767,6 +846,7 @@ public final class MediationSession {
      */
     private void aside(Turn turn, String detectedBy) {
         LegRole asker = turn.role();
+        dropHeldOnFarmerTerms(turn);
         Language lang = language(asker);
         long started = clock.millis();
         AskGone.Answer answer = ask.answer(asker, ScamPatterns.masked(turn.text()), ledger.askedBefore(asker));
@@ -990,21 +1070,35 @@ public final class MediationSession {
     private boolean closingTurn(Turn turn, long heardAt, boolean named) {
         CallClosing closing = side.closing();
         LegRole speaker = turn.role();
-        if (closing.active() && named) {
-            // A question for G-One during the check: answered privately, never taken as the answer, and the pending
-            // question is asked once more on a fresh token, which neither counts as nor uses up the re-ask.
-            aside(turn, "name");
-            closing.repeat(speaker).ifPresent(ask -> sayClosing(ask.role(),
-                    ClosingLines.ask(ask.question(), language(ask.role()).code()), o -> waitForAnswer(ask.role(), ask.token())));
-            return true;
-        }
-        if (closing.active()) {
-            recordHeard(turn, heardAt);
-            closingStep(closing.heard(speaker, turn.text()));
-            return true;
-        }
         boolean deskIdle = desk.awaiting(LegRole.FARMER).isEmpty() && desk.awaiting(LegRole.BUYER).isEmpty();
-        if (deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text())) {
+        boolean starts = deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text());
+        // Taken here, the turn never reaches the relay's check: a term it changes still drops the buyer's held amount.
+        if (closing.active() || starts) dropHeldOnFarmerTerms(turn);
+        if (closing.active()) {
+            // Words only here: a turn during the check costs no model call beyond a private answer.
+            CompoundReply.Parsed parsed = CompoundReply.parse(turn.text());
+            boolean answered = parsed.answer() != CompoundReply.Answer.NONE;
+            if (named || (parsed.hasRemainder() && (!answered || CompoundReply.followUp(parsed.remainder())))) {
+                // A question for G-One during the check ("G-One, ...", "haan, lekin kitna maal tha?"): the answer, if
+                // any, is recorded and only it reaches the shared record; the question is answered privately. A turn
+                // that answered nothing is asked once more, and a second such question ends the wait (CallClosing#aside),
+                // so a party who keeps asking is never asked for ever.
+                Turn question = turn;
+                if (answered && parsed.hasRemainder()) {
+                    String answer = CompoundReply.answerOf(turn.text(), parsed.remainder());
+                    if (!answer.isBlank()) recordHeard(withText(turn, answer), heardAt);
+                    question = withText(turn, parsed.remainder());
+                }
+                aside(question, named ? "name" : "compound");
+                closingStep(answered && parsed.hasRemainder() ? closing.heard(speaker, parsed.reading())
+                        : closing.aside(speaker));
+                return true;
+            }
+            recordHeard(turn, heardAt);
+            closingStep(closing.heard(speaker, parsed.reading()));
+            return true;
+        }
+        if (starts) {
             recordHeard(turn, heardAt);
             closingStep(closing.start());
             return true;

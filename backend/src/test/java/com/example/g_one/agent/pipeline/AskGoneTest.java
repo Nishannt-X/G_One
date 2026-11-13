@@ -705,6 +705,52 @@ class AskGoneTest {
         assertThat(lastDeal().quantity()).isEqualTo("10 kg");
     }
 
+    // ---- a held amount and a farmer turn the end-of-call check or a private aside takes ----
+
+    @Test
+    void aFarmersTermChangeDuringTheEndOfCallCheckDropsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        session(LegRole.FARMER).say("bas itna hi");
+        executor.runAll();
+        finishAll();
+        // "No, not yet: it is only 5 kg now": the closing check takes the turn, and the amount must not survive it.
+        session(LegRole.FARMER).say("nahi, ab sirf paanch kilo hai");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null);
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("The farmer changed the terms"))).hasSize(1);
+    }
+
+    @Test
+    void aFarmersPrivateTurnThatChangesATermDropsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("G-One, ab mere paas sirf 5 kilo hai, usse bata do");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null);
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("The farmer changed the terms"))).hasSize(1);
+    }
+
+    @Test
+    void aPlainYesDuringTheEndOfCallCheckKeepsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        session(LegRole.FARMER).say("bas itna hi");
+        executor.runAll();
+        finishAll();
+        session(LegRole.FARMER).say("nahi");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).noneMatch(l -> l.startsWith("The farmer changed the terms"));
+        buyerAnswers("total");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+    }
+
     @Test
     void theClarificationIsAskedAtMostTwiceThenTheBuyerRestatesThePrice() {
         buyerJoinsAndAgrees("10 kg");
@@ -1330,16 +1376,89 @@ class AskGoneTest {
     }
 
     @Test
-    void aYesThatAlsoAsksGOneIsAQuestionNotAConfirmation() {
+    void aYesThatAlsoAsksGOneConfirmsAndTheQuestionIsAnsweredPrivately() {
         toConfirming();
         llm.replyText(intent("pickup"));
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
 
         session(LegRole.BUYER).say("yes, and G-One what is the pickup?");
         executor.runAll();
         finishAll();
 
-        assertThat(lastDeal().buyerYes()).as("a mixed turn never counts as the yes").isFalse();
-        assertThat(spokenTo(buyer)).last().isEqualTo("Pickup: Monday at the farm.");
+        // The owner's rule since compound answers: the yes counts, and the question to G-One is still answered.
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).anySatisfy(d -> assertThat(d.buyerYes()).isTrue());
+        assertThat(spokenTo(buyer)).contains("Pickup: Monday at the farm.");
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class).subList(heard, eventsOf(ConsoleEvent.TurnHeard.class).size()))
+                .as("only the answer reaches the shared feed").extracting(ConsoleEvent.TurnHeard::text)
+                .containsExactly("yes");
+        assertThat(eventsOf(ConsoleEvent.TurnTranslated.class)).noneMatch(e -> e.text().contains("pickup"));
+    }
+
+    @Test
+    void aFarmerWhoKeepsAskingGOneDuringTheEndOfCallCheckIsAskedOnceMoreThenTheCallGoesOn() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        String endQuestion = ClosingLines.ask(CallClosing.Question.END, FakeLeg.HINDI.code());
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("G-One, kitna maal bataya tha maine?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer).stream().filter(endQuestion::equals)).as("answered, then asked once more").hasSize(2);
+        llm.replyText(intent("pickup"));
+        session(LegRole.FARMER).say("G-One, pickup kab hai?");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("pickup"));
+        session(LegRole.FARMER).say("G-One, aur payment kab?");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer).stream().filter(endQuestion::equals)).as("never asked for ever").hasSize(2);
+        assertThat(spokenTo(farmer)).contains(ClosingLines.carryOn(FakeLeg.HINDI.code()));
+        assertThat(farmer.isEnded()).isFalse();
+    }
+
+    @Test
+    void aYesToEndingWithAQuestionToGOneIsRecordedAndAnsweredPrivately() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        int heard = eventsOf(ConsoleEvent.TurnHeard.class).size();
+        llm.replyText(intent("pickup"));
+        session(LegRole.BUYER).say("yes, and G-One what is the pickup?");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last().satisfies(e -> {
+            assertThat(e.role()).isEqualTo(LegRole.BUYER);
+            assertThat(e.question()).contains("what is the pickup");
+        });
+        assertThat(eventsOf(ConsoleEvent.TurnHeard.class).subList(heard, eventsOf(ConsoleEvent.TurnHeard.class).size()))
+                .extracting(ConsoleEvent.TurnHeard::text).containsExactly("yes");
+        session(LegRole.FARMER).say("haan");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).as("both said yes: the save question follows")
+                .contains(ClosingLines.ask(CallClosing.Question.SAVE, FakeLeg.ENGLISH.code()));
+    }
+
+    @Test
+    void aFarmersYesToEndingWithAPlainQuestionIsRecordedAndAnswered() {
+        buyerJoinsAndAgrees();
+        session(LegRole.FARMER).say("bye");
+        executor.runAll();
+        finishAll();
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("haan, lekin kitna maal tha?");
+        executor.runAll();
+        finishAll();
+        assertThat(eventsOf(ConsoleEvent.AsideAnswered.class)).last()
+                .satisfies(e -> assertThat(e.question()).isEqualTo("kitna maal tha?"));
+        session(LegRole.BUYER).say("yes");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(farmer)).contains(ClosingLines.ask(CallClosing.Question.SAVE, FakeLeg.HINDI.code()));
     }
 
     @Test

@@ -19,7 +19,7 @@ import {
   type Outcome,
 } from '../lib/analytics'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
-import { duration, languageLabel, millis, rupees } from '../lib/format'
+import { dealPrice, duration, languageLabel, millis } from '../lib/format'
 import { ArrowIcon, LockIcon, TrashIcon } from '../ui/icons'
 import { Card, Dialog, Empty, ErrorNote, Skeleton } from '../ui/parts'
 
@@ -47,7 +47,7 @@ function pairLabel(languages: CallSummary['languages']): string {
 function dealLine(deal: CallSummary['deal']): string {
   if (!deal) return ''
   const crop = [deal.variety, deal.commodity].filter(Boolean).join(' ')
-  const parts = [crop, deal.quantity, deal.price !== null ? `${rupees(deal.price)}${deal.unit ? `/${deal.unit}` : ''}` : null, deal.market]
+  const parts = [crop, deal.quantity, deal.price !== null ? dealPrice(deal.price, deal.unit, '/') : null, deal.market]
   return parts.filter(Boolean).join(' · ')
 }
 

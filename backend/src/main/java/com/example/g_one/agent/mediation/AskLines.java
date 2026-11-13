@@ -69,7 +69,9 @@ final class AskLines {
                     f.otherName() != null ? f.otherName() : line("askAFarmer", code))));
             case VALUE -> {
                 BigDecimal value = f.value();
-                if (value == null) {
+                if ("total".equals(f.unit())) {
+                    out.add(price(f, code));
+                } else if (value == null) {
                     out.add(f.price() == null ? price(f, code) : quantity(f, code));
                 } else {
                     out.add(fill("askValue", code, Map.of("quantity", CropNames.quantity(f.quantity(), code),
@@ -116,6 +118,15 @@ final class AskLines {
 
     private static String price(AskDigest.Facts f, String code) {
         if (f.price() == null) return line("askNoPrice", code);
+        if ("total".equals(f.unit())) {
+            String amount = SpokenNumbers.words(f.price(), code);
+            if (code.startsWith("hi")) return "पूरे माल का कुल भाव " + amount + " रुपये था।"
+                    + (f.priceState() == AskDigest.PriceState.CLOSED ? " यह प्रस्ताव अब खुला नहीं है।" : "");
+            if (code.startsWith("bn")) return "পুরো মালটির মোট দাম " + amount + " টাকা ছিল।"
+                    + (f.priceState() == AskDigest.PriceState.CLOSED ? " প্রস্তাবটি আর খোলা নেই।" : "");
+            return "The total price for all of it was " + amount + " rupees."
+                    + (f.priceState() == AskDigest.PriceState.CLOSED ? " That offer is no longer open." : "");
+        }
         String key = switch (f.priceState()) {
             case AGREED -> "askPriceAgreed";
             case CLOSED -> "askPriceClosed";

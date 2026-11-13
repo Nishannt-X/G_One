@@ -156,6 +156,7 @@ export function quantityKg(quantity: string | null): number | null {
 
 /** What the terms add up to, in rupees. Null unless quantity and price can both be read. */
 export function dealValue(quantity: string | null, price: number | null, unit: string | null): number | null {
+  if (price !== null && unit === 'total') return price
   const kg = quantityKg(quantity)
   const unitKg = unit ? UNIT_KG[unit.toLowerCase()] : undefined
   if (kg === null || price === null || !unitKg) return null

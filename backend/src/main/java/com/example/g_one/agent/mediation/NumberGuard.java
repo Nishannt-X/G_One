@@ -33,7 +33,8 @@ final class NumberGuard {
     /** One number found in the text: where it sits, its value and the token right after it. */
     private record Span(int start, int end, String value, boolean strong, String next) {}
 
-    private record Numbers(Set<String> strong, Set<String> all, List<Span> spans) {}
+    /** @param unreadable a digit carries letters the guard cannot read ("2m", "2x"): its value is unknown */
+    private record Numbers(Set<String> strong, Set<String> all, List<Span> spans, boolean unreadable) {}
 
     private enum Kind { VALUE, SCALE, ADDS }
 
@@ -48,6 +49,13 @@ final class NumberGuard {
     private static final Map<String, Word> ROMAN_BN = new HashMap<>();
     private static final List<String> UNITS = new ArrayList<>();
     private static final List<String> QUANTITY_UNITS = new ArrayList<>();
+    /** Shorthand written straight after digits: "2k", "2.5k", "1.5L", "2cr", "2 hazaar". */
+    private static final Map<String, BigDecimal> MULTIPLIERS = Map.of("k", BigDecimal.valueOf(1_000),
+            "l", BigDecimal.valueOf(100_000), "cr", BigDecimal.valueOf(10_000_000), "hazaar", BigDecimal.valueOf(1_000),
+            "hazar", BigDecimal.valueOf(1_000), "hajar", BigDecimal.valueOf(1_000));
+    /** Letters that may sit directly on digits without changing their value, besides units and multipliers. */
+    private static final Set<String> ATTACHED = Set.of("am", "pm", "st", "nd", "rd", "th", "g", "gm", "gms", "pc", "pcs",
+            "hrs", "hr", "min", "mins");
 
     static {
         english();
@@ -116,6 +124,8 @@ final class NumberGuard {
             for (String code : recentCodes) spoken.addAll(read(line, code).all());
         }
         if (spoken.contains(key)) return price;
+        // "2m" read as 2 would be a partial number: when the turn has a figure the guard cannot read, nothing is substituted.
+        if (inTurn.unreadable()) return null;
         List<String> candidates = inTurn.spans().stream().filter(Span::strong)
                 .filter(s -> QUANTITY_UNITS.stream().noneMatch(s.next()::startsWith))
                 .map(Span::value).distinct().toList();
@@ -140,11 +150,23 @@ final class NumberGuard {
         Set<String> all = new HashSet<>();
         List<Span> spans = new ArrayList<>();
         Run run = new Run(strong, all, spans);
+        boolean unreadable = false;
         for (int i = 0; i < tokens.size(); i++) {
             String t = tokens.get(i);
             String next = i + 1 < tokens.size() ? tokens.get(i + 1) : "";
             run.at(offsets.get(i));
             if (Character.isDigit(t.codePointAt(0))) {
+                BigDecimal multiplier = word(next, lang) == null ? MULTIPLIERS.get(next) : null;
+                if (multiplier != null) {
+                    // One amount: "2k" is two thousand, never a 2 beside a stray letter.
+                    run.at(new int[] {offsets.get(i)[0], offsets.get(i + 1)[1]});
+                    run.digits(digits(t).multiply(multiplier), i + 2 < tokens.size() ? tokens.get(i + 2) : "");
+                    i++;
+                    continue;
+                }
+                boolean attached = i + 1 < tokens.size() && offsets.get(i + 1)[0] == offsets.get(i)[1]
+                        && !Character.isDigit(next.codePointAt(0));
+                if (attached && !readableSuffix(next, lang)) unreadable = true;
                 run.digits(digits(t), next);
                 continue;
             }
@@ -163,7 +185,18 @@ final class NumberGuard {
             }
         }
         run.flush("");
-        return new Numbers(strong, all, spans);
+        return new Numbers(strong, all, spans, unreadable);
+    }
+
+    /** A unit, a currency word, a number word or a known abbreviation: letters on a digit that leave its value as it is. */
+    private static boolean readableSuffix(String t, String lang) {
+        String single = t.endsWith("s") ? t.substring(0, t.length() - 1) : t;
+        return ATTACHED.contains(t) || UNITS.contains(t) || UNITS.contains(single) || word(t, lang) != null;
+    }
+
+    /** Whether a digit in {@code text} carries letters the guard cannot read, such as "2m": its amount is unknown. */
+    static boolean unreadable(String text, String code) {
+        return text != null && read(text, code).unreadable();
     }
 
     private static Word word(String t, String lang) {

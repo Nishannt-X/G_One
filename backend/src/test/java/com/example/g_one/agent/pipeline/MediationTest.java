@@ -160,8 +160,9 @@ class MediationTest {
     }
 
     private void buyerOffers(int price) {
-        llm.replyText(reading("चार हज़ार रुपये", clearOffer(price), NO_CAUTION, "none"));
-        session(LegRole.BUYER).say("I can pay " + price + " per quintal");
+        llm.replyText(reading(com.example.g_one.agent.llm.SpokenNumbers.words(java.math.BigDecimal.valueOf(price), "hi-IN")
+                + " रुपये", clearOffer(price), NO_CAUTION, "none"));
+        session(LegRole.BUYER).say("I can pay " + price + " rupees per quintal");
         executor.runAll();
         finishAll();
     }
@@ -865,7 +866,7 @@ class MediationTest {
         assertThat(lastDeal().farmerYes()).isTrue();
 
         llm.replyText(reading("चार हज़ार दो सौ", clearOffer(4200), NO_CAUTION, "changed"));
-        session(LegRole.BUYER).say("Actually I can do 4200 per quintal, a better price for you");
+        session(LegRole.BUYER).say("Actually I can do 4200 rupees per quintal, a better price for you");
         executor.runAll();
 
         ConsoleEvent.DealUpdated last = lastDeal();

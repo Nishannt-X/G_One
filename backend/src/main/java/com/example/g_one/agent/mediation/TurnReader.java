@@ -245,7 +245,7 @@ public class TurnReader {
         String status = n.path("status").asText("none").strip().toLowerCase();
         BigDecimal price = n.path("price").isNumber() ? n.path("price").decimalValue() : null;
         Offer o = new Offer(status, text(n, "commodity"), text(n, "variety"), text(n, "market"), price,
-                n.path("currency").isNull() ? "INR" : n.path("currency").asText("INR"), text(n, "unit"),
+                text(n, "currency"), text(n, "unit"),
                 text(n, "quantity"), text(n, "pickup"), text(n, "payment"));
         return "clear".equals(status) || o.hasDetails() ? o : null;
     }

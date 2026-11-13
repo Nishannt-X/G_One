@@ -122,6 +122,21 @@ public final class DealDesk {
 
     /** What a turn stated about the sale. Only a clear buyer offer opens or replaces a draft. */
     public void terms(Offer offer, LegRole speaker, long seq) {
+        terms(offer, speaker, seq, false);
+    }
+
+    /** Total basis must be verified from the buyer's own words before this is called. */
+    public void verifiedTotal(Offer offer, long seq) {
+        terms(offer, LegRole.BUYER, seq, true);
+    }
+
+    /** A newer offer with an unknown basis invalidates an older draft. */
+    public void unpricedOffer() {
+        agreed.set(null);
+        handle(agreement.superseded());
+    }
+
+    private void terms(Offer offer, LegRole speaker, long seq, boolean verifiedTotal) {
         if (offer == null) return;
         synchronized (this) {
             if (offer.quantity() != null) quantity = firstNonNull(Terms.phrase(offer.quantity()), quantity);
@@ -130,7 +145,7 @@ public final class DealDesk {
         }
         Terms open = current();
         if (speaker == LegRole.BUYER) {
-            Terms clear = Terms.from(offer);
+            Terms clear = verifiedTotal ? Terms.fromVerifiedTotal(offer) : Terms.from(offer);
             if (clear != null) {
                 handle(agreement.offer(details(clear), seq));
                 return;
@@ -270,7 +285,7 @@ public final class DealDesk {
     /** The confirmed terms in one English sentence, for the call gist. */
     public static String summary(Terms t, String buyerName) {
         return "Deal summary confirmed by voice with " + buyerName + ": " + (t.quantity() == null ? "" : t.quantity() + " ")
-                + t.commodity() + " at " + t.priceText() + " rupees per " + t.unit()
+                + t.commodity() + " at " + t.priceText() + ("total".equals(t.unit()) ? " rupees total" : " rupees per " + t.unit())
                 + (t.pickup() == null ? "" : ", pickup " + t.pickup())
                 + (t.payment() == null ? "" : ", payment " + payment(t)) + ". Not a contract.";
     }

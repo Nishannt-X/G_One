@@ -115,6 +115,12 @@ class AgreementTest {
     // ---- terms -----------------------------------------------------------------------------------------------
 
     @Test
+    void totalPriceCannotBecomeAPerUnitDeal() {
+        assertThat(Terms.from(new Offer("clear", "rice", null, null, new BigDecimal("2000"), "INR", "total")))
+                .isNull();
+    }
+
+    @Test
     void onlyACompleteClearOfferInRupeesBecomesTerms() {
         assertThat(Terms.from(new Offer("unclear", "rice", null, null, BigDecimal.TEN, "INR", "quintal"))).isNull();
         assertThat(Terms.from(new Offer("none", null, null, null, null, null, null))).isNull();

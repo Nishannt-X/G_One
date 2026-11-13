@@ -22,7 +22,7 @@ function Waiting({ status, onStarted }: { status: FeedStatus; onStarted: () => v
       <p className="mx-auto mt-2 max-w-xl text-lg text-muted">{t(offline ? 'waiting_offline_body' : 'waiting_body')}</p>
       <div className="mx-auto mt-6 flex max-w-xl flex-col items-center gap-3">
         <SampleCallButton onStarted={onStarted} />
-        <a className="btn-quiet" href="#/simulator"><MicIcon /> {t('open_simulator')}</a>
+        <a className="btn-quiet" href="#/call"><MicIcon /> {t('open_simulator')}</a>
       </div>
     </section>
   )

@@ -95,6 +95,18 @@ class CallRecordRulesTest {
         events.forEach(bus::publish);
     }
 
+    @Test
+    void threeDistinctConsentedCallsProduceThreeRecords() {
+        call("synthetic-call-a", "YES", null, false, true);
+        call("synthetic-call-b", "YES", null, false, true);
+        call("synthetic-call-c", "YES", null, false, true);
+        call("synthetic-call-without-consent", "NO", null, false, true);
+
+        assertThat(store.list(10)).extracting(CallRecord::callId)
+                .containsExactlyInAnyOrder("synthetic-call-a", "synthetic-call-b", "synthetic-call-c");
+        assertThat(store.count()).isEqualTo(3);
+    }
+
     static Stream<Arguments> table() {
         // farmer consent, buyer consent, buyer leg, memory (caller key), expect farmer side, expect buyer side
         return Stream.of(

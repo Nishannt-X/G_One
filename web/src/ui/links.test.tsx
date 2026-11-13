@@ -82,7 +82,8 @@ describe('demo entry points', () => {
     expect(card).toContain('Sample Trader')
     expect(card).toContain('Synthetic')
     expect(card).toContain('Invented price range')
-    expect(card).toContain('₹1,800')
+    // Intl renders the rupee sign with or without a (non-breaking) space depending on the ICU build.
+    expect(card.replace(/[\s\u00a0]+/g, '')).toContain('₹1,800')
   })
 
   it('explains that the scripted sample does not create stored farmer memory', () => {

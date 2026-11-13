@@ -741,6 +741,23 @@ public final class MediationSession {
         return model;
     }
 
+    /**
+     * A farmer turn that touches the deal's terms (a number, a unit, money, a price word or a crop) makes the buyer's
+     * held amount stale, wherever the turn is taken: the normal relay, the end-of-call check or a private question to
+     * G-One. The amount is dropped and the buyer is told once. A plain yes or no, or a private question without any of
+     * these, keeps it. True when an amount was dropped.
+     */
+    private boolean dropHeldOnFarmerTerms(Turn turn) {
+        if (turn.role() != LegRole.FARMER || pendingBasis == null) return false;
+        String code = language(LegRole.FARMER).code();
+        if (!PriceBasis.mentionsTerms(turn.text(), code)) return false;
+        pendingBasis = null;
+        boolean priced = PriceBasis.priceStatement(turn.text(), code);
+        sayAssistant(LegRole.BUYER, priced ? farmerPriced(language(LegRole.BUYER))
+                : farmerChangedTerms(language(LegRole.BUYER)), false, null);
+        return true;
+    }
+
     /** The listener learns the turn and its terms only once it played to the end on their leg. */
     private void translate(Turn turn, LegRole listener, Language to, String spoken, Offer offer) {
         Leg target = listener == LegRole.FARMER ? farmer.farmerLeg() : buyer;
@@ -767,6 +784,7 @@ public final class MediationSession {
      */
     private void aside(Turn turn, String detectedBy) {
         LegRole asker = turn.role();
+        dropHeldOnFarmerTerms(turn);
         Language lang = language(asker);
         long started = clock.millis();
         AskGone.Answer answer = ask.answer(asker, ScamPatterns.masked(turn.text()), ledger.askedBefore(asker));
@@ -990,6 +1008,10 @@ public final class MediationSession {
     private boolean closingTurn(Turn turn, long heardAt, boolean named) {
         CallClosing closing = side.closing();
         LegRole speaker = turn.role();
+        boolean deskIdle = desk.awaiting(LegRole.FARMER).isEmpty() && desk.awaiting(LegRole.BUYER).isEmpty();
+        boolean starts = deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text());
+        // Taken here, the turn never reaches the relay's check: a term it changes still drops the buyer's held amount.
+        if (closing.active() || starts) dropHeldOnFarmerTerms(turn);
         if (closing.active() && named) {
             // A question for G-One during the check: answered privately, never taken as the answer, and the pending
             // question is asked once more on a fresh token, which neither counts as nor uses up the re-ask.
@@ -1003,8 +1025,7 @@ public final class MediationSession {
             closingStep(closing.heard(speaker, turn.text()));
             return true;
         }
-        boolean deskIdle = desk.awaiting(LegRole.FARMER).isEmpty() && desk.awaiting(LegRole.BUYER).isEmpty();
-        if (deskIdle && closing.mayAsk(speaker) && CallClosing.saysDone(turn.text())) {
+        if (starts) {
             recordHeard(turn, heardAt);
             closingStep(closing.start());
             return true;

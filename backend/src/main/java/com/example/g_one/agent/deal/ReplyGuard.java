@@ -194,7 +194,7 @@ public final class ReplyGuard {
     }
 
     /** True when the text asks something: a question mark, or a question word anywhere in it. */
-    static boolean asks(String text) {
+    public static boolean asks(String text) {
         if (text == null) return false;
         if (text.contains("?") || text.contains("\uFF1F")) return true;
         return tokens(text).stream().anyMatch(QUESTION::contains);

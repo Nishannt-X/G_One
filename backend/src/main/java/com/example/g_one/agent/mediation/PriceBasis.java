@@ -234,6 +234,28 @@ final class PriceBasis {
                 .anyMatch(b -> b.equals("money") || b.equals("total") || b.startsWith("rate:") || b.startsWith("lot:"));
     }
 
+    /** Words that name a price or a crop, without a number: "bhav", "rate", "दाम", "pyaz", "धान". */
+    private static final Pattern TERMS_WORD = Pattern.compile("(?iu)" + B + "(?:price|rate|bhav|bhaav|daam|dam|keemat|kimat"
+            + "|भाव|दाम|रेट|कीमत|দাম|দর|விலை|ಬೆಲೆ|ದರ|onions?|potato(?:es)?|tomato(?:es)?|rice|paddy|wheat|maize|cotton"
+            + "|soya ?bean|pyaz|pyaaz|aloo|alu|tamatar|chawal|dhaan|dhan|gehu|gehun|makka|bhutta|kapas|soyabean"
+            + "|प्याज़?|प्याज|आलू|टमाटर|चावल|धान|गेहूं|गेहूँ|मक्का|भुट्टा|कपास|सोयाबीन|পেঁয়াজ|আলু|টমেটো|চাল|ধান|গম|ভুট্টা|তুলা"
+            + "|வெங்காயம்|உருளைக்கிழங்கு|தக்காளி|அரிசி|நெல்|ಈರುಳ್ಳಿ|ಆಲೂಗಡ್ಡೆ|ಟೊಮೆಟೊ|ಅಕ್ಕಿ|ಭತ್ತ)" + E);
+    private static final Pattern UNIT_RE = Pattern.compile("(?iu)" + B + UNIT + E);
+    private static final Pattern DIGIT = Pattern.compile("\\d");
+
+    /**
+     * Whether the words touch the deal's terms: a number (in digits or words), a unit or money always does; a price word
+     * or a crop does in a statement ("ab pyaz nahi, aloo"), not in a question about it ("what is the mandi rate?"). A
+     * farmer turn like this makes the buyer's held amount stale wherever it is heard; a plain yes or no, or a private
+     * question without figures, does not.
+     */
+    static boolean mentionsTerms(String text, String code) {
+        if (text == null || text.isBlank()) return false;
+        String d = NumberGuard.digitized(text, code);
+        if (DIGIT.matcher(d).find() || UNIT_RE.matcher(text).find() || MONEY_RE.matcher(text).find()) return true;
+        return TERMS_WORD.matcher(text).find() && !ReplyGuard.asks(text);
+    }
+
     /** Whether the words state a quantity: a number tied to a unit, such as "5 kg" or "दस क्विंटल". */
     static boolean quantityStatement(String text, String code) {
         if (text == null) return false;

@@ -705,6 +705,52 @@ class AskGoneTest {
         assertThat(lastDeal().quantity()).isEqualTo("10 kg");
     }
 
+    // ---- a held amount and a farmer turn the end-of-call check or a private aside takes ----
+
+    @Test
+    void aFarmersTermChangeDuringTheEndOfCallCheckDropsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        session(LegRole.FARMER).say("bas itna hi");
+        executor.runAll();
+        finishAll();
+        // "No, not yet: it is only 5 kg now": the closing check takes the turn, and the amount must not survive it.
+        session(LegRole.FARMER).say("nahi, ab sirf paanch kilo hai");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null);
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("The farmer changed the terms"))).hasSize(1);
+    }
+
+    @Test
+    void aFarmersPrivateTurnThatChangesATermDropsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("G-One, ab mere paas sirf 5 kilo hai, usse bata do");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null);
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("The farmer changed the terms"))).hasSize(1);
+    }
+
+    @Test
+    void aPlainYesDuringTheEndOfCallCheckKeepsTheHeldAmount() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        session(LegRole.FARMER).say("bas itna hi");
+        executor.runAll();
+        finishAll();
+        session(LegRole.FARMER).say("nahi");
+        executor.runAll();
+        finishAll();
+        assertThat(spokenTo(buyer)).noneMatch(l -> l.startsWith("The farmer changed the terms"));
+        buyerAnswers("total");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+    }
+
     @Test
     void theClarificationIsAskedAtMostTwiceThenTheBuyerRestatesThePrice() {
         buyerJoinsAndAgrees("10 kg");

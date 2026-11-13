@@ -8,6 +8,7 @@ import com.example.g_one.agent.llm.ChatClient;
 import com.example.g_one.agent.llm.ChatException;
 import com.example.g_one.agent.llm.ChatMessage;
 import com.example.g_one.agent.llm.ChatRequest;
+import com.example.g_one.agent.llm.ToolSpec;
 import com.example.g_one.speech.LlmClient;
 import com.example.g_one.speech.UpstreamException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -145,17 +146,21 @@ class ModelRouterTest {
             ChatClient chat = new ChatClient(props, JSON);
             assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("fast");
             assertThat(chat.complete(REQUEST.numeric()).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(ChatRequest.of(REQUEST.messages(),
+                    List.of(new ToolSpec("example", "synthetic", null)))).usage().model()).isEqualTo("gemini");
+            assertThat(chat.complete(ChatRequest.of(List.of(ChatMessage.user("hello"),
+                    ChatMessage.tool("call_1", "done")), List.of())).usage().model()).isEqualTo("gemini");
             assertThat(chat.complete(new ChatRequest(REQUEST.messages(), List.of(), 0.3, 300,
                     ModelRouter.Task.CHAT)).usage().model()).isEqualTo("gemini");
             assertThat(chat.complete(REQUEST).usage().model()).isEqualTo("gemini");
             assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(2);
-            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(3);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(5);
             for (int i = 0; i < 3; i++) {
                 ChatClient fresh = new ChatClient(props, JSON);
                 assertThat(fresh.complete(REQUEST).usage().model()).isEqualTo("gemini");
             }
             assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(5);
-            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(6);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(8);
         } finally {
             plain.stop(0);
         }

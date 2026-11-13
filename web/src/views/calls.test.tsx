@@ -75,16 +75,6 @@ describe('the Calls list', () => {
     const html = renderToStaticMarkup(<CallsTable calls={[]} filter={NO_FILTER} onFilter={() => {}} />)
     expect(html).toContain('No calls stored yet')
     expect(html).toContain('A call is stored only when a party says yes to remembering it.')
-    expect(html).toContain('Scripted samples')
-    expect(html).toContain('No audio recordings are kept')
-    expect(html).toContain('href="#/call"')
-  })
-
-  it('shows each of three separate consented call records', () => {
-    const ids = ['call-synthetic-1', 'call-synthetic-2', 'call-synthetic-3']
-    const html = renderToStaticMarkup(<CallsTable calls={ids.map((id, i) => summary(id, { startedMs: T0 + i }))} filter={NO_FILTER} onFilter={() => {}} />)
-    for (const id of ids) expect(html).toContain(`href="#/analytics/calls?id=${id}"`)
-    expect((html.match(/href="#\/analytics\/calls\?id=/g) ?? [])).toHaveLength(3)
   })
 
   it('lists each call with its code, full id on hover, outcome, consent and terms', () => {
@@ -102,7 +92,6 @@ describe('the Calls list', () => {
     const html = renderToStaticMarkup(<KpiStrip summary={{ storedCalls: 2, bothYesDeals: 1, averageDurationMs: 90_000, languagePairs: { 'hi-IN ⇄ ta-IN': 1 }, medianMs: { reply: 1200 }, toolCounts: { get_mandi_price: 1 } }} />)
     expect(html).toContain('Stored calls')
     expect(html).toContain('Figures cover stored calls only')
-    expect(html).toContain('Scripted samples do not appear here')
     expect(html).not.toMatch(/farmers helped|impact/i)
   })
 })

@@ -98,7 +98,8 @@ class CallRecordRulesTest {
 
     static Stream<Arguments> table() {
         // farmer consent, buyer consent, buyer leg, memory (caller key), expect the farmer's gated fields, expect
-        // "terms only". Every call is stored: before ticket #19 a call without a yes left nothing at all.
+        // "terms only". Every call is stored: before ticket #19 a call without a yes left nothing at all. "Terms only"
+        // follows the recorded answers alone (privacy review nit), so a buyer's yes counts even without a buyer leg.
         return Stream.of(
                 Arguments.of("YES", "YES", true, true, true, false),
                 Arguments.of("YES", "NO", true, true, true, false),
@@ -111,7 +112,7 @@ class CallRecordRulesTest {
                 Arguments.of(null, "YES", true, true, false, false),
                 Arguments.of("YES", "YES", true, false, false, false),
                 Arguments.of("YES", "NONE", true, false, false, false),
-                Arguments.of(null, "YES", false, true, false, true),
+                Arguments.of(null, "YES", false, true, false, false),
                 Arguments.of("yes", "maybe", true, true, true, false));
     }
 
@@ -129,18 +130,24 @@ class CallRecordRulesTest {
         assertThat(r.languages().containsKey("buyer")).isEqualTo(buyerLeg);
         assertThat(r.durationMs()).isEqualTo(7000);
         JsonNode f = data.get("farmer");
-        assertThat(f.get("timings")).hasSize(1);
-        assertThat(f.get("timings").get(0).get("repliedMs").asLong()).isEqualTo(T0 + 2600);
+        // Privacy review B3: medians and counts for every call; the per-turn timeline only with that party's yes.
+        assertThat(f.get("latency").get("reply").asLong()).isEqualTo(600);
+        boolean farmerSaidYes = Consent.parse(farmer).yes();
+        assertThat(f.has("timings")).isEqualTo(farmerSaidYes);
+        if (farmerSaidYes) {
+            assertThat(f.get("timings").get(0).get("repliedMs").asLong()).isEqualTo(T0 + 2600);
+        }
         assertThat(f.get("advice").get(0).get("kind").asText()).isEqualTo("caution");
         assertThat(f.get("tools")).hasSize(2);
         if (buyerLeg) {
             JsonNode b = data.get("buyer");
             assertThat(b.get("language").asText()).isEqualTo("ta-IN");
-            assertThat(b.get("timings").get(0).get("translatedMs").asLong()).isEqualTo(T0 + 4400);
+            assertThat(b.get("latency").get("translation").asLong()).isEqualTo(400);
+            assertThat(b.has("timings")).isEqualTo(Consent.parse(buyer).yes());
             assertThat(b.has("tools")).isFalse();
             assertThat(b.has("memory")).isFalse();
             // The deal card: every call, labelled when nobody said yes.
-            assertThat(data.get("deal").get("commodity").asText()).isEqualTo("onion");
+            assertThat(data.get("deal").get("commodity").asText()).isEqualTo("Onion");
             assertThat(data.get("deal").get("price").decimalValue()).isEqualByComparingTo("2100");
             assertThat(data.get("deal").get("termsOnly").asBoolean()).isEqualTo(termsOnly);
             assertThat(r.outcome()).isEqualTo("agreed");
@@ -194,7 +201,9 @@ class CallRecordRulesTest {
         assertThat(forgetting.farmerKey()).isNull();
         assertThat(forgetting.data().get("notStored").get("farmer").asText()).isEqualTo("forgotten");
         assertThat(forgetting.data().get("farmer").get("memory").isNull()).isTrue();
-        assertThat(forgetting.termsOnly()).isTrue();
+        // The recorded yes stands (privacy review nit): not terms only, though nothing is linked to the caller.
+        assertThat(forgetting.termsOnly()).isFalse();
+        assertThat(forgetting.data().get("keyed").asBoolean()).isFalse();
     }
 
     @Test

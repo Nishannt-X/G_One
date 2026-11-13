@@ -81,8 +81,8 @@ class CallRecordDetailTest {
                 JSON.createObjectNode().put("commodity", "CANARY-arg"), true, PRICE, 6));
         e.add(new ConsoleEvent.WhisperSent(c, T0 + 6000, f, ConsoleEvent.WhisperKind.PRICE_REFERENCE, "hi-IN", "CANARY-whisper"));
         e.add(new ConsoleEvent.ToolCalled(c, T0 + 7000, "connect_buyer",
-                JSON.createObjectNode().put("buyerId", "buyer-synthetic-7"), true,
-                "Calling Sharma Traders now. Tell the farmer you are calling them.", 4));
+                JSON.createObjectNode().put("buyerId", "mehta-agro"), true,
+                "Calling Mehta Agro Traders now. Tell the farmer you are calling them.", 4));
         e.add(new ConsoleEvent.LegJoined(c, T0 + 8000, b, LegRole.BUYER, LegSource.SIMULATOR, "en-IN"));
         e.add(new ConsoleEvent.LanguageChanged(c, T0 + 9000, b, LegRole.BUYER, "en-IN", "hi-IN", "named"));
         e.add(new ConsoleEvent.TurnHeard(c, T0 + 10_000, b, LegRole.BUYER, "hi-IN", "CANARY-buyer", T0 + 9200, T0 + 9600));
@@ -103,7 +103,7 @@ class CallRecordDetailTest {
 
     private static ConsoleEvent.DealUpdated deal(CallId c, long at, ConsoleEvent.DealState s, boolean fy, boolean by) {
         return new ConsoleEvent.DealUpdated(c, at, s, "onion", "Red", "Lasalgaon", "10 quintal", new BigDecimal("2100"),
-                "quintal", "Friday at the farm, cash on pickup", fy, by);
+                "quintal", "Friday at the farm; payment cash on pickup", fy, by);
     }
 
     @Test
@@ -120,13 +120,16 @@ class CallRecordDetailTest {
             JsonNode d = r.data();
 
             JsonNode deal = d.get("deal");
-            assertThat(deal.get("pickup").asText()).isEqualTo("Friday at the farm, cash on pickup");
+            // Privacy review B1: a fixed label from the pickup and payment kinds, never the words.
+            assertThat(deal.get("pickup").asText()).isEqualTo("At the farm; payment on delivery");
             assertThat(deal.get("readback").asBoolean()).isTrue();
             assertThat(deal.get("stateTimes").get("readback").asLong()).isEqualTo(T0 + 13_000);
             assertThat(deal.get("stateTimes").get("agreed").asLong()).isEqualTo(T0 + 15_000);
             assertThat(deal.get("farmerYesMs").asLong()).isEqualTo(T0 + 14_000);
             assertThat(deal.get("buyerYesMs").asLong()).isEqualTo(T0 + 15_000);
-            assertThat(d.get("price").get("reference").asText()).isEqualTo(PRICE);
+            // Privacy review B2: that the lookup ran, and when; never its result.
+            assertThat(d.get("price").get("atMs").asLong()).isEqualTo(T0 + 5000);
+            assertThat(JSON.writeValueAsString(r)).doesNotContain(PRICE);
 
             JsonNode f = d.get("farmer");
             assertThat(f.get("firstLanguage").asText()).isEqualTo("auto");
@@ -151,11 +154,11 @@ class CallRecordDetailTest {
             assertThat(b.get("joinedMs").asLong()).isEqualTo(T0 + 8000);
             assertThat(b.get("endedMs").asLong()).isEqualTo(T0 + 16_000);
             assertThat(b.get("latency").get("translation").asLong()).isEqualTo(500);
-            assertThat(b.get("match").get("buyerId").asText()).isEqualTo("buyer-synthetic-7");
-            assertThat(b.get("match").get("name").asText()).isEqualTo("Sharma Traders");
+            assertThat(b.get("match").get("buyerId").asText()).isEqualTo("mehta-agro");
+            assertThat(b.get("match").get("name").asText()).isEqualTo("Mehta Agro Traders");
 
             CallRecord.Summary row = r.summary();
-            assertThat(row.buyerName()).isEqualTo("Sharma Traders");
+            assertThat(row.buyerName()).isEqualTo("Mehta Agro Traders");
             assertThat(row.cautions()).isEqualTo(1);
             assertThat(row.tools()).isEqualTo(3);
             assertNoText(r);
@@ -177,10 +180,12 @@ class CallRecordDetailTest {
             assertThat(d.get("notStored").get("farmer").asText()).isEqualTo("said_no");
             assertThat(r.farmerKey()).isNull();
             assertThat(r.consentScope()).isEqualTo("buyer");
-            assertThat(d.get("deal").get("commodity").asText()).isEqualTo("onion");
+            assertThat(d.get("deal").get("commodity").asText()).isEqualTo("Onion");
             assertThat(d.get("deal").get("termsOnly").asBoolean()).isFalse();
-            assertThat(d.get("price").get("reference").asText()).isEqualTo(PRICE);
-            assertThat(d.get("buyer").get("match").get("name").asText()).isEqualTo("Sharma Traders");
+            // Privacy review B2: that the lookup ran, and when; never its result.
+            assertThat(d.get("price").get("atMs").asLong()).isEqualTo(T0 + 5000);
+            assertThat(JSON.writeValueAsString(r)).doesNotContain(PRICE);
+            assertThat(d.get("buyer").get("match").get("name").asText()).isEqualTo("Mehta Agro Traders");
             assertThat(r.summary().cautions()).isEqualTo(1);
             assertThat(r.summary().tools()).isEqualTo(3);
             assertThat(JSON.writeValueAsString(r)).doesNotContain("Suresh").doesNotContain("Old call");
@@ -199,8 +204,8 @@ class CallRecordDetailTest {
             CallRecord r = h.store.get("call-f").orElseThrow();
             JsonNode b = r.data().get("buyer");
             assertThat(b.get("latency").get("translation").asLong()).isEqualTo(500);
-            assertThat(b.get("match").get("buyerId").asText()).isEqualTo("buyer-synthetic-7");
-            assertThat(r.summary().buyerName()).isEqualTo("Sharma Traders");
+            assertThat(b.get("match").get("buyerId").asText()).isEqualTo("mehta-agro");
+            assertThat(r.summary().buyerName()).isEqualTo("Mehta Agro Traders");
             assertThat(r.data().get("notStored").has("buyer")).isFalse();
             assertThat(r.consentScope()).isEqualTo("farmer");
             assertThat(r.data().get("farmer").get("memory").get("facts")).hasSize(1);

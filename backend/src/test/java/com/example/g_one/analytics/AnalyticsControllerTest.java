@@ -164,7 +164,7 @@ class AnalyticsControllerTest {
         assertThat(row.get("deal").get("label").asText()).isEqualTo("kept without consent: terms only");
         assertThat(row.get("languages").get("buyer").asText()).isEqualTo("ta-IN");
         JsonNode one = JSON.readTree(detail);
-        assertThat(one.get("data").get("deal").get("commodity").asText()).isEqualTo("onion");
+        assertThat(one.get("data").get("deal").get("commodity").asText()).isEqualTo("Onion");
         assertThat(one.get("data").get("farmer").get("tools")).hasSize(2);
         for (String body : List.of(list, detail)) {
             assertThat(body).doesNotContain("CANARY").doesNotContain(phone).doesNotContain(FakeLeg.FARMER_KEY.value())
@@ -174,5 +174,88 @@ class AnalyticsControllerTest {
         assertThat(s.get("storedCalls").asInt()).isEqualTo(3);
         assertThat(s.get("callsWithoutYes").asInt()).isEqualTo(1);
         assertThat(s.get("callsWithYes").asInt()).isEqualTo(2);
+    }
+
+    /** Every string value in a JSON body, field names included. */
+    private static List<String> strings(JsonNode n, List<String> out) {
+        if (n.isTextual()) out.add(n.asText());
+        n.fieldNames().forEachRemaining(out::add);
+        n.forEach(child -> strings(child, out));
+        return out;
+    }
+
+    /**
+     * Privacy review B1/B2: planted phone numbers, an address, a sentence and a link in every deal term, the buyer id
+     * and the mandi tool result never reach the served list or detail JSON, for a call with and without a yes.
+     */
+    @Test
+    void plantedTextInTermsAndToolResultsIsNeverServed() throws Exception {
+        java.util.regex.Pattern phoneLike = java.util.regex.Pattern.compile("\\d(?:[\\s\\-().+/]*\\d){6,}");
+        for (String consent : List.of("YES", "NO")) {
+            String id = "call-planted-" + consent;
+            CallId c = CallId.of(id);
+            LegId f = LegId.of(id + "-f");
+            LegId b = LegId.of(id + "-b");
+            bus.publish(new ConsoleEvent.CallStarted(c, 30_000, "hi-IN"));
+            bus.publish(new ConsoleEvent.LegJoined(c, 30_000, f, LegRole.FARMER, LegSource.SIMULATOR, "hi-IN"));
+            bus.publish(new ConsoleEvent.ToolCalled(c, 31_000, "get_mandi_price", JSON.createObjectNode(), true,
+                    "Onion 2,150 a quintal; call me 1234567890 or see https://example.com/pay", 9));
+            bus.publish(new ConsoleEvent.ToolCalled(c, 32_000, "connect_buyer",
+                    JSON.createObjectNode().put("buyerId", "+91 98765 43210"), true,
+                    "Calling House 12, Gandhi Road, Nashik 422001 now.", 4));
+            bus.publish(new ConsoleEvent.LegJoined(c, 33_000, b, LegRole.BUYER, LegSource.SIMULATOR, "en-IN"));
+            bus.publish(new ConsoleEvent.DealUpdated(c, 34_000, ConsoleEvent.DealState.AGREED,
+                    "call me 1234567890", "please tell my wife", "House 12, Gandhi Road, Nashik 422001",
+                    "+91 98765 43210", new BigDecimal("2100"), "quintal",
+                    "please tell my wife I will be late tonight; payment https://example.com/pay", true, true));
+            bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.FARMER, consent, 35_000));
+            bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.BUYER, consent, 35_000));
+            bus.publish(new ConsoleEvent.CallEnded(c, 36_000, 6000, "hangup"));
+            String detail = send(HttpMethod.GET, "/api/analytics/calls/" + id, CODE).getBody();
+            String list = send(HttpMethod.GET, "/api/analytics/calls?limit=50", CODE).getBody();
+            for (String body : List.of(detail, list)) {
+                for (String planted : List.of("1234567890", "98765", "Gandhi", "Nashik", "wife", "late tonight",
+                        "example.com", "https", "2,150")) {
+                    assertThat(body).as(consent).doesNotContain(planted);
+                }
+                for (String value : strings(JSON.readTree(body), new java.util.ArrayList<>())) {
+                    assertThat(phoneLike.matcher(value).find()).as(consent + " value " + value).isFalse();
+                }
+            }
+            JsonNode deal = JSON.readTree(detail).get("data").get("deal");
+            // Unsafe text (a phone number) is left out altogether; other unknown words become "other".
+            assertThat(deal.get("commodity").isNull()).isTrue();
+            assertThat(deal.get("market").asText()).isEqualTo("other");
+            assertThat(deal.get("pickupKind").asText()).isEqualTo("other");
+            assertThat(deal.has("paymentKind")).isFalse();
+            assertThat(deal.get("quantity").isNull()).isTrue();
+            assertThat(deal.has("buyerId")).isFalse();
+        }
+    }
+
+    /**
+     * Privacy review B4: the console forgets a caller while a call of theirs is open; when that call ends with the
+     * farmer's yes it is recorded without the caller key, stated name or memory.
+     */
+    @Test
+    void aConsoleForgetDuringAnOpenCallKeepsTheCallerOutOfItsRecord() throws Exception {
+        String key = FakeLeg.FARMER_KEY.value();
+        CallId c = CallId.of("call-open-forget");
+        LegId f = LegId.of("call-open-forget-f");
+        bus.publish(new ConsoleEvent.CallStarted(c, 40_000, "hi-IN"));
+        bus.publish(new ConsoleEvent.LegJoined(c, 40_000, f, LegRole.FARMER, LegSource.SIMULATOR, "hi-IN"));
+        bus.publish(new ConsoleEvent.MemoryLoaded(c, 40_010, FakeLeg.FARMER_KEY, true,
+                List.of(new ProfileFact("name", "Remembered-Suresh", Provenance.said(CallId.of("old"), 1))), List.of()));
+        bus.publish(new ConsoleEvent.ToolCalled(c, 41_000, "save_profile_fact",
+                JSON.createObjectNode().put("field", "name").put("value", "Stated-Rameshwar"), true, "ok", 2));
+        assertThat(send(HttpMethod.DELETE, "/api/memory/" + key, CODE).getStatusCode().value()).isEqualTo(204);
+        bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.FARMER, "YES", 42_000));
+        bus.publish(new ConsoleEvent.CallEnded(c, 43_000, 3000, "hangup"));
+
+        assertThat(store.get("call-open-forget").orElseThrow().farmerKey()).isNull();
+        String detail = send(HttpMethod.GET, "/api/analytics/calls/call-open-forget", CODE).getBody();
+        assertThat(detail).doesNotContain("Remembered-Suresh").doesNotContain("Stated-Rameshwar");
+        assertThat(JSON.readTree(detail).get("data").get("notStored").get("farmer").asText()).isEqualTo("forgotten");
+        assertThat(store.deleteByFarmerKey(key)).isZero();
     }
 }

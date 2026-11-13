@@ -1,5 +1,7 @@
 package com.example.g_one.analytics;
 
+import com.example.g_one.agent.tools.buyers.BuyerDirectory;
+import com.example.g_one.agent.tools.mandi.MandiCatalog;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.MemoryStore;
 import com.example.g_one.memory.ForgetListener;
@@ -29,14 +31,18 @@ public class AnalyticsConfig {
         return new CallRecordStore("jdbc:sqlite:" + file);
     }
 
-    /** A farmer forgotten from the console loses their stored call records too. */
+    /**
+     * A farmer forgotten from the console loses their stored call records too, and leaves a tombstone so a call of
+     * theirs that is still open is recorded without anything linked to them.
+     */
     @Bean
-    ForgetListener callRecordsForget(CallRecordStore store) {
-        return key -> store.deleteByFarmerKey(key.value());
+    ForgetListener callRecordsForget(CallRecordWriter writer) {
+        return key -> writer.forgetNow(key.value());
     }
 
     @Bean
-    CallRecordWriter callRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json) {
-        return new CallRecordWriter(bus, store, json, Clock.systemUTC());
+    CallRecordWriter callRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, MandiCatalog catalog,
+                                      BuyerDirectory buyers) {
+        return new CallRecordWriter(bus, store, json, Clock.systemUTC(), new DealVocabulary(catalog, buyers));
     }
 }

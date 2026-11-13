@@ -25,10 +25,12 @@ public class AnalyticsController {
 
     private final CallRecordStore store;
     private final MemoryProperties props;
+    private final CallRecordWriter writer;
 
-    public AnalyticsController(CallRecordStore store, MemoryProperties props) {
+    public AnalyticsController(CallRecordStore store, MemoryProperties props, CallRecordWriter writer) {
         this.store = store;
         this.props = props;
+        this.writer = writer;
     }
 
     @GetMapping("/api/analytics/calls")
@@ -67,7 +69,8 @@ public class AnalyticsController {
         if (!allowed(code)) {
             return denied();
         }
-        return ResponseEntity.ok(AnalyticsSummary.of(store.list(CallRecordStore.MAX_RECORDS)));
+        return ResponseEntity.ok(AnalyticsSummary.of(store.list(CallRecordStore.MAX_RECORDS),
+                writer.pendingRecords()));
     }
 
     private static ResponseEntity<?> denied() {

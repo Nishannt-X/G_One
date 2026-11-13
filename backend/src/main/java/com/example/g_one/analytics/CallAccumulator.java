@@ -27,16 +27,17 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 
 /**
  * Collects what a record may hold while one call runs, then builds it at the end. Every ended call gets a record; the
- * parties' consent decides only the conversation-derived fields (owner decision, ticket #19).
+ * parties' consent decides only the conversation-derived fields (owner decision, ticket #19; privacy review round 1).
  *
- * <p>Only derived data is collected: no turn, translation, reply, whisper or aside text, no audio, no phone number and
- * no tool arguments. Arguments are read while the call runs only to tell a confirmed name from a denied one, to know
- * which directory buyer was connected and which name the farmer stated; they are never kept as arguments.
+ * <p>Only derived data is collected: no turn, translation, reply, whisper or aside text, no audio, no phone number, no
+ * tool arguments and no tool results. Arguments are read while the call runs only to tell a confirmed name from a
+ * denied one, to know which directory buyer was connected (looked up by id) and which name the farmer stated; they are
+ * never kept as arguments. Deal terms are reduced to closed values by {@link DealCard}.
  *
  * <p>What is kept (schema version {@value CallRecord#SCHEMA_VERSION}):
  * <table>
@@ -44,34 +45,34 @@ import java.util.regex.Pattern;
  *   <tr><th>Field</th><th>Kept when</th></tr>
  *   <tr><td>times, duration, end reason, outcome, who joined ({@code joined}), each party's consent answer</td>
  *       <td>every call</td></tr>
- *   <tr><td>{@code farmer} and {@code buyer} leg: language and switches, leg times, turn timings and latency medians;
- *       {@code farmer.tools} (name, ok, duration, time and offset, never arguments or results); {@code farmer.advice}
- *       (private-advice and caution kind and time, never the words); {@code farmer.identity} (the name check's
- *       confirmed / denied flag, never a name); {@code buyer.match} (the synthetic directory buyer); {@code brain}
- *       (assistant turn counts and latency)</td><td>every call</td></tr>
- *   <tr><td>{@code deal}: crop, quantity, price with its basis, calculated total, mandi, pickup and payment, each
- *       party's confirmation, the matched directory buyer</td>
- *       <td>every call; {@code termsOnly} and the label "kept without consent: terms only" when no party said yes</td></tr>
- *   <tr><td>{@code price}: the latest mandi price reference (market data)</td><td>at least one YES</td></tr>
+ *   <tr><td>{@code farmer} and {@code buyer} leg: language and switches, leg times, {@code latency} (turn count and
+ *       per-stage medians with their counts); {@code farmer.tools} (name, ok, duration, time and offset);
+ *       {@code farmer.advice} (kind and time); {@code farmer.identity} (the name check's flag); {@code buyer.match}
+ *       (directory buyer by id); {@code price} (that a mandi lookup ran, and when); {@code brain} (assistant turn
+ *       counts and latency)</td><td>every call</td></tr>
+ *   <tr><td>{@code deal}: crop and market from the catalog, bounded quantity and price with listed units, basis,
+ *       total, pickup and payment kinds with fixed labels, each party's confirmation, the directory buyer</td>
+ *       <td>every call; {@code termsOnly} and the label "kept without consent: terms only" when no party's recorded
+ *       answer was yes</td></tr>
+ *   <tr><td>a leg's {@code timings} (per-turn start, end, heard, translated and replied times)</td>
+ *       <td>that party said yes (the farmer's, unless withdrawn by a forget)</td></tr>
  *   <tr><td>the caller key (column, never sent to the browser), {@code farmer.statedName}</td>
- *       <td>farmer YES, with a caller ID, and no "forget me" on the call</td></tr>
+ *       <td>farmer YES, with a caller ID, and no forget of that caller during the call</td></tr>
  *   <tr><td>{@code farmer.memory}: what was remembered when the call began (facts, newest gists)</td>
  *       <td>as the caller key, and the caller did not deny being the remembered farmer</td></tr>
  * </table>
- * A buyer's YES counts only when a buyer leg joined; a farmer's YES is withdrawn by "forget me".
+ * {@code consentScope} and {@code termsOnly} follow the recorded answers only; {@code keyed} says whether the farmer's
+ * linked fields were kept, which a withheld caller ID or a forget can prevent even after a yes.
  */
 final class CallAccumulator {
-    /** Tool results kept: price lookups only, which hold market data, never a party's words. */
-    private static final String PRICE_TOOL = MandiPriceTool.NAME;
     /** Lookups that make a call without terms "information only". */
     private static final Set<String> INFO_TOOLS = Set.of(MandiPriceTool.NAME, WeatherTool.NAME, FindBuyersTool.NAME);
     /** Newest remembered gists kept with the memory snapshot: the last call and the open follow-ups. */
     static final int MAX_GISTS = 3;
-    private static final Pattern CALLING = Pattern.compile("^Calling (.{1,80}?) now\\.");
-    /** A machine word (tool name, handler, model id, failure): anything else is stored as "other". */
+    /** A machine word (tool name, handler, model id, failure, language code): anything else is stored as "other". */
     private static final Pattern WORD = Pattern.compile("[A-Za-z0-9._:/-]{1,64}");
     /** Six or more digits, even with spaces or dashes between them: never kept as a stated name. */
-    private static final Pattern LONG_NUMBER = Pattern.compile("\\d(?:[\\s-]?\\d){5,}");
+    private static final Pattern LONG_NUMBER = Pattern.compile("\\d(?:[\\s-]?\\d){5,}", Pattern.UNICODE_CHARACTER_CLASS);
     static final int MAX_NAME_CHARS = 80;
     static final String TERMS_ONLY_LABEL = "kept without consent: terms only";
 
@@ -90,14 +91,17 @@ final class CallAccumulator {
     private ConsoleEvent.MemoryLoaded memory;
     private ConsoleEvent.DealUpdated deal;
     private ConsoleEvent.CallEnded ended;
-    private ConsoleEvent.ToolCalled priceReference;
+    private Long priceLookupMs;
     private Long farmerYesMs;
     private Long buyerYesMs;
-    private boolean forgot;
+    /** When this caller said "forget me" on this call, or null. */
+    private Long forgetMeMs;
+    /** The caller key was forgotten elsewhere (the console, or another call) while this call was open. */
+    private boolean withdrawn;
     /** "confirmed", "denied" or "unchecked": the returning farmer's name check. */
     private String identity = "unchecked";
+    /** The connect_buyer id as the model sent it: kept only if it is a directory id. */
     private String buyerId;
-    private String buyerName;
     private String farmerLanguage;
     /** The name the farmer stated on this call: kept only with the farmer's yes. */
     private String statedName;
@@ -111,6 +115,7 @@ final class CallAccumulator {
         long joinedMs;
         Long endedMs;
         String endReason;
+        int turnSeq;
         final List<ConsoleEvent.LanguageChanged> changes = new ArrayList<>();
         final Map<String, ObjectNode> timings = new LinkedHashMap<>();
     }
@@ -126,6 +131,10 @@ final class CallAccumulator {
         return callId;
     }
 
+    long startedMs() {
+        return startedMs;
+    }
+
     boolean ended() {
         return ended != null;
     }
@@ -135,8 +144,14 @@ final class CallAccumulator {
         return Optional.ofNullable(memory).map(m -> m.callerKey().value());
     }
 
-    boolean forgot() {
-        return forgot;
+    /** When the caller said "forget me" on this call, if they did. */
+    Optional<Long> forgetMeMs() {
+        return Optional.ofNullable(forgetMeMs);
+    }
+
+    /** The caller key was forgotten while this call was open: its linked fields are not kept. */
+    void withdrawKey() {
+        withdrawn = true;
     }
 
     void accept(ConsoleEvent event, ObjectMapper json) {
@@ -145,19 +160,19 @@ final class CallAccumulator {
                 Side side = sides.computeIfAbsent(e.role(), r -> new Side());
                 side.legId = e.legId().value();
                 side.source = e.source().name().toLowerCase(Locale.ROOT);
-                side.language = e.language();
-                side.firstLanguage = e.language();
+                side.language = word(e.language());
+                side.firstLanguage = word(e.language());
                 side.joinedMs = e.atMs();
                 legRoles.put(e.legId(), e.role());
             }
             case ConsoleEvent.LegEnded e -> {
                 Side side = side(e.role());
-                side.endReason = e.reason();
+                side.endReason = word(e.reason());
                 side.endedMs = e.atMs();
             }
             case ConsoleEvent.LanguageChanged e -> {
                 Side side = side(e.role());
-                side.language = e.to();
+                side.language = word(e.to());
                 side.changes.add(e);
             }
             case ConsoleEvent.TurnHeard e -> {
@@ -165,7 +180,9 @@ final class CallAccumulator {
                     return;
                 }
                 ObjectNode t = json.createObjectNode();
-                t.put("key", e.legId().value() + ":" + e.startedMs());
+                // A display key only: the leg and the turn's number, never a time or anything said.
+                Side heardSide = side(e.role());
+                t.put("key", e.legId().value() + "#" + (++heardSide.turnSeq));
                 t.put("legId", e.legId().value());
                 t.put("role", e.role().name().toLowerCase(Locale.ROOT));
                 t.put("startedMs", e.startedMs());
@@ -226,8 +243,11 @@ final class CallAccumulator {
             return;
         }
         switch (e.tool()) {
-            case ForgetMeTool.NAME -> forgot = true;
-            case PRICE_TOOL -> priceReference = e;
+            case ForgetMeTool.NAME -> {
+                if (forgetMeMs == null) forgetMeMs = e.atMs();
+            }
+            // Only that a lookup ran, and when: the tool's result is never kept.
+            case MandiPriceTool.NAME -> priceLookupMs = e.atMs();
             case ConfirmNameTool.NAME -> {
                 JsonNode confirmed = e.args() == null ? null : e.args().get("confirmed");
                 if (confirmed != null && confirmed.isBoolean()) {
@@ -238,17 +258,17 @@ final class CallAccumulator {
                 JsonNode field = e.args() == null ? null : e.args().get("field");
                 JsonNode value = e.args() == null ? null : e.args().get("value");
                 if (field != null && "name".equals(field.asText()) && value != null && value.isTextual()) {
-                    String name = value.asText().strip();
-                    if (!name.isEmpty() && name.length() <= MAX_NAME_CHARS && !LONG_NUMBER.matcher(name).find()) {
+                    String name = value.asText().strip().replaceAll("\\s+", " ");
+                    if (!name.isEmpty() && name.length() <= MAX_NAME_CHARS && !LONG_NUMBER.matcher(name).find()
+                            && !DealCard.unsafe(name)) {
                         statedName = name;
                     }
                 }
             }
             case ConnectBuyerTool.NAME -> {
+                // The id only, looked up in the directory when the record is built; the tool's result text is unused.
                 JsonNode id = e.args() == null ? null : e.args().get("buyerId");
-                Matcher m = CALLING.matcher(e.result() == null ? "" : e.result());
                 if (id != null && id.isTextual() && id.asText().length() <= 64) buyerId = id.asText();
-                if (m.find()) buyerName = m.group(1);
             }
             default -> { }
         }
@@ -267,26 +287,26 @@ final class CallAccumulator {
         return b != null && b.legId != null;
     }
 
-    /** The farmer's yes, unless they asked to be forgotten on this call. */
-    private boolean farmerYes() {
-        return consent(LegRole.FARMER).yes() && !forgot;
+    private boolean farmerWithdrew() {
+        return forgetMeMs != null || withdrawn;
     }
 
-    /** The buyer's yes, which counts only when a buyer leg joined. */
-    private boolean buyerYes() {
-        return consent(LegRole.BUYER).yes() && buyerJoined();
-    }
-
-    /** "both", "farmer", "buyer" or "none": whose yes covers this record. */
+    /** "both", "farmer", "buyer" or "none": whose recorded answer was yes. */
     String consentScope() {
-        boolean f = farmerYes();
-        boolean b = buyerYes();
+        boolean f = consent(LegRole.FARMER).yes();
+        boolean b = consent(LegRole.BUYER).yes();
         return f && b ? "both" : f ? "farmer" : b ? "buyer" : "none";
     }
 
-    /** The caller key, stated name and memory may be kept: the farmer said yes, with a caller ID, and no "forget me". */
+    /** The caller key, stated name and memory may be kept: the farmer said yes, with a caller ID, and no forget. */
     private boolean keyed() {
-        return farmerYes() && memory != null;
+        return consent(LegRole.FARMER).yes() && memory != null && !farmerWithdrew();
+    }
+
+    /** A party's per-turn timeline may be kept: that party said yes (the farmer's yes not withdrawn by a forget). */
+    private boolean timelineKept(LegRole role) {
+        if (role == LegRole.FARMER) return consent(LegRole.FARMER).yes() && !farmerWithdrew();
+        return consent(LegRole.BUYER).yes() && buyerJoined();
     }
 
     /** Why the farmer's consent-gated fields (caller key, stated name, memory) were not kept, or null when they were. */
@@ -294,7 +314,7 @@ final class CallAccumulator {
         if (memory == null) {
             return "withheld";
         }
-        if (forgot) {
+        if (farmerWithdrew()) {
             return "forgotten";
         }
         return switch (consent(LegRole.FARMER)) {
@@ -305,7 +325,7 @@ final class CallAccumulator {
     }
 
     /** The record of this call: every ended call has one; consent decides only the gated fields. */
-    CallRecord toRecord(ObjectMapper json, long nowMs) {
+    CallRecord toRecord(ObjectMapper json, DealVocabulary vocab, long nowMs, String endReasonIfOpen) {
         String scope = consentScope();
         boolean termsOnly = scope.equals("none");
         boolean keyed = keyed();
@@ -315,18 +335,20 @@ final class CallAccumulator {
         ObjectNode data = json.createObjectNode();
         data.put("consentScope", scope);
         data.put("termsOnly", termsOnly);
+        data.put("keyed", keyed);
+        if (ended == null) data.put("incomplete", true);
         ObjectNode joined = data.putObject("joined");
         Side farmerSide = sides.get(LegRole.FARMER);
         joined.put("farmer", farmerSide != null && farmerSide.legId != null);
         joined.put("buyer", buyerJoined());
-        data.set("deal", deal == null ? null : dealJson(json, termsOnly));
-        data.set("price", termsOnly ? null : priceJson(json));
+        data.set("deal", deal == null ? null : dealJson(json, vocab, termsOnly));
+        data.set("price", priceJson(json));
         ObjectNode notStored = data.putObject("notStored");
         String farmerWhy = keyed ? null : farmerNotKeptReason();
         if (farmerWhy != null) notStored.put("farmer", farmerWhy);
         if (keyed && identity.equals("denied")) notStored.put("memory", "not_this_farmer");
         data.set("farmer", farmerJson(json, keyed));
-        data.set("buyer", buyerJoined() ? buyerJson(json) : null);
+        data.set("buyer", buyerJoined() ? buyerJson(json, vocab) : null);
         data.set("brain", brainJson(json));
 
         Map<String, String> languages = new LinkedHashMap<>();
@@ -334,15 +356,15 @@ final class CallAccumulator {
         if (buyerJoined() && sides.get(LegRole.BUYER).language != null) {
             languages.put("buyer", sides.get(LegRole.BUYER).language);
         }
-        return new CallRecord(callId.value(), startedMs, endedMs, durationMs,
-                ended != null ? ended.reason() : "", languages, outcome(), consent(LegRole.FARMER),
-                consent(LegRole.BUYER), keyed ? memory.callerKey().value() : null, data, nowMs,
+        String reason = ended != null ? word(ended.reason()) : endReasonIfOpen;
+        return new CallRecord(callId.value(), startedMs, endedMs, durationMs, reason, languages, outcome(),
+                consent(LegRole.FARMER), consent(LegRole.BUYER), keyed ? memory.callerKey().value() : null, data, nowMs,
                 CallRecord.SCHEMA_VERSION);
     }
 
     private String farmerLanguageNow() {
         Side f = sides.get(LegRole.FARMER);
-        return f != null && f.language != null ? f.language : farmerLanguage;
+        return word(f != null && f.language != null ? f.language : farmerLanguage);
     }
 
     /** "agreed", "no_deal" (terms heard, not agreed), "info_only" (lookups, no buyer, no terms) or "no_terms". */
@@ -355,21 +377,12 @@ final class CallAccumulator {
         return agreed ? "agreed" : "no_deal";
     }
 
-
-    /** The deal card: shared terms, kept for every call, labelled when no party said yes. */
-    private ObjectNode dealJson(ObjectMapper json, boolean termsOnly) {
+    /** The deal card: closed values only, kept for every call, labelled when no party said yes. */
+    private ObjectNode dealJson(ObjectMapper json, DealVocabulary vocab, boolean termsOnly) {
         ObjectNode d = json.createObjectNode();
         d.set("state", json.valueToTree(deal.state()));
-        d.put("commodity", deal.commodity());
-        d.put("variety", deal.variety());
-        d.put("market", deal.market());
-        d.put("quantity", deal.quantity());
-        d.put("price", deal.price());
-        d.put("unit", deal.unit());
-        d.put("basis", DealTotal.basis(deal.unit()));
-        d.put("total", DealTotal.of(deal.quantity(), deal.price(), deal.unit()));
-        d.put("pickup", deal.pickup());
-        d.put("payment", DealTotal.payment(deal.pickup()));
+        DealCard.fill(d, vocab, deal.commodity(), deal.market(), deal.quantity(), deal.price(), deal.unit(),
+                deal.pickup(), buyerId);
         d.put("farmerYes", deal.farmerYes());
         d.put("buyerYes", deal.buyerYes());
         d.put("atMs", deal.atMs());
@@ -379,25 +392,24 @@ final class CallAccumulator {
                 || dealStates.containsKey("agreed"));
         if (farmerYesMs != null) d.put("farmerYesMs", farmerYesMs);
         if (buyerYesMs != null) d.put("buyerYesMs", buyerYesMs);
-        if (buyerId != null) d.put("buyerId", buyerId);
-        if (buyerName != null) d.put("buyerName", buyerName);
         d.put("termsOnly", termsOnly);
         if (termsOnly) d.put("label", TERMS_ONLY_LABEL);
         return d;
     }
 
-    /** The newest successful mandi price lookup: market data, kept when at least one party said yes. */
+    /** That a mandi price lookup ran, and when. The tool's result (prices, words) is never kept. */
     private ObjectNode priceJson(ObjectMapper json) {
-        if (priceReference == null) {
+        if (priceLookupMs == null) {
             return null;
         }
         ObjectNode p = json.createObjectNode();
-        p.put("reference", priceReference.result());
-        p.put("atMs", priceReference.atMs());
+        p.put("tool", MandiPriceTool.NAME);
+        p.put("atMs", priceLookupMs);
+        p.put("offsetMs", Math.max(0, priceLookupMs - startedMs));
         return p;
     }
 
-    private ObjectNode sideJson(ObjectMapper json, Side side) {
+    private ObjectNode sideJson(ObjectMapper json, Side side, boolean timeline) {
         ObjectNode s = json.createObjectNode();
         s.put("legId", side.legId);
         s.put("source", side.source);
@@ -409,18 +421,23 @@ final class CallAccumulator {
         ArrayNode changes = s.putArray("languageChanges");
         for (ConsoleEvent.LanguageChanged c : side.changes) {
             ObjectNode n = changes.addObject();
-            n.put("from", c.from());
-            n.put("to", c.to());
-            n.put("reason", c.reason());
+            n.put("from", word(c.from()));
+            n.put("to", word(c.to()));
+            n.put("reason", word(c.reason()));
             n.put("atMs", c.atMs());
         }
-        ArrayNode timings = s.putArray("timings");
-        side.timings.values().forEach(timings::add);
+        if (timeline) {
+            ArrayNode timings = s.putArray("timings");
+            side.timings.values().forEach(timings::add);
+        }
         s.set("latency", latencyJson(json, side.timings.values()));
         return s;
     }
 
-    /** Medians per stage in milliseconds, worked out like the console's: absent when nothing was measured. */
+    /**
+     * Per-stage medians in milliseconds with how many turns each was measured on, worked out like the console's: a
+     * stage with nothing measured is absent. Kept for every call; the per-turn timeline is not.
+     */
     static ObjectNode latencyJson(ObjectMapper json, Iterable<? extends JsonNode> timings) {
         List<Long> transcript = new ArrayList<>();
         List<Long> translation = new ArrayList<>();
@@ -441,32 +458,37 @@ final class CallAccumulator {
         return l;
     }
 
+    /** {@code key}: the median, and {@code keyCount}: how many values it was taken over. */
     private static void putMedian(ObjectNode out, String key, List<Long> values) {
         if (values.isEmpty()) {
             return;
         }
-        List<Long> sorted = values.stream().sorted().toList();
-        int mid = sorted.size() / 2;
-        out.put(key, sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2);
+        out.put(key, median(values));
+        out.put(key + "Count", values.size());
     }
 
+    static long median(List<Long> values) {
+        List<Long> sorted = values.stream().sorted().toList();
+        int mid = sorted.size() / 2;
+        return sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2;
+    }
 
-    private ObjectNode buyerJson(ObjectMapper json) {
-        ObjectNode b = sideJson(json, sides.get(LegRole.BUYER));
-        if (buyerId != null || buyerName != null) {
+    private ObjectNode buyerJson(ObjectMapper json, DealVocabulary vocab) {
+        ObjectNode b = sideJson(json, sides.get(LegRole.BUYER), timelineKept(LegRole.BUYER));
+        vocab.buyer(buyerId).ifPresent(directory -> {
             ObjectNode m = b.putObject("match");
-            m.put("buyerId", buyerId);
-            m.put("name", buyerName);
-        }
+            m.put("buyerId", directory.id());
+            m.put("name", directory.name());
+        });
         return b;
     }
 
     /** The farmer leg's operational data; the memory snapshot and stated name only when {@code keyed}. */
     private ObjectNode farmerJson(ObjectMapper json, boolean keyed) {
         Side side = sides.get(LegRole.FARMER);
-        ObjectNode f = side != null ? sideJson(json, side) : json.createObjectNode();
+        ObjectNode f = side != null ? sideJson(json, side, timelineKept(LegRole.FARMER)) : json.createObjectNode();
         f.put("language", farmerLanguageNow());
-        if (side == null || side.firstLanguage == null) f.put("firstLanguage", startLanguage);
+        if (side == null || side.firstLanguage == null) f.put("firstLanguage", word(startLanguage));
         f.put("identity", identity);
         ArrayNode toolList = f.putArray("tools");
         for (ConsoleEvent.ToolCalled t : tools) {
@@ -511,8 +533,8 @@ final class CallAccumulator {
         long modelCalls = 0;
         long promptTokens = 0;
         long completionTokens = 0;
-        Map<String, Integer> handlers = new java.util.TreeMap<>();
-        Map<String, Integer> failures = new java.util.TreeMap<>();
+        Map<String, Integer> handlers = new TreeMap<>();
+        Map<String, Integer> failures = new TreeMap<>();
         for (ConsoleEvent.TurnMeasured t : brainTurns) {
             latency.add(Math.max(0, t.latencyMs()));
             modelCalls += Math.max(0, t.modelCalls());
@@ -521,7 +543,7 @@ final class CallAccumulator {
             handlers.merge(word(t.handler()), 1, Integer::sum);
             if (t.failure() != null && !t.failure().isBlank()) failures.merge(word(t.failure()), 1, Integer::sum);
         }
-        putMedian(b, "latencyMs", latency);
+        if (!latency.isEmpty()) b.put("latencyMs", median(latency));
         b.put("modelCalls", modelCalls);
         b.put("promptTokens", promptTokens);
         b.put("completionTokens", completionTokens);
@@ -532,6 +554,7 @@ final class CallAccumulator {
 
     /** A short machine word as it is, or "other": free text never reaches a record through a name field. */
     static String word(String s) {
-        return s != null && WORD.matcher(s).matches() ? s : "other";
+        if (s == null) return null;
+        return WORD.matcher(s).matches() && !DealCard.unsafe(s) ? s : "other";
     }
 }

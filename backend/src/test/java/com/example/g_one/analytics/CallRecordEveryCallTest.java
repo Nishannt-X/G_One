@@ -90,8 +90,8 @@ class CallRecordEveryCallTest {
                 "CANARY-aside-answer", T0 + 3350));
         if (buyerJoined) {
             e.add(new ConsoleEvent.ToolCalled(c, T0 + 4000, "connect_buyer",
-                    JSON.createObjectNode().put("buyerId", "buyer-synthetic-7"), true,
-                    "Calling Sharma Traders now. Tell the farmer you are calling them.", 5));
+                    JSON.createObjectNode().put("buyerId", "mehta-agro"), true,
+                    "Calling Mehta Agro Traders now. Tell the farmer you are calling them.", 5));
             e.add(new ConsoleEvent.LegJoined(c, T0 + 5000, b, LegRole.BUYER, LegSource.SIMULATOR, "en-IN"));
             e.add(new ConsoleEvent.LanguageChanged(c, T0 + 5500, b, LegRole.BUYER, "en-IN", "ta-IN", "named"));
             e.add(new ConsoleEvent.TurnHeard(c, T0 + 6000, b, LegRole.BUYER, "ta-IN", "CANARY-buyer-words", T0 + 5600,
@@ -137,7 +137,8 @@ class CallRecordEveryCallTest {
         JsonNode d = rec.get("data");
 
         boolean farmerYes = farmer.equals("YES");
-        boolean anyYes = farmerYes || (buyer.equals("YES") && joined);
+        // Privacy review nit: the label follows the recorded answers only.
+        boolean anyYes = farmerYes || buyer.equals("YES");
         boolean keyed = farmerYes && !withheld;
 
         // Operational: always.
@@ -147,7 +148,7 @@ class CallRecordEveryCallTest {
         assertThat(rec.get("endReason").asText()).isEqualTo("hangup");
         assertThat(rec.get("consentFarmer").asText()).isEqualTo(farmer);
         assertThat(rec.get("consentBuyer").asText()).isEqualTo(buyer);
-        assertThat(rec.get("schemaVersion").asInt()).isEqualTo(3);
+        assertThat(rec.get("schemaVersion").asInt()).isEqualTo(CallRecord.SCHEMA_VERSION);
         assertThat(rec.get("outcome").asText()).isEqualTo(joined ? "agreed" : "info_only");
         assertThat(d.get("joined").get("farmer").asBoolean()).isTrue();
         assertThat(d.get("joined").get("buyer").asBoolean()).isEqualTo(joined);
@@ -178,23 +179,28 @@ class CallRecordEveryCallTest {
             assertThat(bSide.get("language").asText()).isEqualTo("ta-IN");
             assertThat(bSide.get("languageChanges").get(0).get("reason").asText()).isEqualTo("named");
             assertThat(bSide.get("latency").get("translation").asLong()).isEqualTo(400);
-            assertThat(bSide.get("match").get("buyerId").asText()).isEqualTo("buyer-synthetic-7");
-            assertThat(bSide.get("match").get("name").asText()).isEqualTo("Sharma Traders");
-            assertThat(row.get("buyerName").asText()).isEqualTo("Sharma Traders");
+            assertThat(bSide.get("match").get("buyerId").asText()).isEqualTo("mehta-agro");
+            assertThat(bSide.get("match").get("name").asText()).isEqualTo("Mehta Agro Traders");
+            assertThat(row.get("buyerName").asText()).isEqualTo("Mehta Agro Traders");
+            // Privacy review B3: the buyer's per-turn timeline only with the buyer's yes.
+            assertThat(bSide.has("timings")).isEqualTo(buyer.equals("YES"));
             JsonNode deal = d.get("deal");
-            assertThat(deal.get("commodity").asText()).isEqualTo("onion");
+            assertThat(deal.get("commodity").asText()).isEqualTo("Onion");
+            assertThat(deal.get("variety").isNull()).isTrue();
             assertThat(deal.get("quantity").asText()).isEqualTo("10 quintal");
             assertThat(deal.get("price").decimalValue()).isEqualByComparingTo("2100");
             assertThat(deal.get("unit").asText()).isEqualTo("quintal");
             assertThat(deal.get("basis").asText()).isEqualTo("per quintal");
             assertThat(deal.get("total").decimalValue()).isEqualByComparingTo("21000");
             assertThat(deal.get("market").asText()).isEqualTo("Lasalgaon");
-            assertThat(deal.get("pickup").asText()).isEqualTo("Friday at the farm; payment cash on pickup");
-            assertThat(deal.get("payment").asText()).isEqualTo("cash on pickup");
+            assertThat(deal.get("pickup").asText()).isEqualTo("At the farm; payment on delivery");
+            assertThat(deal.get("pickupKind").asText()).isEqualTo("at_farm");
+            assertThat(deal.get("paymentKind").asText()).isEqualTo("on_delivery");
+            assertThat(deal.get("payment").asText()).isEqualTo("on delivery");
             assertThat(deal.get("farmerYes").asBoolean()).isTrue();
             assertThat(deal.get("buyerYes").asBoolean()).isTrue();
-            assertThat(deal.get("buyerId").asText()).isEqualTo("buyer-synthetic-7");
-            assertThat(deal.get("buyerName").asText()).isEqualTo("Sharma Traders");
+            assertThat(deal.get("buyerId").asText()).isEqualTo("mehta-agro");
+            assertThat(deal.get("buyerName").asText()).isEqualTo("Mehta Agro Traders");
             assertThat(deal.get("termsOnly").asBoolean()).isEqualTo(!anyYes);
             assertThat(deal.path("label").asText(null))
                     .isEqualTo(anyYes ? null : "kept without consent: terms only");
@@ -208,8 +214,11 @@ class CallRecordEveryCallTest {
         assertThat(d.get("termsOnly").asBoolean()).isEqualTo(!anyYes);
         assertThat(row.get("termsOnly").asBoolean()).isEqualTo(!anyYes);
         assertThat(row.get("consentScope").asText()).isEqualTo(d.get("consentScope").asText());
-        String scope = farmerYes && buyer.equals("YES") && joined ? "both" : farmerYes ? "farmer"
-                : buyer.equals("YES") && joined ? "buyer" : "none";
+        String scope = farmerYes && buyer.equals("YES") ? "both" : farmerYes ? "farmer"
+                : buyer.equals("YES") ? "buyer" : "none";
+        assertThat(d.get("keyed").asBoolean()).isEqualTo(keyed);
+        // Privacy review B3: the farmer's per-turn timeline only with the farmer's yes.
+        assertThat(f.has("timings")).isEqualTo(farmerYes);
         assertThat(d.get("consentScope").asText()).isEqualTo(scope);
 
         // Gated: only with the farmer's yes (and a caller ID); the memory snapshot also needs the name check not denied.
@@ -231,9 +240,10 @@ class CallRecordEveryCallTest {
         }
         assertThat(all).doesNotContain(FakeLeg.FARMER_KEY.value()).doesNotContain("\"args\"")
                 .doesNotContain("\"text\"");
-        // The mandi price reference (market data, not anyone's words) is kept only with at least one yes.
-        assertThat(d.get("price").isNull()).isEqualTo(!anyYes);
-        assertThat(all.contains("Onion at Lasalgaon: 2,150")).isEqualTo(anyYes);
+        // Privacy review B2: only that a mandi lookup ran, and when; never its result, with or without a yes.
+        assertThat(d.get("price").get("offsetMs").asLong()).isEqualTo(3200);
+        assertThat(d.get("price").has("reference")).isFalse();
+        assertThat(all).doesNotContain("Onion at Lasalgaon: 2,150");
     }
 
     @Test
@@ -326,7 +336,9 @@ class CallRecordEveryCallTest {
         JsonNode d = JSON.valueToTree(forgetCall).get("data");
         assertThat(d.get("notStored").get("farmer").asText()).isEqualTo("forgotten");
         assertThat(d.get("farmer").path("memory").isObject()).isFalse();
-        assertThat(d.get("consentScope").asText()).isEqualTo("none");
+        // The recorded answer stays yes (privacy review nit); only the linked fields are withdrawn.
+        assertThat(d.get("consentScope").asText()).isEqualTo("farmer");
+        assertThat(d.get("keyed").asBoolean()).isFalse();
         assertThat(forgetCall.toString()).doesNotContain(REMEMBERED_NAME);
         // The console's "forget" finds nothing more: anonymous records are not linked to the caller.
         assertThat(store.deleteByFarmerKey(FakeLeg.FARMER_KEY.value())).isZero();
@@ -381,11 +393,13 @@ class CallRecordEveryCallTest {
         }
         try (Connection conn = DriverManager.getConnection(url); Statement st = conn.createStatement()) {
             st.execute("""
-                    INSERT INTO call_records VALUES ('call-v2', 1000, 61000, 60000, 'hangup', '{"buyer":"ta-IN"}',
+                    INSERT INTO call_records (call_id, started_ms, ended_ms, duration_ms, end_reason, languages, outcome,
+                    consent_farmer, consent_buyer, farmer_key_hash, data, created_at, schema_version, privacy_version)
+                    VALUES ('call-v2', 1000, 61000, 60000, 'hangup', '{"buyer":"ta-IN"}',
                     'no_deal', 'NO', 'YES', NULL,
                     '{"deal":{"commodity":"onion","farmerYes":false,"buyerYes":true},"price":null,
                     "notStored":{"farmer":"said_no"},"farmer":null,"buyer":{"legId":"b","language":"ta-IN",
-                    "timings":[],"match":{"buyerId":"buyer-synthetic-7","name":"Sharma Traders"}}}', 62000, 2)""");
+                    "timings":[],"match":{"buyerId":"mehta-agro","name":"Mehta Agro Traders"}}}', 62000, 2, 0)""");
         }
         try (CallRecordStore s = new CallRecordStore(url)) {
             CallRecord old = s.get("call-v2").orElseThrow();
@@ -393,10 +407,71 @@ class CallRecordEveryCallTest {
             JsonNode row = JSON.valueToTree(old.summary());
             assertThat(row.get("consentScope").asText()).isEqualTo("buyer");
             assertThat(row.get("termsOnly").asBoolean()).isFalse();
-            assertThat(row.get("buyerName").asText()).isEqualTo("Sharma Traders");
+            assertThat(row.get("buyerName").asText()).isEqualTo("Mehta Agro Traders");
             assertThat(row.get("tools").asInt()).isZero();
             JsonNode sum = JSON.valueToTree(AnalyticsSummary.of(s.list(10)));
             assertThat(sum.get("callsWithYes").asInt()).isEqualTo(1);
         }
     }
+
+    /**
+     * Privacy review: a row stored by the round-0 build (schema 3, privacy version 0) held raw deal words, the mandi
+     * tool's result and per-turn timelines for a call nobody said yes to. Opening the writer scrubs it once, in place;
+     * the row still opens with its operational data.
+     */
+    @Test
+    void aRowStoredBeforeThePrivacyReviewIsScrubbedOnce(@TempDir Path dir) throws Exception {
+        String url = "jdbc:sqlite:" + dir.resolve("g-one.db");
+        try (CallRecordStore s = new CallRecordStore(url)) {
+            assertThat(s.count()).isZero();
+        }
+        try (Connection conn = DriverManager.getConnection(url); Statement st = conn.createStatement()) {
+            st.execute("""
+                    INSERT INTO call_records (call_id, started_ms, ended_ms, duration_ms, end_reason, languages, outcome,
+                    consent_farmer, consent_buyer, farmer_key_hash, data, created_at, schema_version, privacy_version)
+                    VALUES ('call-v3', 1000, 61000, 60000, 'hangup', '{"farmer":"hi-IN","buyer":"ta-IN"}',
+                    'agreed', 'NO', 'NONE', NULL,
+                    '{"consentScope":"none","termsOnly":true,
+                    "deal":{"state":"agreed","commodity":"onion","variety":"call me 1234567890","market":"Lasalgaon",
+                    "quantity":"10 quintal","price":2100,"unit":"quintal","basis":"per quintal","total":21000,
+                    "pickup":"tell my wife I am late; payment +91 98765 43210","payment":"+91 98765 43210",
+                    "farmerYes":true,"buyerYes":true,"buyerId":"buyer-synthetic-7","buyerName":"Sharma Traders",
+                    "termsOnly":true,"label":"kept without consent: terms only"},
+                    "price":{"reference":"Onion 2,150; ring 98765 43210","atMs":3000},
+                    "notStored":{"farmer":"said_no"},
+                    "farmer":{"legId":"f","language":"hi-IN","timings":[{"key":"f:2000","legId":"f","role":"farmer",
+                    "startedMs":2000,"endedMs":2500,"heardMs":3000,"translatedMs":null,"repliedMs":3600}],
+                    "latency":{"turns":1,"transcript":500,"reply":600},
+                    "tools":[{"tool":"get_mandi_price","ok":true,"durationMs":9,"atMs":3000,"result":"ring 98765 43210"}],
+                    "advice":[],"memory":null},
+                    "buyer":{"legId":"b","language":"ta-IN","timings":[{"key":"b:4000","legId":"b","role":"buyer",
+                    "startedMs":4000,"endedMs":4300,"heardMs":4500,"translatedMs":4900,"repliedMs":null}],
+                    "match":{"buyerId":"buyer-synthetic-7","name":"Sharma Traders"}}}', 62000, 3, 0)""");
+        }
+        try (CallRecordStore s = new CallRecordStore(url);
+             CallRecordWriter w = new CallRecordWriter(new ConsoleBus(), s, JSON, Clock.systemUTC())) {
+            CallRecord r = s.get("call-v3").orElseThrow();
+            String all = JSON.writeValueAsString(r) + JSON.writeValueAsString(r.summary());
+            for (String gone : List.of("1234567890", "98765", "wife", "2,150", "Sharma", "buyer-synthetic-7",
+                    "\"timings\"", "\"reference\"", "\"result\"")) {
+                assertThat(all).as(gone).doesNotContain(gone);
+            }
+            JsonNode d = r.data();
+            assertThat(d.get("deal").get("commodity").asText()).isEqualTo("Onion");
+            assertThat(d.get("deal").get("pickupKind").asText()).isEqualTo("other");
+            assertThat(d.get("deal").get("total").decimalValue()).isEqualByComparingTo("21000");
+            assertThat(d.get("deal").get("label").asText()).isEqualTo("kept without consent: terms only");
+            assertThat(d.get("farmer").get("latency").get("transcript").asLong()).isEqualTo(500);
+            assertThat(d.get("buyer").get("latency").get("translation").asLong()).isEqualTo(400);
+            assertThat(d.get("price").get("atMs").asLong()).isEqualTo(3000);
+            assertThat(r.schemaVersion()).isEqualTo(3);
+        }
+        // Scrubbed once: opening again leaves it as it is.
+        try (CallRecordStore s = new CallRecordStore(url)) {
+            assertThat(s.scrubLegacy(r -> {
+                throw new AssertionError("already scrubbed");
+            })).isZero();
+        }
+    }
+
 }

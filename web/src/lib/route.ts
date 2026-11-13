@@ -11,14 +11,17 @@ export interface Route {
 
 const VIEWS: readonly View[] = ['demo', 'call', 'farmers', 'analytics', 'memory', 'buyers', 'simulator', 'join', 'sample-receipt']
 
-/** The views that sit under the Advanced menu. */
-export const ADVANCED_VIEWS: readonly View[] = ['analytics', 'simulator', 'buyers', 'memory']
+/** The older views, which are translated and so get the language switch. */
+export const TRANSLATED_VIEWS: readonly View[] = ['analytics', 'simulator', 'buyers', 'memory']
 
-/** The main navigation, in order. The Advanced menu follows it. */
+/** Every page in the top bar, in order. */
 export const MAIN_NAV: readonly { href: string; view: View; label: string }[] = [
   { href: '#/demo', view: 'demo', label: 'Demo' },
   { href: '#/call', view: 'call', label: 'Try a call' },
   { href: '#/farmers', view: 'farmers', label: 'Farmers' },
+  { href: '#/analytics', view: 'analytics', label: 'Analytics' },
+  { href: '#/buyers', view: 'buyers', label: 'Buyer directory' },
+  { href: '#/memory', view: 'memory', label: 'Memory lookup' },
 ]
 
 /** Query keys that belong to the live browser call, which used to share #/demo with the recorded sample. */

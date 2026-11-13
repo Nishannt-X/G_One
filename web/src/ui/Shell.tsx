@@ -1,14 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '../lib/i18n'
-import { ADVANCED_VIEWS, MAIN_NAV, type Route } from '../lib/route'
+import { MAIN_NAV, TRANSLATED_VIEWS, type Route } from '../lib/route'
 import { useTheme } from '../lib/theme'
-import { ChevronIcon, CrossIcon, Logo, MenuIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
-
-const ADVANCED: { href: string; view: Route['view']; label: string; note: string }[] = [
-  { href: '#/analytics', view: 'analytics', label: 'Analytics', note: 'The live call, and the calls kept with consent' },
-  { href: '#/buyers', view: 'buyers', label: 'Buyer directory', note: 'The synthetic buyers G-One can match' },
-  { href: '#/memory', view: 'memory', label: 'Memory lookup', note: 'Find a farmer by caller key' },
-]
+import { CrossIcon, Logo, MenuIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
 
 /** The full-width call pages, which already link to each other. */
 const STAGE_VIEWS: readonly Route['view'][] = ['demo', 'call']
@@ -19,49 +13,6 @@ function Brand() {
       <Logo className="text-[1.15rem] text-line-strong" />
       <span className="text-xl font-bold tracking-tight">G-One</span>
     </a>
-  )
-}
-
-function AdvancedMenu({ route }: { route: Route }) {
-  const [open, setOpen] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-  const active = ADVANCED_VIEWS.includes(route.view)
-
-  useEffect(() => {
-    if (!open) return
-    const onPointer = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setOpen(false)
-        box.current?.querySelector('button')?.focus()
-      }
-    }
-    document.addEventListener('pointerdown', onPointer)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onPointer)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-
-  return (
-    <div ref={box} className="relative">
-      <button type="button" className="nav-link" aria-expanded={open} aria-haspopup="true" aria-current={active ? 'page' : undefined} onClick={() => setOpen((o) => !o)}>
-        Advanced <ChevronIcon className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && (
-        <div className="card animate-rise absolute top-full left-0 z-50 mt-3 w-72 p-1.5 shadow-lift">
-          {ADVANCED.map((item) => (
-            <a key={item.href} href={item.href} onClick={() => setOpen(false)} aria-current={route.view === item.view ? 'page' : undefined} className="block rounded-xl px-3 py-2 transition-colors hover:bg-sunk aria-[current=page]:bg-sunk">
-              <span className="block font-semibold">{item.label}</span>
-              <span className="block text-sm text-muted">{item.note}</span>
-            </a>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -84,49 +35,49 @@ function LanguageButton() {
   )
 }
 
+/** The menu below xl, with the same six pages in the same order. */
+export function MobileMenu({ route, onClose }: { route: Route; onClose: () => void }) {
+  return (
+    <nav id="mobile-menu" aria-label="Mobile" className="animate-rise border-t border-line bg-page xl:hidden">
+      <div className="shell space-y-1 py-3">
+        {MAIN_NAV.map((item) => (
+          <a key={item.href} onClick={onClose} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
+        ))}
+        <a onClick={onClose} href="#/demo" className="btn-accent mt-3 flex w-full"><PhoneIcon /> Try the demo</a>
+      </div>
+    </nav>
+  )
+}
+
 function TopNav({ route }: { route: Route }) {
   const [menu, setMenu] = useState(false)
-  const advanced = ADVANCED_VIEWS.includes(route.view)
-  const close = () => setMenu(false)
+  const translated = TRANSLATED_VIEWS.includes(route.view)
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-page/90 backdrop-blur-md">
       <div className={`shell flex h-16 items-center justify-between gap-3 ${STAGE_VIEWS.includes(route.view) ? 'max-w-[1560px] lg:px-4' : ''}`}>
         <div className="flex items-center gap-6">
           <Brand />
-          <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+          {/* All six pages plus the buttons wrap below about 1100 px, so the bar shows them from xl and the menu covers narrower screens. */}
+          <nav aria-label="Main" className="hidden items-center gap-1 xl:flex">
             {MAIN_NAV.map((item) => (
               <a key={item.href} className="nav-link" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
             ))}
-            <AdvancedMenu route={route} />
           </nav>
         </div>
         <div className="flex items-center gap-1">
-          {advanced && <LanguageButton />}
+          {translated && <LanguageButton />}
           <ThemeButton />
           {!STAGE_VIEWS.includes(route.view) && (
             <a href="#/demo" className="btn-accent ml-1 hidden sm:inline-flex">
               <PhoneIcon /> Try the demo
             </a>
           )}
-          <button type="button" className="btn-ghost w-11 px-0 md:hidden" aria-expanded={menu} aria-controls="mobile-menu" aria-label={menu ? 'Close menu' : 'Open menu'} onClick={() => setMenu((m) => !m)}>
+          <button type="button" className="btn-ghost w-11 px-0 xl:hidden" aria-expanded={menu} aria-controls="mobile-menu" aria-label={menu ? 'Close menu' : 'Open menu'} onClick={() => setMenu((m) => !m)}>
             {menu ? <CrossIcon /> : <MenuIcon />}
           </button>
         </div>
       </div>
-      {menu && (
-        <nav id="mobile-menu" aria-label="Mobile" className="animate-rise border-t border-line bg-page md:hidden">
-          <div className="shell space-y-1 py-3">
-            {MAIN_NAV.map((item) => (
-              <a key={item.href} onClick={close} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
-            ))}
-            <p className="px-3 pt-3 text-sm font-bold tracking-wide text-faint">Advanced</p>
-            {ADVANCED.map((item) => (
-              <a key={item.href} onClick={close} className="block rounded-xl px-3 py-2 font-medium text-muted hover:bg-sunk" href={item.href}>{item.label}</a>
-            ))}
-            <a onClick={close} href="#/demo" className="btn-accent mt-3 flex w-full"><PhoneIcon /> Try the demo</a>
-          </div>
-        </nav>
-      )}
+      {menu && <MobileMenu route={route} onClose={() => setMenu(false)} />}
     </header>
   )
 }

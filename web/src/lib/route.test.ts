@@ -53,8 +53,15 @@ describe('the Analytics route', () => {
 })
 
 describe('MAIN_NAV', () => {
-  it('lists Demo, Try a call and Farmers, in that order, with no How it works item', () => {
-    expect(MAIN_NAV.map((n) => [n.label, n.href])).toEqual([['Demo', '#/demo'], ['Try a call', '#/call'], ['Farmers', '#/farmers']])
+  it('lists every page in order, with no How it works item', () => {
+    expect(MAIN_NAV.map((n) => [n.label, n.href])).toEqual([
+      ['Demo', '#/demo'],
+      ['Try a call', '#/call'],
+      ['Farmers', '#/farmers'],
+      ['Analytics', '#/analytics'],
+      ['Buyer directory', '#/buyers'],
+      ['Memory lookup', '#/memory'],
+    ])
     for (const item of MAIN_NAV) expect(parseRoute(item.href).view).toBe(item.view)
   })
 })

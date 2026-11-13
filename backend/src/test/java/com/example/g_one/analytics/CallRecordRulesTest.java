@@ -29,7 +29,8 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * The consent rules for stored call records, driven through the console bus as a real call would be. Synthetic data
+ * The consent rules for stored call records (owner decision, ticket #19: every call is stored; consent gates only the
+ * conversation-derived fields), driven through the console bus as a real call would be. Synthetic data
  * only; the "secret" strings below are canaries that must never reach a stored record.
  */
 class CallRecordRulesTest {
@@ -96,67 +97,68 @@ class CallRecordRulesTest {
     }
 
     static Stream<Arguments> table() {
-        // farmer consent, buyer consent, buyer leg, memory (caller key), expect farmer side, expect buyer side
+        // farmer consent, buyer consent, buyer leg, memory (caller key), expect the farmer's gated fields, expect
+        // "terms only". Every call is stored: before ticket #19 a call without a yes left nothing at all.
         return Stream.of(
-                Arguments.of("YES", "YES", true, true, true, true),
+                Arguments.of("YES", "YES", true, true, true, false),
                 Arguments.of("YES", "NO", true, true, true, false),
-                Arguments.of("NO", "YES", true, true, false, true),
-                Arguments.of("NO", "NO", true, true, false, false),
-                Arguments.of("NONE", "NONE", true, true, false, false),
-                Arguments.of(null, null, true, true, false, false),
+                Arguments.of("NO", "YES", true, true, false, false),
+                Arguments.of("NO", "NO", true, true, false, true),
+                Arguments.of("NONE", "NONE", true, true, false, true),
+                Arguments.of(null, null, true, true, false, true),
                 Arguments.of("YES", null, true, true, true, false),
                 Arguments.of("YES", "YES", false, true, true, false),
-                Arguments.of(null, "YES", true, true, false, true),
-                Arguments.of("YES", "YES", true, false, false, true),
+                Arguments.of(null, "YES", true, true, false, false),
+                Arguments.of("YES", "YES", true, false, false, false),
                 Arguments.of("YES", "NONE", true, false, false, false),
+                Arguments.of(null, "YES", false, true, false, true),
                 Arguments.of("yes", "maybe", true, true, true, false));
     }
 
     @ParameterizedTest(name = "farmer={0} buyer={1} buyerLeg={2} key={3}")
     @MethodSource("table")
-    void storesOnlyTheSidesThatSaidYes(String farmer, String buyer, boolean buyerLeg, boolean memory,
-                                       boolean keepFarmer, boolean keepBuyer) throws Exception {
+    void storesEveryCallAndGatesOnlyTheFarmersContent(String farmer, String buyer, boolean buyerLeg, boolean memory,
+                                                      boolean keyed, boolean termsOnly) throws Exception {
         call("call-1", farmer, buyer, buyerLeg, memory);
-        Optional<CallRecord> stored = store.get("call-1");
-        if (!keepFarmer && !keepBuyer) {
-            assertThat(stored).isEmpty();
-            assertThat(store.count()).isZero();
-            return;
-        }
-        CallRecord r = stored.orElseThrow();
+        CallRecord r = store.get("call-1").orElseThrow(() -> new AssertionError("every ended call is stored"));
         JsonNode data = r.data();
-        assertThat(data.get("farmer").isNull()).isEqualTo(!keepFarmer);
-        assertThat(data.get("buyer").isNull()).isEqualTo(!keepBuyer);
-        assertThat(r.languages().containsKey("farmer")).isEqualTo(keepFarmer);
-        assertThat(r.languages().containsKey("buyer")).isEqualTo(keepBuyer);
-        assertThat(r.farmerKey()).isEqualTo(keepFarmer ? FakeLeg.FARMER_KEY.value() : null);
-        assertThat(data.get("notStored").has("farmer")).isEqualTo(!keepFarmer);
-        assertThat(data.get("notStored").has("buyer")).isEqualTo(!keepBuyer);
-        // Shared terms come with any kept side.
+        // Operational: every call, whoever said yes.
+        assertThat(data.get("farmer").isObject()).isTrue();
+        assertThat(data.get("buyer").isNull()).isEqualTo(!buyerLeg);
+        assertThat(r.languages()).containsEntry("farmer", "hi-IN");
+        assertThat(r.languages().containsKey("buyer")).isEqualTo(buyerLeg);
+        assertThat(r.durationMs()).isEqualTo(7000);
+        JsonNode f = data.get("farmer");
+        assertThat(f.get("timings")).hasSize(1);
+        assertThat(f.get("timings").get(0).get("repliedMs").asLong()).isEqualTo(T0 + 2600);
+        assertThat(f.get("advice").get(0).get("kind").asText()).isEqualTo("caution");
+        assertThat(f.get("tools")).hasSize(2);
         if (buyerLeg) {
+            JsonNode b = data.get("buyer");
+            assertThat(b.get("language").asText()).isEqualTo("ta-IN");
+            assertThat(b.get("timings").get(0).get("translatedMs").asLong()).isEqualTo(T0 + 4400);
+            assertThat(b.has("tools")).isFalse();
+            assertThat(b.has("memory")).isFalse();
+            // The deal card: every call, labelled when nobody said yes.
             assertThat(data.get("deal").get("commodity").asText()).isEqualTo("onion");
             assertThat(data.get("deal").get("price").decimalValue()).isEqualByComparingTo("2100");
+            assertThat(data.get("deal").get("termsOnly").asBoolean()).isEqualTo(termsOnly);
             assertThat(r.outcome()).isEqualTo("agreed");
         } else {
             assertThat(data.get("deal").isNull()).isTrue();
             // A price lookup with no buyer is an information-only call.
             assertThat(r.outcome()).isEqualTo("info_only");
         }
-        assertThat(r.durationMs()).isEqualTo(7000);
-        if (keepFarmer) {
-            JsonNode f = data.get("farmer");
-            assertThat(f.get("timings")).hasSize(1);
-            assertThat(f.get("timings").get(0).get("repliedMs").asLong()).isEqualTo(T0 + 2600);
-            assertThat(f.get("advice").get(0).get("kind").asText()).isEqualTo("caution");
+        assertThat(data.get("termsOnly").asBoolean()).isEqualTo(termsOnly);
+        assertThat(r.termsOnly()).isEqualTo(termsOnly);
+        // Gated: only the farmer's yes, with a caller ID, keeps the caller key and the memory snapshot.
+        assertThat(r.farmerKey()).isEqualTo(keyed ? FakeLeg.FARMER_KEY.value() : null);
+        assertThat(data.get("notStored").has("farmer")).isEqualTo(!keyed);
+        assertThat(f.get("memory").isObject()).isEqualTo(keyed);
+        if (keyed) {
             assertThat(f.get("memory").get("facts").get(0).get("value").asText()).isEqualTo("Suresh");
-            assertThat(f.get("tools")).hasSize(2);
-        }
-        if (keepBuyer) {
-            JsonNode b = data.get("buyer");
-            assertThat(b.get("language").asText()).isEqualTo("ta-IN");
-            assertThat(b.get("timings").get(0).get("translatedMs").asLong()).isEqualTo(T0 + 4400);
-            assertThat(b.has("tools")).isFalse();
-            assertThat(b.has("memory")).isFalse();
+        } else {
+            assertThat(JSON.writeValueAsString(r)).doesNotContain("Suresh");
         }
         assertNoVerbatimOrSecrets(r);
     }
@@ -172,8 +174,9 @@ class CallRecordRulesTest {
         assertThat(JSON.writeValueAsString(r)).doesNotContain(FakeLeg.FARMER_KEY.value());
     }
 
+    /** Before ticket #19 the forgetting call left no record; now it is kept, anonymous (no caller key, no memory). */
     @Test
-    void farmerWhoAsksToBeForgottenIsNotStoredAndTheirOlderRecordsGo() {
+    void farmerWhoAsksToBeForgottenIsKeptAnonymouslyAndTheirOlderRecordsGo() {
         call("call-1", "YES", "YES", true, true);
         assertThat(store.get("call-1").orElseThrow().farmerKey()).isNotNull();
 
@@ -187,7 +190,11 @@ class CallRecordRulesTest {
         bus.publish(new ConsoleEvent.CallEnded(c, T0 + 103_000, 3000, "hangup"));
 
         assertThat(store.get("call-1")).isEmpty();
-        assertThat(store.get("call-2")).isEmpty();
+        CallRecord forgetting = store.get("call-2").orElseThrow();
+        assertThat(forgetting.farmerKey()).isNull();
+        assertThat(forgetting.data().get("notStored").get("farmer").asText()).isEqualTo("forgotten");
+        assertThat(forgetting.data().get("farmer").get("memory").isNull()).isTrue();
+        assertThat(forgetting.termsOnly()).isTrue();
     }
 
     @Test
@@ -196,6 +203,8 @@ class CallRecordRulesTest {
         assertThat(store.count()).isZero();
         call("call-1", "NO", "NO", true, true);
         assertThat(writer.openCalls()).isZero();
-        assertThat(store.count()).isZero();
+        // A call without a yes is stored too (terms only, anonymous); before ticket #19 it left nothing.
+        assertThat(store.count()).isEqualTo(1);
+        assertThat(store.get("call-1").orElseThrow().farmerKey()).isNull();
     }
 }

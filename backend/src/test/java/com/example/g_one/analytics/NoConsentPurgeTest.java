@@ -15,12 +15,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * A call nobody said yes to leaves nothing behind once it ends: the console's running-call state drops it at
- * call_ended, a new console subscriber is not replayed its events (subtitles included), and no record is stored.
+ * A call nobody said yes to leaves no conversation behind once it ends: the console's running-call state drops it at
+ * call_ended and a new console subscriber is not replayed its events (subtitles included). Its record holds only
+ * operational data, is labelled terms only and is anonymous (ticket #19; before it, no record was stored at all).
  */
 class NoConsentPurgeTest {
     @Test
-    void anEndedCallWithoutConsentLeavesNothing() {
+    void anEndedCallWithoutConsentLeavesOnlyAnAnonymousOperationalRecord() throws Exception {
         ConsoleBus bus = new ConsoleBus();
         ConsoleState state = new ConsoleState(bus);
         try (CallRecordStore store = new CallRecordStore("jdbc:sqlite::memory:");
@@ -37,8 +38,12 @@ class NoConsentPurgeTest {
             List<ConsoleEvent> replayed = new ArrayList<>();
             state.subscribe(replayed::add).run();
             assertThat(replayed).isEmpty();
-            assertThat(store.count()).isZero();
             assertThat(writer.openCalls()).isZero();
+            assertThat(store.count()).isEqualTo(1);
+            CallRecord r = store.get("call-purge").orElseThrow();
+            assertThat(r.termsOnly()).isTrue();
+            assertThat(r.farmerKey()).isNull();
+            assertThat(new ObjectMapper().writeValueAsString(r)).doesNotContain("synthetic words");
         }
     }
 }

@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * What a stored record keeps for the stored-call view (schema version 2), which party's yes unlocks each part, and that
+ * What a stored record keeps for the stored-call view (schema version 3), which party's yes unlocks each part, and that
  * version 1 rows still open. Synthetic data only; "CANARY" strings must never reach a record.
  */
 class CallRecordDetailTest {
@@ -162,33 +162,47 @@ class CallRecordDetailTest {
         }
     }
 
+    /**
+     * Before ticket #19 the buyer's yes alone kept nothing of the farmer's leg. Now the farmer leg's operational data
+     * (timings, tools by name, advice kinds) is kept for every call, and only the farmer's content stays out.
+     */
     @Test
-    void theBuyersYesAloneKeepsTheSharedTermsAndTheBuyerButNothingOfTheFarmer() throws Exception {
+    void theBuyersYesAloneKeepsTheTermsAndOperationalDataButNothingRememberedOfTheFarmer() throws Exception {
         try (Harness h = new Harness("jdbc:sqlite::memory:")) {
             call(h.bus, "call-b", "NO", "YES", true);
             CallRecord r = h.store.get("call-b").orElseThrow();
             JsonNode d = r.data();
-            assertThat(d.get("farmer").isNull()).isTrue();
+            assertThat(d.get("farmer").get("memory").isNull()).isTrue();
+            assertThat(d.get("farmer").get("latency").get("turns").asInt()).isEqualTo(1);
+            assertThat(d.get("notStored").get("farmer").asText()).isEqualTo("said_no");
             assertThat(r.farmerKey()).isNull();
+            assertThat(r.consentScope()).isEqualTo("buyer");
             assertThat(d.get("deal").get("commodity").asText()).isEqualTo("onion");
+            assertThat(d.get("deal").get("termsOnly").asBoolean()).isFalse();
             assertThat(d.get("price").get("reference").asText()).isEqualTo(PRICE);
             assertThat(d.get("buyer").get("match").get("name").asText()).isEqualTo("Sharma Traders");
-            assertThat(r.summary().cautions()).isZero();
-            assertThat(r.summary().tools()).isZero();
+            assertThat(r.summary().cautions()).isEqualTo(1);
+            assertThat(r.summary().tools()).isEqualTo(3);
             assertThat(JSON.writeValueAsString(r)).doesNotContain("Suresh").doesNotContain("Old call");
             assertNoText(r);
         }
     }
 
+    /**
+     * Before ticket #19 the farmer's yes alone kept no buyer match or buyer timings. The buyer leg's language, timings
+     * and the synthetic directory match are operational now, kept for every call; nothing buyer-private is stored.
+     */
     @Test
-    void theFarmersYesAloneKeepsNoBuyerMatchOrBuyerTimings() throws Exception {
+    void theFarmersYesAloneStillKeepsTheBuyerLegsOperationalData() throws Exception {
         try (Harness h = new Harness("jdbc:sqlite::memory:")) {
             call(h.bus, "call-f", "YES", "NO", true);
             CallRecord r = h.store.get("call-f").orElseThrow();
-            assertThat(r.data().get("buyer").isNull()).isTrue();
-            assertThat(r.summary().buyerName()).isNull();
-            assertThat(r.data().get("notStored").get("buyer").asText()).isEqualTo("said_no");
-            assertThat(JSON.writeValueAsString(r.data())).doesNotContain("Sharma Traders").doesNotContain("buyer-synthetic-7");
+            JsonNode b = r.data().get("buyer");
+            assertThat(b.get("latency").get("translation").asLong()).isEqualTo(500);
+            assertThat(b.get("match").get("buyerId").asText()).isEqualTo("buyer-synthetic-7");
+            assertThat(r.summary().buyerName()).isEqualTo("Sharma Traders");
+            assertThat(r.data().get("notStored").has("buyer")).isFalse();
+            assertThat(r.consentScope()).isEqualTo("farmer");
             assertThat(r.data().get("farmer").get("memory").get("facts")).hasSize(1);
             assertNoText(r);
         }
@@ -250,8 +264,10 @@ class CallRecordDetailTest {
             assertThat(old.farmerKey()).isEqualTo("key-old");
             assertThat(old.data().get("farmer").get("language").asText()).isEqualTo("hi-IN");
             assertThat(old.summary().buyerName()).isNull();
+            assertThat(old.summary().consentScope()).isEqualTo("farmer");
+            assertThat(old.summary().termsOnly()).isFalse();
             call(h.bus, "call-new", "YES", "YES", true);
-            assertThat(h.store.list(10)).extracting(CallRecord::schemaVersion).containsExactly(2, 1);
+            assertThat(h.store.list(10)).extracting(CallRecord::schemaVersion).containsExactly(CallRecord.SCHEMA_VERSION, 1);
             assertThat(h.store.deleteByFarmerKey("key-old")).isEqualTo(1);
         }
         // Opening again does not migrate twice.

@@ -2,9 +2,20 @@ package com.example.g_one.analytics;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.g_one.core.CallId;
+import com.example.g_one.core.ConsoleBus;
+import com.example.g_one.core.ConsoleEvent;
+import com.example.g_one.core.LegId;
+import com.example.g_one.core.LegRole;
+import com.example.g_one.core.LegSource;
+import com.example.g_one.core.ProfileFact;
+import com.example.g_one.core.Provenance;
+import com.example.g_one.fakes.FakeLeg;
 import com.example.g_one.memory.MemoryController;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +40,8 @@ class AnalyticsControllerTest {
     TestRestTemplate http;
     @Autowired
     CallRecordStore store;
+    @Autowired
+    ConsoleBus bus;
 
     @BeforeEach
     void seed() {
@@ -102,5 +115,64 @@ class AnalyticsControllerTest {
         assertThat(s.get("averageDurationMs").asLong()).isEqualTo(90_000);
         assertThat(s.get("languagePairs").get("hi-IN").asInt()).isEqualTo(1);
         assertThat(s.get("toolCounts").get("get_mandi_price").asInt()).isEqualTo(1);
+    }
+
+    /**
+     * A rich call nobody said yes to, with planted secrets in every text field: the list and detail JSON carry its
+     * operational data and the terms-only deal card, and none of the words, whisper text, tool arguments, phone number,
+     * caller key or remembered profile.
+     */
+    @Test
+    void anUnconsentedCallIsListedWithTermsOnlyAndNoSecrets() throws Exception {
+        String phone = "+15005550006";
+        CallId c = CallId.of("call-rich");
+        LegId f = LegId.of("call-rich-f");
+        LegId b = LegId.of("call-rich-b");
+        bus.publish(new ConsoleEvent.CallStarted(c, 20_000, "hi-IN"));
+        bus.publish(new ConsoleEvent.LegJoined(c, 20_000, f, LegRole.FARMER, LegSource.SIMULATOR, "hi-IN"));
+        bus.publish(new ConsoleEvent.MemoryLoaded(c, 20_010, FakeLeg.FARMER_KEY, true,
+                List.of(new ProfileFact("name", "CANARY-remembered", Provenance.said(CallId.of("old"), 1))), List.of()));
+        bus.publish(new ConsoleEvent.TurnHeard(c, 22_000, f, LegRole.FARMER, "hi-IN", "CANARY-transcript " + phone,
+                21_000, 21_500));
+        bus.publish(new ConsoleEvent.AssistantSaid(c, 22_500, f, LegRole.FARMER, "hi-IN", "CANARY-reply"));
+        bus.publish(new ConsoleEvent.ToolCalled(c, 23_000, "save_profile_fact",
+                JSON.createObjectNode().put("field", "name").put("value", "CANARY-stated"), true, "CANARY-result", 2));
+        bus.publish(new ConsoleEvent.ToolCalled(c, 23_100, "get_mandi_price",
+                JSON.createObjectNode().put("q", "CANARY-argument").put("phone", phone), true, "CANARY-price", 9));
+        bus.publish(new ConsoleEvent.WhisperSent(c, 23_500, f, ConsoleEvent.WhisperKind.TIP, "hi-IN", "CANARY-whisper"));
+        bus.publish(new ConsoleEvent.AsideAnswered(c, 23_600, f, LegRole.FARMER, "hi-IN", "CANARY-aside", "CANARY-answer",
+                23_550));
+        bus.publish(new ConsoleEvent.LegJoined(c, 24_000, b, LegRole.BUYER, LegSource.SIMULATOR, "ta-IN"));
+        bus.publish(new ConsoleEvent.TurnHeard(c, 25_000, b, LegRole.BUYER, "ta-IN", "CANARY-subtitle", 24_200, 24_600));
+        bus.publish(new ConsoleEvent.TurnTranslated(c, 25_400, b, LegRole.BUYER, LegRole.FARMER, "ta-IN", "hi-IN",
+                "CANARY-translation", 24_200));
+        bus.publish(new ConsoleEvent.DealUpdated(c, 26_000, ConsoleEvent.DealState.DRAFT, "onion", null, "Lasalgaon",
+                "10 quintal", new BigDecimal("2100"), "quintal", "Friday", false, false));
+        bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.FARMER, "NO", 27_000));
+        bus.publish(new ConsoleEvent.ConsentRecorded(c, LegRole.BUYER, "NONE", 27_000));
+        bus.publish(new ConsoleEvent.CallEnded(c, 27_000, 7000, "hangup"));
+
+        String list = send(HttpMethod.GET, "/api/analytics/calls?limit=10", CODE).getBody();
+        String detail = send(HttpMethod.GET, "/api/analytics/calls/call-rich", CODE).getBody();
+        JsonNode row = null;
+        for (JsonNode r : JSON.readTree(list).get("calls")) {
+            if (r.get("callId").asText().equals("call-rich")) row = r;
+        }
+        assertThat(row).as("the unconsented call is listed").isNotNull();
+        assertThat(row.get("termsOnly").asBoolean()).isTrue();
+        assertThat(row.get("consentScope").asText()).isEqualTo("none");
+        assertThat(row.get("deal").get("label").asText()).isEqualTo("kept without consent: terms only");
+        assertThat(row.get("languages").get("buyer").asText()).isEqualTo("ta-IN");
+        JsonNode one = JSON.readTree(detail);
+        assertThat(one.get("data").get("deal").get("commodity").asText()).isEqualTo("onion");
+        assertThat(one.get("data").get("farmer").get("tools")).hasSize(2);
+        for (String body : List.of(list, detail)) {
+            assertThat(body).doesNotContain("CANARY").doesNotContain(phone).doesNotContain(FakeLeg.FARMER_KEY.value())
+                    .doesNotContain("farmerKey").doesNotContain("\"args\"").doesNotContain("\"text\"");
+        }
+        JsonNode s = JSON.readTree(send(HttpMethod.GET, "/api/analytics/summary", CODE).getBody());
+        assertThat(s.get("storedCalls").asInt()).isEqualTo(3);
+        assertThat(s.get("callsWithoutYes").asInt()).isEqualTo(1);
+        assertThat(s.get("callsWithYes").asInt()).isEqualTo(2);
     }
 }

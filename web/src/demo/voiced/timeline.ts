@@ -104,7 +104,7 @@ export function callViewAt(manifest: Manifest, beat: number, startedMs: number, 
     tools,
     translations: {},
     timings: [],
-    memory: beats.length === 0 ? null : {
+    memory: !beats.some((step) => step.id === 'name-yes') ? null : {
       type: 'memory_loaded', callId: CALL_ID, atMs: startedMs, callerKey: 'sample', returning: true,
       facts: manifest.memoryBefore.facts.map((f) => ({ ...f, provenance: { callId: 'voiced-earlier', saidOrInferred: 'said' as const, atMs: earlier } })),
       gists: [...saved, before],

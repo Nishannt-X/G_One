@@ -135,7 +135,7 @@ export default function VoicedTimeline({ manifest, state, onReplayPhones }: { ma
             const tool = beat.tool ? toolNote({ key: '', tool: beat.tool.tool, args: beat.tool.args, ok: true, result: beat.tool.result, durationMs: 0, atMs: 0 }) : null
             return (
               <div key={beat.id} className="space-y-3.5">
-                {index === 0 && <Note row={{ tone: 'plain', icon: <MemoryIcon />, text: `Returning caller. Last call: ${manifest.memoryBefore.gist.summary}` }} />}
+                {beat.id === 'greet' && <Note row={{ tone: 'plain', icon: <MemoryIcon />, text: `Returning caller. Last call: ${manifest.memoryBefore.gist.summary}` }} />}
                 {tool && <Note row={{ tone: 'plain', icon: <SearchIcon />, text: tool.text }} />}
                 {beat.buyerJoins && <Note row={{ tone: 'ok', icon: <StoreIcon />, text: 'Buyer joined on a second line' }} />}
                 <div className={`transition-opacity duration-300 ${current || finished ? '' : 'opacity-70'}`}>

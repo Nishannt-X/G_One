@@ -671,6 +671,40 @@ class AskGoneTest {
         assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null && d.price().compareTo(new java.math.BigDecimal("2000")) == 0);
     }
 
+    // ---- round 4: a held amount never outlives a change of terms, and at most two questions are asked ----
+
+    private static String tenKgOffer(int price) {
+        return kgOffer(price).replace("\"pickup\"", "\"quantity\":\"10 kg\",\"pickup\"");
+    }
+
+    @Test
+    void aFarmersQuantityChangeDropsTheHeldAmountAndAsksTheBuyerAgain() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        String changed = "{\"status\":\"none\",\"commodity\":\"Onion\",\"quantity\":\"5 kg\"}";
+        llm.replyText(reading("It is only 5 kg now", changed, "none", false));
+        session(LegRole.FARMER).say("अब सिर्फ़ पाँच किलो है");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(eventsOf(ConsoleEvent.DealUpdated.class)).noneMatch(d -> d.price() != null);
+        assertThat(spokenTo(buyer).stream().filter(l -> l.startsWith("The farmer changed the terms"))).hasSize(1);
+    }
+
+    @Test
+    void aFarmersPrivateQuestionAndAPlainYesKeepTheHeldAmountWithItsQuantity() {
+        buyerJoinsAndAgrees("10 kg");
+        buyerSays("I will buy your 10 kg rice at 2000", "मैं आपका दस किलो चावल दो हज़ार में खरीदूँगा", tenKgOffer(2000));
+        llm.replyText(intent("quantity"));
+        session(LegRole.FARMER).say("G-One, how much did I say I have?");
+        executor.runAll();
+        finishAll();
+        buyerAnswers("total");
+        assertThat(lastDeal().price()).isEqualByComparingTo("2000");
+        assertThat(lastDeal().unit()).isEqualTo("total");
+        assertThat(lastDeal().quantity()).isEqualTo("10 kg");
+    }
+
     @Test
     void theClarificationIsAskedAtMostTwiceThenTheBuyerRestatesThePrice() {
         buyerJoinsAndAgrees("10 kg");

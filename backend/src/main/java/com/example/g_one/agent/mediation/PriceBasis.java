@@ -234,6 +234,12 @@ final class PriceBasis {
                 .anyMatch(b -> b.equals("money") || b.equals("total") || b.startsWith("rate:") || b.startsWith("lot:"));
     }
 
+    /** Whether the words state a quantity: a number tied to a unit, such as "5 kg" or "दस क्विंटल". */
+    static boolean quantityStatement(String text, String code) {
+        if (text == null) return false;
+        return bindings(text, code).values().stream().flatMap(Set::stream).anyMatch(b -> b.startsWith("qty:"));
+    }
+
     /** Every number in the text and what its neighbours make it: money, a rate, a total, a lot, a quantity, or none. */
     private static Map<String, Set<String>> bindings(String text, String code) {
         String d = NumberGuard.digitized(text, code);

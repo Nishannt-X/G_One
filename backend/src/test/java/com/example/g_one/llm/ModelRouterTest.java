@@ -26,6 +26,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 
 /** Routing, cooldowns and the token budget with a hand-moved clock, and both callers against a fake server. No network. */
@@ -113,7 +116,7 @@ class ModelRouterTest {
         HttpServer plain = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         List<String> plainAuth = new CopyOnWriteArrayList<>();
         List<String> primaryAuth = new CopyOnWriteArrayList<>();
-        List<Integer> statuses = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(200, 429, 500, 201, 202));
+        List<Integer> statuses = new java.util.concurrent.CopyOnWriteArrayList<>(List.of(200, 429, 500, 201, 202, 401, 403, 400));
         plain.createContext("/chat/completions", x -> {
             plainAuth.add(x.getRequestHeaders().getFirst("Authorization"));
             int status = statuses.remove(0);
@@ -161,9 +164,49 @@ class ModelRouterTest {
             }
             assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(5);
             assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(8);
+            for (int status : List.of(401, 403, 400)) {
+                ChatClient fresh = new ChatClient(props, JSON);
+                assertThat(fresh.complete(REQUEST).usage().model()).as("status " + status).isEqualTo("gemini");
+                int afterFailure = plainAuth.size();
+                assertThat(fresh.complete(REQUEST).usage().model()).isEqualTo("gemini");
+                assertThat(plainAuth).as("plain model cooling after " + status).hasSize(afterFailure);
+            }
+            assertThat(plainAuth).containsOnly("Bearer plain-key").hasSize(8);
+            assertThat(primaryAuth).containsOnly("Bearer gemini-key").hasSize(14);
         } finally {
             plain.stop(0);
         }
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void overlapIsWarnedAndIgnored(CapturedOutput output) {
+        GOneProperties.Llm cfg = new GOneProperties.Llm("http://gemini", "gemini-key", "gemini", 5, "",
+                List.of(), List.of(), 0, "http://extra", "extra-key", List.of("fast"),
+                "http://plain", "plain-key", List.of("fast"), 8000);
+        ModelRouter r = new ModelRouter(cfg, clock::get, ms -> { });
+        assertThat(r.chain(ModelRouter.Task.CHAT, true)).containsExactly("gemini", "fast");
+        assertThat(cfg.isPlain("fast")).isFalse();
+        assertThat(output).contains("plain overlap ignored").contains("fast");
+    }
+
+    @Test
+    void configuredBudgetKeepsTheDefaultLimit() throws IOException {
+        String yml = new String(getClass().getResourceAsStream("/application.yml").readAllBytes(), StandardCharsets.UTF_8);
+        assertThat(yml).contains("G_ONE_LLM_TOKENS_PER_MINUTE:8000");
+        ModelRouter r = router(8_000);
+        r.call(ModelRouter.Task.CHAT, 7_900, slot -> { slot.spent(7_900); return slot.model(); });
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, 500, slot -> slot.model())).isEqualTo(SECOND);
+    }
+
+    @Test
+    void zeroConfiguredBudgetStillLearnsTheProviderLimit() {
+        ModelRouter r = router(0);
+        HttpHeaders h = new HttpHeaders();
+        h.set("x-ratelimit-remaining-tokens", "10");
+        h.set("x-ratelimit-limit-tokens", "8000");
+        r.call(ModelRouter.Task.CHAT, 100, slot -> { slot.observe(h); return slot.model(); });
+        assertThat(r.<String>call(ModelRouter.Task.CHAT, 500, slot -> slot.model())).isEqualTo(SECOND);
     }
 
     @Test

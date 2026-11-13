@@ -119,7 +119,8 @@ public record GOneProperties(
 
         /** True when this model is served by the extra endpoint rather than the primary one. */
         public boolean isPlain(String routedModel) {
-            return plainModels.contains(routedModel);
+            return plainModels.contains(routedModel) && !routedModel.equals(model)
+                    && !fallbackModels.contains(routedModel) && !extraModels.contains(routedModel);
         }
 
         public boolean isExtra(String routedModel) {

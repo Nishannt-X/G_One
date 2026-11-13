@@ -56,12 +56,23 @@ public class ModelRouter {
 
     /** This model failed in a way the next model may not (server error, timeout, model gone). */
     public static final class TryNext extends RuntimeException {
+        private final long cooldownMs;
+
         public TryNext(RuntimeException cause) {
+            this(cause, DEFAULT_COOLDOWN_MS);
+        }
+
+        public TryNext(RuntimeException cause, long cooldownMs) {
             super("try next model", cause, false, false);
+            this.cooldownMs = cooldownMs;
         }
 
         RuntimeException failure() {
             return (RuntimeException) getCause();
+        }
+
+        long cooldownMs() {
+            return cooldownMs;
         }
     }
 
@@ -152,9 +163,9 @@ public class ModelRouter {
         }
 
         synchronized void server(long remaining, long reportedLimit, long nowMs) {
-            if (limit <= 0) return;
             serverRemaining = remaining;
             serverAt = nowMs;
+            if (limit <= 0 && reportedLimit > 0) limit = reportedLimit;
         }
 
         synchronized void cool(long untilMs) {
@@ -210,6 +221,8 @@ public class ModelRouter {
         if (cfg != null) cfg.fallbackModels().stream().filter(m -> !models.contains(m)).forEach(models::add);
         if (cfg != null) cfg.extraModels().stream().filter(m -> !models.contains(m)).forEach(models::add);
         this.chain = List.copyOf(models);
+        if (cfg != null) cfg.plainModels().stream().filter(models::contains)
+                .forEach(m -> log.warn("llm_route model={} plain overlap ignored; remove it from primary/fallback/extra or plain config", m));
         this.plainModels = cfg == null ? List.of() : cfg.plainModels().stream()
                 .filter(m -> !models.contains(m)).toList();
         List<String> plainFirst = new ArrayList<>(plainModels);
@@ -284,7 +297,7 @@ public class ModelRouter {
                 } catch (TryNext e) {
                     slot.release();
                     lastFailure = e.failure();
-                    if (plainModels.contains(model)) budget.cool(now.getAsLong() + DEFAULT_COOLDOWN_MS);
+                    if (plainModels.contains(model)) budget.cool(now.getAsLong() + e.cooldownMs());
                     log.warn("llm_route model={} failed; trying the next", model);
                     if (now.getAsLong() - started > SWITCH_DEADLINE_MS) throw lastFailure;
                     break;

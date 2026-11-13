@@ -194,7 +194,8 @@ public class ChatClient {
             if (e.status() == 429) throw new ModelRouter.RateLimited(null);
             if (e.status() > 0) {
                 throw new ModelRouter.TryNext(new ChatException(ChatException.Kind.HTTP_ERROR, e.status(),
-                        "The language model returned HTTP " + e.status() + "."));
+                        "The language model returned HTTP " + e.status() + "."),
+                        cfg.isPlain(slot.model()) && (e.status() == 401 || e.status() == 403) ? 300_000 : 5_000);
             }
             throw new ModelRouter.TryNext(new ChatException(ChatException.Kind.UNREACHABLE, 0,
                     "The language model could not be reached (timeout or network error)."));
@@ -205,12 +206,16 @@ public class ChatClient {
                 throw new ModelRouter.RateLimited(r.headers());
             }
             String code = errorCode(r.body());
-            if (r.status() == 400 && UNFINISHED_CODES.contains(code)) {
+            if (!cfg.isPlain(slot.model()) && r.status() == 400 && UNFINISHED_CODES.contains(code)) {
                 throw new Unfinished(400, code, "The language model could not finish its answer (HTTP 400 " + code + ").");
             }
             log.warn("Language model refused the request: HTTP {} {} model={}", r.status(), code, slot.model());
             ChatException refused = new ChatException(ChatException.Kind.HTTP_ERROR, r.status(),
                     "The language model returned HTTP " + r.status() + ".");
+            if (cfg.isPlain(slot.model())) {
+                long cooldownMs = r.status() == 401 || r.status() == 403 ? 300_000 : 5_000;
+                throw new ModelRouter.TryNext(refused, cooldownMs);
+            }
             if (r.status() >= 500 || r.status() == 404 || MODEL_GONE_CODES.contains(code)) throw new ModelRouter.TryNext(refused);
             throw refused;
         }

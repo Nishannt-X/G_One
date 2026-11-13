@@ -214,7 +214,7 @@ export default function LandingPage({ section }: { section: string | null }) {
               A browser demo of a phone-call middleman. G-One brings in a buyer, translates both ways, and quietly tells the farmer what the buyer can't hear.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap lg:flex-nowrap">
-              <a href="#/demo" className="btn-accent btn-lg px-5"><PlayIcon /> Watch the demo</a>
+              <a href="#/demo?autoplay=1" className="btn-accent btn-lg px-5"><PlayIcon /> Watch the demo</a>
               <a href="#/call" className="btn-quiet btn-lg px-5"><PhoneIcon /> Try a call</a>
               <a href="#/how" className="btn-ghost btn-lg px-4 text-brand">See how it works <ArrowIcon /></a>
             </div>

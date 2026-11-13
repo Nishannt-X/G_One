@@ -178,6 +178,43 @@ public final class ReplyGuard {
         return containsAny(joined, CONNECT_ASK);
     }
 
+    /**
+     * True when every word of {@code text} is part of a yes or no ("haan ji", "theek hai", "nahi bhai"), with nothing
+     * else said. {@link CompoundReply} uses it to find where an answer ends and the rest of a turn begins.
+     */
+    static boolean answerOnly(String text) {
+        if (text == null || text.isBlank()) return false;
+        List<String> tokens = tokens(text);
+        if (tokens.isEmpty()) return false;
+        String rest = replaceAll(" " + String.join(" ", tokens) + " ", YES_IDIOMS, YES_MARK);
+        rest = replaceAll(rest, NO_PHRASES, NO_MARK);
+        rest = replaceAll(rest, YES_PHRASES, YES_MARK);
+        return Arrays.stream(rest.strip().split(" +")).filter(w -> !w.isEmpty()).allMatch(w -> w.equals(YES_MARK)
+                || w.equals(NO_MARK) || YES.contains(w) || NO.contains(w) || FILLER.contains(w) || EMPHATIC.contains(w));
+    }
+
+    /** True when the text asks something: a question mark, or a question word anywhere in it. */
+    static boolean asks(String text) {
+        if (text == null) return false;
+        if (text.contains("?") || text.contains("\uFF1F")) return true;
+        return tokens(text).stream().anyMatch(QUESTION::contains);
+    }
+
+    /** "kya?", "what?", "kya matlab": a question about the question, with nothing else in it. */
+    static boolean bareQuestion(String text) {
+        if (text == null) return false;
+        List<String> tokens = tokens(text);
+        return !tokens.isEmpty() && tokens.size() <= 2 && tokens.stream().anyMatch(QUESTION::contains)
+                && tokens.stream().allMatch(w -> QUESTION.contains(w) || FILLER.contains(w) || w.equals("matlab")
+                        || w.equals("मतलब") || w.equals("again") || w.equals("phir") || w.equals("फिर"));
+    }
+
+    /** True when the text carries doubt or a delay ("pata nahi", "ruko", "let me think"). */
+    static boolean doubtful(String text) {
+        if (text == null || text.isBlank()) return false;
+        return containsAny(" " + String.join(" ", tokens(text)) + " ", UNSURE);
+    }
+
     /** Lower case, one script form: no nukta (ज़ is ज), chandrabindu as anusvara (हाँ is हां). */
     static String normalized(String text) {
         String s = Normalizer.normalize(text.toLowerCase(Locale.ROOT), Normalizer.Form.NFD).replace("़", "");
@@ -197,7 +234,7 @@ public final class ReplyGuard {
         return out;
     }
 
-    private static List<String> tokens(String text) {
+    static List<String> tokens(String text) {
         // Keep letters, combining vowel signs and the apostrophe; everything else separates words.
         return Arrays.stream(normalized(text).split("[^\\p{L}\\p{M}']+")).map(w -> w.replaceAll("^'+|'+$", ""))
                 .filter(w -> !w.isEmpty()).toList();

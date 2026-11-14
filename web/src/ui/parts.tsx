@@ -81,18 +81,77 @@ export function Segmented<T extends string>({ label, value, options, onChange, d
   )
 }
 
-/** A panel from the right edge on the native dialog element, full width on a phone. */
-export function Drawer({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
+let scrollLocks = 0
+
+/** Stops the page behind an open overlay from scrolling; counted, so stacked overlays release it once, together. */
+function lockPageScroll(lock: boolean) {
+  scrollLocks = Math.max(0, scrollLocks + (lock ? 1 : -1))
+  document.documentElement.style.overflow = scrollLocks > 0 ? 'hidden' : ''
+}
+
+/**
+ * A centred modal on the native dialog element, full screen on a phone. The browser keeps focus inside it, makes the
+ * page behind inert and sends Escape to the topmost one only, so overlays stack: a second one opened later sits on top
+ * and dims the first. Escape, a backdrop click or `onClose` from a button close it; `onClose` should change what
+ * `open` says (a route), and the overlay closes when it does. Focus moves to the element marked `data-autofocus`, and
+ * back to `returnFocus()` (as it was while open) on close. Children lay out the panel: a header, a body with
+ * `min-h-0 flex-1 overflow-y-auto`, and a footer.
+ */
+export function Overlay({ open, onClose, labelledBy, returnFocus, children }: { open: boolean; onClose: () => void; labelledBy: string; returnFocus?: () => HTMLElement | null; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
+  const latest = useRef({ open, onClose, returnFocus, closing: false })
+  const pressedBackdrop = useRef(false)
+  useEffect(() => {
+    latest.current.onClose = onClose
+    // A close that did not change `open` (nothing to go back to) must not block the next one.
+    latest.current.closing = false
+    if (open) latest.current.returnFocus = returnFocus
+  })
   useEffect(() => {
     const dialog = ref.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
+    const state = latest.current
+    state.open = open
+    state.closing = false
+    if (!dialog || !open) return
+    if (!dialog.open) dialog.showModal()
+    lockPageScroll(true)
+    dialog.querySelector<HTMLElement>('[data-autofocus]')?.focus({ preventScroll: true })
+    return () => {
+      state.open = false
+      lockPageScroll(false)
+      if (dialog.open) dialog.close()
+      state.returnFocus?.()?.focus({ preventScroll: true })
+    }
   }, [open])
+  const requestClose = () => {
+    const state = latest.current
+    if (!state.open || state.closing) return
+    state.closing = true
+    state.onClose()
+  }
   return (
-    <dialog ref={ref} onClose={onClose} aria-label={label} onClick={(e) => { if (e.target === ref.current) onClose() }} className="animate-drawer fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full max-w-[34rem] overflow-y-auto border-l border-line bg-surface text-ink shadow-lift">
-      {open && children}
+    <dialog
+      ref={ref}
+      aria-modal="true"
+      aria-labelledby={labelledBy}
+      // Escape is handled here so it closes this overlay only: Chrome groups dialogs opened without a click in
+      // between (a deep link opens two at once) and would close them together. Any other native close (a system back
+      // gesture) still reaches onClose.
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') return
+        e.preventDefault()
+        e.stopPropagation()
+        requestClose()
+      }}
+      // A close event that arrives after the overlay reopened (another farmer in the same tick) is stale.
+      onClose={() => { if (!ref.current?.open) requestClose() }}
+      onPointerDown={(e) => { pressedBackdrop.current = e.target === e.currentTarget }}
+      onClick={(e) => { if (e.target === e.currentTarget && pressedBackdrop.current) requestClose() }}
+      className="fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none overflow-hidden border-0 bg-transparent p-0 text-ink open:flex open:items-center open:justify-center sm:p-6"
+    >
+      <div className="animate-rise flex h-full w-full flex-col overflow-hidden bg-surface shadow-lift sm:h-auto sm:max-h-[90vh] sm:max-w-[720px] sm:rounded-2xl sm:border sm:border-line">
+        {open && children}
+      </div>
     </dialog>
   )
 }

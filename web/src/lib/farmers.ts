@@ -41,6 +41,8 @@ export interface FarmerDeal {
 export interface FarmerValue {
   value: string
   source: Origin
+  /** When the farmer last told it or G-One last inferred it; absent when unknown. */
+  atMs?: number
 }
 
 export interface Farmer {
@@ -184,7 +186,7 @@ function profileOf(facts: MemoryFact[]): Farmer['profile'] {
     if (!fact) continue
     const raw = fact.value.trim()
     const value = field === 'language' ? (LANGUAGE_CODES[raw.toUpperCase()] ?? raw) : field === 'name' ? englishName(raw) : englishText(raw)
-    if (value) out[field] = { value, source: fact.source }
+    if (value) out[field] = { value, source: fact.source, atMs: fact.atMs }
   }
   return out
 }
@@ -195,7 +197,7 @@ function cropFactsOf(facts: MemoryFact[]): Farmer['cropFacts'] {
     const names = f.field.startsWith(CROP_PREFIX) ? [f.value.trim() || f.field.slice(CROP_PREFIX.length)] : f.field === 'crops' || f.field === 'crop' || f.field === 'main_crop' ? f.value.split(/[,/]/) : []
     for (const n of names) {
       const name = englishText(n.trim())
-      if (name && !out.some((c) => c.name.toLowerCase() === name.toLowerCase())) out.push({ name, value: name, source: f.source })
+      if (name && !out.some((c) => c.name.toLowerCase() === name.toLowerCase())) out.push({ name, value: name, source: f.source, atMs: f.atMs })
     }
   }
   return out

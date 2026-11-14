@@ -24,6 +24,19 @@ export interface RecordedFacts {
   priceReference: string | null
   /** True once the deal receipt was found on the server; false hides the receipt link. */
   receipt: boolean
+  /** True when the deal card was kept without consent, as terms only. */
+  termsOnly?: boolean
+  /** The call's stored medians, when its per-turn times were not kept (nobody said yes). */
+  latency?: RecordedLatency | null
+}
+
+/** Per-stage medians in milliseconds kept with a stored call; `approximate` when several sides' medians were combined. */
+export interface RecordedLatency {
+  turns: number
+  transcript?: number
+  translation?: number
+  reply?: number
+  approximate: boolean
 }
 
 export interface LegView {
@@ -96,6 +109,8 @@ export interface CallView {
   seq: number
   /** Set only for a stored call (`origin: 'stored'`). */
   recorded?: RecordedFacts
+  /** Each party's answer to "may G-One remember this call?", once the feed has sent it (just before the call ends). */
+  consent?: Partial<Record<LegRole, 'YES' | 'NO' | 'NONE'>>
 }
 
 export interface FeedState {
@@ -232,8 +247,9 @@ function applyToCall(call: CallView, event: ConsoleEvent): CallView {
     case 'call_ended':
       return { ...call, ended: { atMs: event.atMs, durationMs: event.durationMs, reason: event.reason } }
     case 'turn_measured':
-    case 'consent_recorded':
       return call
+    case 'consent_recorded':
+      return { ...call, consent: { ...call.consent, [event.role]: event.consent === 'YES' || event.consent === 'NO' ? event.consent : 'NONE' } }
     case 'aside_answered': {
       // A private exchange with G-One: shown as the question and the answer, both marked, on the asker's side only.
       const question: TimelineItem = { kind: 'turn', key: `${key}-q`, legId: event.legId, role: event.role, language: event.language, text: event.question, startedMs: event.startedMs, atMs: event.startedMs, aside: true }

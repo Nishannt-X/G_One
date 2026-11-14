@@ -12,8 +12,8 @@ import java.util.TreeMap;
  * the median over every call's measured turns: {@code transcript} (end of speech to transcript), {@code translation}
  * and {@code reply} (transcript to the assistant's answer); a stage with no measurement is absent. Each call keeps only
  * its per-stage medians and counts, so the figure is the median of those medians weighted by their counts (exact for
- * one call; a close estimate across calls). {@code callsWithYes} counts calls at least one party said yes to;
- * {@code callsWithoutYes} the rest, kept as terms only. {@code bothYesDeals} counts deals both parties confirmed on the
+ * one call; a close estimate across calls). {@code callsWithYes} counts calls at least one party said yes to,
+ * read from the recorded answers (so a minimal record with a yes still counts); {@code callsWithoutYes} the rest. {@code bothYesDeals} counts deals both parties confirmed on the
  * call (not the remembering question). {@code unsavedCalls} counts finished calls whose record is waiting in the
  * spool for the store. {@code approximate} is true whenever {@code medianMs} spans more than one call: it is then a
  * count-weighted median of per-call medians, not the true median over every turn.
@@ -43,7 +43,7 @@ public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDu
             if (deal.path("farmerYes").asBoolean() && deal.path("buyerYes").asBoolean()) {
                 agreed++;
             }
-            if (!r.termsOnly()) withYes++;
+            if (r.consentFarmer().yes() || r.consentBuyer().yes()) withYes++;
             total += r.durationMs();
             pairs.merge(pair(r.languages()), 1, Integer::sum);
             for (String role : List.of("farmer", "buyer")) {

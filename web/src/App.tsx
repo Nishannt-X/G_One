@@ -11,6 +11,7 @@ import FarmersPage from './views/FarmersPage'
 import LandingPage from './views/LandingPage'
 import AnalyticsPage from './views/AnalyticsPage'
 import MemoryView from './views/MemoryView'
+import DealMapPage from './views/DealMapPage'
 import JoinPage from './simulator/JoinPage'
 import SimulatorPage from './simulator/SimulatorPage'
 
@@ -52,6 +53,8 @@ function Console({ route }: { route: Route }) {
         <Legacy><BuyersView /></Legacy>
       ) : route.view === 'memory' ? (
         <Legacy><MemoryView initialKey={route.param} /></Legacy>
+      ) : route.view === 'deal-map' ? (
+        <DealMapPage />
       ) : (
         <SimulatorPage />
       )}

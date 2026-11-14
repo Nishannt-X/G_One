@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export type View = 'home' | 'demo' | 'call' | 'farmers' | 'analytics' | 'memory' | 'buyers' | 'simulator' | 'join' | 'sample-receipt'
+export type View = 'home' | 'demo' | 'call' | 'farmers' | 'analytics' | 'memory' | 'deal-map' | 'buyers' | 'simulator' | 'join' | 'sample-receipt'
 
 export interface Route {
   view: View
@@ -9,7 +9,7 @@ export interface Route {
   query: URLSearchParams
 }
 
-const VIEWS: readonly View[] = ['demo', 'call', 'farmers', 'analytics', 'memory', 'buyers', 'simulator', 'join', 'sample-receipt']
+const VIEWS: readonly View[] = ['demo', 'call', 'farmers', 'analytics', 'memory', 'deal-map', 'buyers', 'simulator', 'join', 'sample-receipt']
 
 /** The older views, which are translated and so get the language switch. */
 export const TRANSLATED_VIEWS: readonly View[] = ['analytics', 'simulator', 'buyers', 'memory']
@@ -21,7 +21,7 @@ export const MAIN_NAV: readonly { href: string; view: View; label: string }[] = 
   { href: '#/farmers', view: 'farmers', label: 'Farmers' },
   { href: '#/analytics', view: 'analytics', label: 'Analytics' },
   { href: '#/buyers', view: 'buyers', label: 'Buyer directory' },
-  { href: '#/memory', view: 'memory', label: 'Memory lookup' },
+  { href: '#/deal-map', view: 'deal-map', label: 'Deal map' },
 ]
 
 /** Query keys that belong to the live browser call, which used to share #/demo with the recorded sample. */

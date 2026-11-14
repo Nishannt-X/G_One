@@ -17,7 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * The stored call records for the Analytics page: {@code GET /api/analytics/calls}, {@code GET} and {@code DELETE}
  * {@code /api/analytics/calls/{id}} and {@code GET /api/analytics/summary}. Behind the same access code as farmer
- * memory, since a record can hold a consenting farmer's profile facts.
+ * memory, since a record can hold a consenting farmer's profile facts. Reads are refused (503) until the one-time
+ * privacy cleanup of old rows has run, and every served row is projected through {@link RecordSchema}.
  */
 @RestController
 public class AnalyticsController {
@@ -39,8 +40,11 @@ public class AnalyticsController {
         if (!allowed(code)) {
             return denied();
         }
+        if (notReady()) {
+            return closed();
+        }
         int bounded = Math.max(1, Math.min(limit, CallRecordStore.MAX_RECORDS));
-        List<CallRecord.Summary> rows = store.list(bounded).stream().map(CallRecord::summary).toList();
+        List<CallRecord.Summary> rows = store.list(bounded).stream().map(this::served).map(CallRecord::summary).toList();
         return ResponseEntity.ok(Map.of("calls", rows));
     }
 
@@ -50,7 +54,10 @@ public class AnalyticsController {
         if (!allowed(code)) {
             return denied();
         }
-        return store.get(id).<ResponseEntity<?>>map(ResponseEntity::ok)
+        if (notReady()) {
+            return closed();
+        }
+        return store.get(id).map(this::served).<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "not_found")));
     }
 
@@ -69,8 +76,27 @@ public class AnalyticsController {
         if (!allowed(code)) {
             return denied();
         }
-        return ResponseEntity.ok(AnalyticsSummary.of(store.list(CallRecordStore.MAX_RECORDS),
-                writer.pendingRecords()));
+        if (notReady()) {
+            return closed();
+        }
+        return ResponseEntity.ok(AnalyticsSummary.of(store.list(CallRecordStore.MAX_RECORDS).stream()
+                .map(this::served).toList(), writer.pendingRecords()));
+    }
+
+    /** Every row is projected again before it is served: a row can never show more than the closed schema allows. */
+    private CallRecord served(CallRecord r) {
+        return writer.schema().project(r);
+    }
+
+    /** Reads wait for the one-time privacy cleanup of old rows (and stay closed if it failed). */
+    private boolean notReady() {
+        return writer.readiness() != CallRecordWriter.Readiness.READY;
+    }
+
+    private ResponseEntity<?> closed() {
+        String error = writer.readiness() == CallRecordWriter.Readiness.FAILED
+                ? "analytics_privacy_cleanup_failed" : "analytics_privacy_cleanup_in_progress";
+        return ResponseEntity.status(503).body(Map.of("error", error));
     }
 
     private static ResponseEntity<?> denied() {

@@ -199,17 +199,41 @@ final class DealCard {
         return s != null && (PHONE_LIKE.matcher(s).find() || EMAIL.matcher(s).find() || LINK.matcher(s).find());
     }
 
+    /** The pickup and payment kinds read from the console's combined field; null kinds were unsafe text. */
+    record Kinds(Pickup pickup, Payment payment) {}
+
+    /** Splits "Monday at the farm; payment on delivery" and maps each part to its kind. The words are not kept. */
+    static Kinds kinds(String pickupAndPayment) {
+        String pickupPart = pickupAndPayment;
+        String paymentPart = null;
+        if (pickupAndPayment != null) {
+            Matcher m = PAYMENT_PART.matcher(pickupAndPayment);
+            if (m.find()) {
+                paymentPart = m.group(1);
+                pickupPart = pickupAndPayment.substring(0, m.start());
+            }
+        }
+        return new Kinds(pickup(pickupPart), payment(paymentPart));
+    }
+
     /**
-     * Fills a stored deal card from the raw terms. {@code pickupAndPayment} is the console's combined field; it is read
-     * and dropped. Fields that cannot be stored safely are null.
+     * Fills a stored deal card from the raw terms of a deal update. {@code pickupAndPayment} is the console's combined
+     * field; it is read and dropped. Fields that cannot be stored safely are null.
      */
     static void fill(ObjectNode d, DealVocabulary vocab, String commodity, String market, String quantity,
                      BigDecimal price, String unit, String pickupAndPayment, String buyerId) {
+        Kinds kinds = kinds(pickupAndPayment);
+        fillClosed(d, vocab, commodity, market, quantity(quantity), price, unit, kinds.pickup(), kinds.payment(),
+                buyerId);
+    }
+
+    /** Fills a stored deal card from values already reduced to closed kinds and a checked quantity. */
+    static void fillClosed(ObjectNode d, DealVocabulary vocab, String commodity, String market, Quantity q,
+                           BigDecimal price, String unit, Pickup pickup, Payment payment, String buyerId) {
         d.put("commodity", vocab.crop(commodity));
         d.putNull("variety"); // free words: never stored
         d.put("market", vocab.market(market));
 
-        Quantity q = quantity(quantity);
         if (q != null) {
             d.put("quantity", q.label());
             d.put("quantityValue", q.value());
@@ -233,21 +257,14 @@ final class DealCard {
             d.putNull("total");
         }
 
-        String pickupPart = pickupAndPayment;
-        String paymentPart = null;
-        if (pickupAndPayment != null) {
-            Matcher m = PAYMENT_PART.matcher(pickupAndPayment);
-            if (m.find()) {
-                paymentPart = m.group(1);
-                pickupPart = pickupAndPayment.substring(0, m.start());
-            }
-        }
-        Pickup pickup = pickup(pickupPart);
-        Payment payment = payment(paymentPart);
+        // A kind left out as unsafe is stored as null, so a later projection knows it was decided, not missing.
         if (pickup != null) d.put("pickupKind", pickup.wire());
+        else d.putNull("pickupKind");
         if (payment != null) {
             d.put("paymentKind", payment.wire());
             d.put("payment", payment == Payment.UNSPECIFIED ? null : payment.label);
+        } else {
+            d.putNull("paymentKind");
         }
         d.put("pickup", pickupLabel(pickup, payment));
 

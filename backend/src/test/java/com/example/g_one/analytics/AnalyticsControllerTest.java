@@ -42,6 +42,12 @@ class AnalyticsControllerTest {
     CallRecordStore store;
     @Autowired
     ConsoleBus bus;
+    @Autowired
+    CallRecordWriter writer;
+    @Autowired
+    List<com.example.g_one.core.Tool> tools;
+    @Autowired
+    com.example.g_one.core.Language.Registry languages;
 
     @BeforeEach
     void seed() {
@@ -80,7 +86,8 @@ class AnalyticsControllerTest {
         JsonNode calls = JSON.readTree(res.getBody()).get("calls");
         assertThat(calls).hasSize(2);
         assertThat(calls.get(0).get("callId").asText()).isEqualTo("call-new");
-        assertThat(calls.get(1).get("deal").get("commodity").asText()).isEqualTo("onion");
+        // Served rows are projected to closed values: the catalog's crop name.
+        assertThat(calls.get(1).get("deal").get("commodity").asText()).isEqualTo("Onion");
         assertThat(calls.get(1).get("consentFarmer").asText()).isEqualTo("YES");
         assertThat(res.getBody()).doesNotContain("secret-key-never-shown").doesNotContain("farmerKey");
 
@@ -227,7 +234,7 @@ class AnalyticsControllerTest {
             assertThat(deal.get("commodity").isNull()).isTrue();
             assertThat(deal.get("market").asText()).isEqualTo("other");
             assertThat(deal.get("pickupKind").asText()).isEqualTo("other");
-            assertThat(deal.has("paymentKind")).isFalse();
+            assertThat(deal.get("paymentKind").isNull()).isTrue();
             assertThat(deal.get("quantity").isNull()).isTrue();
             assertThat(deal.has("buyerId")).isFalse();
         }
@@ -257,5 +264,17 @@ class AnalyticsControllerTest {
         assertThat(detail).doesNotContain("Remembered-Suresh").doesNotContain("Stated-Rameshwar");
         assertThat(JSON.readTree(detail).get("data").get("notStored").get("farmer").asText()).isEqualTo("forgotten");
         assertThat(store.deleteByFarmerKey(key)).isZero();
+    }
+
+    /** Privacy review round 2, B1: the tool allowlist is built from the registered tool beans, languages from the registry. */
+    @Test
+    void theClosedSetsComeFromTheRegisteredToolsAndLanguages() {
+        Vocabulary vocab = writer.schema().vocabulary();
+        assertThat(tools).isNotEmpty();
+        for (com.example.g_one.core.Tool t : tools) assertThat(vocab.tool(t.name())).isEqualTo(t.name());
+        assertThat(vocab.tool("RameshPrivateAddress")).isEqualTo("other");
+        for (var l : languages.all()) assertThat(vocab.language(l.code())).isEqualTo(l.code());
+        assertThat(vocab.language("Ramesh-Bhasha")).isEqualTo("other");
+        assertThat(writer.readiness()).isEqualTo(CallRecordWriter.Readiness.READY);
     }
 }

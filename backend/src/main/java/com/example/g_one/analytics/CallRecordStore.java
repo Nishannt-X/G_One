@@ -2,6 +2,7 @@ package com.example.g_one.analytics;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -13,7 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.UnaryOperator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.sqlite.SQLiteConfig;
 
 /**
@@ -31,6 +33,7 @@ public class CallRecordStore implements AutoCloseable {
     public static final int MAX_RECORDS = 500;
 
     private static final TypeReference<Map<String, String>> STRING_MAP = new TypeReference<>() {};
+    private static final Logger log = LoggerFactory.getLogger(CallRecordStore.class);
     /** Rows written at or after this level are already scrubbed by {@link RecordScrubber}. */
     static final int PRIVACY_VERSION = 1;
     private static final String COLUMNS = "call_id, started_ms, ended_ms, duration_ms, end_reason, languages, outcome, "
@@ -102,37 +105,108 @@ public class CallRecordStore implements AutoCloseable {
         }
     }
 
+    /** What the one-time scrub did: rows rebuilt, rows replaced by a minimal row, rows that could not be fixed. */
+    record ScrubReport(int scrubbed, int minimised, int failed) {
+        boolean ok() {
+            return failed == 0;
+        }
+    }
+
     /**
-     * Rewrites every row stored before the privacy review through {@code scrub} once, in one transaction, and marks it
-     * scrubbed. @return how many rows were rewritten
+     * Brings every row stored before the privacy review to today's rules through {@code schema}, one row per
+     * transaction, and marks it scrubbed; idempotent. A row that cannot be read or rebuilt is replaced by a minimal
+     * row (id, times, consent answers, terms only); a row that cannot even be replaced is deleted. Only call ids are
+     * logged, never content.
      */
-    public synchronized int scrubLegacy(UnaryOperator<CallRecord> scrub) {
-        List<CallRecord> old;
+    public synchronized ScrubReport scrubLegacy(RecordSchema schema) {
+        List<String> ids = new ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT " + COLUMNS + " FROM call_records WHERE privacy_version < ?")) {
+                "SELECT call_id FROM call_records WHERE privacy_version < ? ORDER BY started_ms")) {
             ps.setInt(1, PRIVACY_VERSION);
-            old = read(ps);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) ids.add(rs.getString(1));
+            }
         } catch (SQLException e) {
-            throw new IllegalStateException("Could not read call records to scrub", e);
+            throw new IllegalStateException("Could not list call records to scrub", e);
         }
-        if (old.isEmpty()) {
-            return 0;
-        }
-        return tx(() -> {
-            for (CallRecord r : old) {
-                CallRecord clean = scrub.apply(r);
-                try (PreparedStatement ps = conn.prepareStatement("""
-                        UPDATE call_records SET data = ?, farmer_key_hash = ?, privacy_version = ?
-                        WHERE call_id = ?""")) {
-                    ps.setString(1, json.writeValueAsString(clean.data()));
-                    ps.setString(2, clean.farmerKey());
-                    ps.setInt(3, PRIVACY_VERSION);
-                    ps.setString(4, r.callId());
-                    ps.executeUpdate();
+        int scrubbed = 0;
+        int minimised = 0;
+        int failed = 0;
+        for (String id : ids) {
+            try {
+                tx(() -> {
+                    CallRecord r;
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "SELECT " + COLUMNS + " FROM call_records WHERE call_id = ?")) {
+                        ps.setString(1, id);
+                        r = readStrict(ps).get(0);
+                    }
+                    CallRecord clean = schema.project(r);
+                    if (clean.data().path("minimal").asBoolean(false) && !r.data().path("minimal").asBoolean(false)) {
+                        throw new IllegalStateException("not rebuildable");
+                    }
+                    replace(id, clean);
+                    return null;
+                });
+                scrubbed++;
+            } catch (RuntimeException notScrubbable) {
+                try {
+                    tx(() -> {
+                        replace(id, minimalRow(schema, id));
+                        return null;
+                    });
+                    minimised++;
+                    log.warn("Call record {} could not be scrubbed; replaced by a minimal record", id);
+                } catch (RuntimeException notReplaceable) {
+                    try {
+                        delete(id);
+                        log.error("Call record {} could not be scrubbed or minimised; deleted", id);
+                    } catch (RuntimeException notDeletable) {
+                        failed++;
+                        log.error("Call record {} could not be scrubbed, minimised or deleted", id);
+                    }
                 }
             }
-            return old.size();
-        });
+        }
+        return new ScrubReport(scrubbed, minimised, failed);
+    }
+
+    /** The minimal row of an old record, from its plain columns only (the data blob is never read). */
+    private CallRecord minimalRow(RecordSchema schema, String id) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement("""
+                SELECT started_ms, ended_ms, duration_ms, consent_farmer, consent_buyer, created_at, schema_version
+                FROM call_records WHERE call_id = ?""")) {
+            ps.setString(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) throw new IllegalStateException("row vanished");
+                return schema.minimal(id, rs.getLong(1), rs.getLong(2), rs.getLong(3), Consent.parse(rs.getString(4)),
+                        Consent.parse(rs.getString(5)), rs.getLong(6), rs.getInt(7));
+            }
+        }
+    }
+
+    /** Replaces row {@code oldId} with {@code r}, marked scrubbed. */
+    private void replace(String oldId, CallRecord r) throws SQLException, JsonProcessingException {
+        try (PreparedStatement del = conn.prepareStatement("DELETE FROM call_records WHERE call_id = ?")) {
+            del.setString(1, oldId);
+            del.executeUpdate();
+        }
+        insert(r);
+    }
+
+    /**
+     * Deletes every keyed record a tombstone covers (its call began at or before the forget). Run at startup before
+     * reads are served, so a forget whose deletion never ran (a crash) still takes effect. @return how many
+     */
+    public synchronized int applyTombstones() {
+        try (PreparedStatement ps = conn.prepareStatement("""
+                DELETE FROM call_records WHERE farmer_key_hash IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM call_record_forgets f
+                    WHERE f.caller_key = call_records.farmer_key_hash AND call_records.started_ms <= f.at_ms)""")) {
+            return ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not apply the forget tombstones", e);
+        }
     }
 
     /**
@@ -282,18 +356,34 @@ public class CallRecordStore implements AutoCloseable {
         }
     }
 
+    /** Reads rows; a row whose JSON cannot be read comes back as a minimal record (its blob is never shown). */
     private List<CallRecord> read(PreparedStatement ps) throws SQLException {
+        return read(ps, false);
+    }
+
+    private List<CallRecord> readStrict(PreparedStatement ps) throws SQLException {
+        return read(ps, true);
+    }
+
+    private List<CallRecord> read(PreparedStatement ps, boolean strict) throws SQLException {
         List<CallRecord> out = new ArrayList<>();
         try (ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
+                Map<String, String> languages;
+                JsonNode data;
                 try {
-                    out.add(new CallRecord(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4),
-                            rs.getString(5), json.readValue(rs.getString(6), STRING_MAP), rs.getString(7),
-                            Consent.parse(rs.getString(8)), Consent.parse(rs.getString(9)), rs.getString(10),
-                            json.readTree(rs.getString(11)), rs.getLong(12), rs.getInt(13)));
-                } catch (JsonProcessingException e) {
-                    throw new IllegalStateException("A stored call record is not valid JSON", e);
+                    languages = json.readValue(rs.getString(6), STRING_MAP);
+                    data = json.readTree(rs.getString(11));
+                    if (data == null || !data.isObject()) throw new IllegalStateException("not an object");
+                } catch (JsonProcessingException | RuntimeException e) {
+                    if (strict) throw new IllegalStateException("A stored call record is not valid JSON");
+                    log.warn("Call record {} is not valid JSON; shown as a minimal record", rs.getString(1));
+                    languages = Map.of();
+                    data = json.createObjectNode().put("minimal", true);
                 }
+                out.add(new CallRecord(rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4),
+                        rs.getString(5), languages, rs.getString(7), Consent.parse(rs.getString(8)),
+                        Consent.parse(rs.getString(9)), rs.getString(10), data, rs.getLong(12), rs.getInt(13)));
             }
         }
         return out;

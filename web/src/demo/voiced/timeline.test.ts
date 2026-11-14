@@ -199,11 +199,12 @@ describe('voiced sample timeline', () => {
     for (const clip of own) expect(clip.language).toBe('bn-IN')
   })
 
-  it('keeps short, clear gaps and runs no longer than 4:11 at the default speed', () => {
+  it('keeps short, clear gaps and runs no longer than 3:20 at the default speed', () => {
     for (const clip of sample.beats.flatMap((b) => b.clips)) {
       expect(clip.pauseAfterMs).toBeGreaterThanOrEqual(200)
       expect(clip.pauseAfterMs).toBeLessThanOrEqual(320)
     }
-    expect(plan.total).toBeLessThanOrEqual(251)
+    expect(sample.tempo).toBe(1.3)
+    expect(plan.total).toBeLessThanOrEqual(200)
   })
 })

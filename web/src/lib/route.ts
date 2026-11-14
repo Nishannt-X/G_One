@@ -36,12 +36,12 @@ function split(hash: string): { head: string; rest: string[]; search: string } {
 /**
  * Where an old link should go now, or null when it is fine as it is. "#/demo?lan=..." or "#/demo?call=..." was the live
  * call before it got its own page, so it moves to "#/call" with the same query. "#/live" is the old name of
- * "#/analytics".
+ * "#/analytics/live".
  */
 export function redirectFor(hash: string): string | null {
   const { head, rest, search } = split(hash)
   // The operator console was renamed Analytics; "#/live" still opens it.
-  if (head === 'live') return `#/analytics${rest.length ? `/${rest.join('/')}` : ''}${search ? `?${search}` : ''}`
+  if (head === 'live') return `#/analytics/${rest.length ? rest.join('/') : 'live'}${search ? `?${search}` : ''}`
   if (head !== 'demo') return null
   const query = new URLSearchParams(search)
   return LIVE_CALL_PARAMS.some((key) => query.has(key)) ? `#/call?${search}` : null

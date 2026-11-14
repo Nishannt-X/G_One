@@ -45,7 +45,7 @@ describe('the Analytics route', () => {
   it('opens Analytics at #/analytics and keeps old #/live links working', () => {
     expect(parseRoute('#/analytics').view).toBe('analytics')
     expect(parseRoute('#/live').view).toBe('analytics')
-    expect(redirectFor('#/live')).toBe('#/analytics')
+    expect(redirectFor('#/live')).toBe('#/analytics/live')
     expect(redirectFor('#/live/calls?id=c-1')).toBe('#/analytics/calls?id=c-1')
     expect(parseRoute('#/analytics/calls')).toMatchObject({ view: 'analytics', param: 'calls' })
     expect(redirectFor('#/analytics')).toBeNull()

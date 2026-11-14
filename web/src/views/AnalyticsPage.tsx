@@ -6,8 +6,8 @@ import CallsView from './CallsView'
 import LiveView from './LiveView'
 
 const TABS: { tab: AnalyticsTab; href: string; label: string }[] = [
-  { tab: 'live', href: '#/analytics', label: 'Live' },
-  { tab: 'calls', href: '#/analytics/calls', label: 'Calls' },
+  { tab: 'calls', href: '#/analytics', label: 'Calls' },
+  { tab: 'live', href: '#/analytics/live', label: 'Live' },
 ]
 
 /** Analytics: the live view of the current call, and every finished call. */

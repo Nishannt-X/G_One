@@ -532,9 +532,9 @@ export function keyPoints(record: CallRecordView): KeyPoint[] {
 
 export type AnalyticsTab = 'live' | 'calls'
 
-/** "#/analytics" is the live call; "#/analytics/calls" the stored calls, and "?id=" one of them. */
+/** "#/analytics" opens the stored calls (and "?id=" one of them); "#/analytics/live" is the live call. */
 export function tabOf(param: string | null): AnalyticsTab {
-  return param === 'calls' ? 'calls' : 'live'
+  return param === 'live' ? 'live' : 'calls'
 }
 
 /** The backend's 503 code when its one-time privacy cleanup of old rows did not finish. */

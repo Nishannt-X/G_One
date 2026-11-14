@@ -244,8 +244,9 @@ describe('deal price text', () => {
 })
 
 describe('Analytics tabs', () => {
-  it('opens Live by default and Calls at #/analytics/calls', () => {
-    expect(tabOf(null)).toBe('live')
+  it('opens Calls by default and Live at #/analytics/live', () => {
+    expect(tabOf(null)).toBe('calls')
     expect(tabOf('calls')).toBe('calls')
+    expect(tabOf('live')).toBe('live')
   })
 })

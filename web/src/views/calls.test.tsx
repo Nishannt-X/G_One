@@ -74,8 +74,8 @@ describe('filters and sort', () => {
 describe('the Calls list', () => {
   it('shows the honest empty state', () => {
     const html = renderToStaticMarkup(<CallsTable calls={[]} filter={NO_FILTER} onFilter={() => {}} />)
-    expect(html).toContain('No calls stored yet')
-    expect(html).toContain('A call is stored only when a party says yes to remembering it.')
+    expect(html).toContain('No finished calls yet')
+    expect(html).not.toContain('A call is stored only when a party says yes to remembering it.')
   })
 
   it('lists each call with its code, full id on hover, outcome, consent and terms', () => {
@@ -89,10 +89,11 @@ describe('the Calls list', () => {
     expect(html).toContain('onion')
   })
 
-  it('says the figures cover stored calls only', () => {
+  it('says the figures cover every finished call', () => {
     const html = renderToStaticMarkup(<KpiStrip summary={{ storedCalls: 2, bothYesDeals: 1, averageDurationMs: 90_000, languagePairs: { 'hi-IN ⇄ ta-IN': 1 }, medianMs: { reply: 1200 }, toolCounts: { get_mandi_price: 1 } }} />)
-    expect(html).toContain('Stored calls')
-    expect(html).toContain('Figures cover stored calls only')
+    expect(html).toContain('Finished calls')
+    expect(html).toContain('Figures cover every finished call.')
+    expect(html).not.toContain('Figures cover stored calls only')
     expect(html).not.toMatch(/farmers helped|impact/i)
   })
 })

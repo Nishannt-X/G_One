@@ -1,3 +1,4 @@
+import { api, ApiError, type ApiFailure } from './api'
 import type { CallView, LegView, NotStoredReason, RecordedLatency, TimelineItem, ToolView, TurnTiming } from './callState'
 import { dealPrice, languageLabel, offset, rupees } from './format'
 import { comparePrice, dealValue, parseReference } from './pricing'
@@ -64,6 +65,8 @@ export interface CallSummary {
   /** Version 3: whose yes covers the record, and true when only operational data and the deal terms were kept. */
   consentScope?: ConsentScope
   termsOnly?: boolean
+  /** True only when the record holds a caller key (never the key itself); absent on older servers. */
+  keyed?: boolean
   schemaVersion?: number
 }
 
@@ -224,24 +227,51 @@ export function hasYes(call: Answers): boolean {
 }
 
 /**
- * True when the call is not linked to any farmer: no caller key is kept. The caller key is kept only with the
- * farmer's yes, so a list row without it is anonymous; a full record also says so for a withheld or forgotten caller.
+ * True when the call is not linked to any farmer: no caller key is stored. Read from the record's or the row's
+ * `keyed` flag. Without it (older servers) only a call without the farmer's yes is certainly anonymous, since a key is
+ * kept only with that yes; a farmer-yes row then makes no claim (a full record also checks a withheld or forgotten
+ * caller).
  */
-export function isAnonymous(call: Answers & { data?: CallRecordView['data'] }): boolean {
-  const keyed = call.data?.keyed
+export function isAnonymous(call: Answers & { keyed?: boolean; data?: CallRecordView['data'] }): boolean {
+  const keyed = typeof call.data?.keyed === 'boolean' ? call.data.keyed : call.keyed
   if (typeof keyed === 'boolean') return !keyed
+  if (call.consentFarmer !== 'YES') return true
   const why = call.data?.notStored?.farmer
-  return call.consentFarmer !== 'YES' || why === 'withheld' || why === 'forgotten'
+  return why === 'withheld' || why === 'forgotten'
 }
 
 export const NOT_KEPT_NOTE = 'Conversation not kept: no one said yes'
-export const MINIMAL_NOTE = 'Only the times and the answers were kept for this call'
+export const MINIMAL_NOTE = 'This record is minimal: only times and consent answers were saved'
 export const TERMS_ONLY_LABEL = 'Kept without consent: terms only'
 
-/** The short note a list row or a stored call shows when its consent-gated content was not kept, or null. */
+/**
+ * The short note a list row or a stored call shows when its consent-gated content was not kept, or null. A minimal
+ * record says so first; a list row cannot tell a minimal record apart unless someone said yes (it is then terms only).
+ */
 export function keptNote(call: Answers & { termsOnly?: boolean; data?: CallRecordView['data'] }): string | null {
+  if (call.data?.minimal) return MINIMAL_NOTE
   if (!hasYes(call)) return NOT_KEPT_NOTE
-  return call.termsOnly || call.data?.minimal ? MINIMAL_NOTE : null
+  return call.termsOnly ? MINIMAL_NOTE : null
+}
+
+/** What a stored record actually holds, in plain words, for the "what was kept" note. Never more than is there. */
+export function keptItems(record: CallRecordView): string[] {
+  const items = ['call times', 'consent answers']
+  if (record.data.minimal) return items
+  const { farmer, buyer, deal } = record.data
+  const sides = [farmer, buyer].filter((s): s is StoredFarmer | StoredBuyer => Boolean(s))
+  if (sides.length) items.push('who joined')
+  if (Object.keys(record.languages ?? {}).length || sides.some((s) => s.language)) items.push('languages')
+  if (sides.some((s) => s.latency && (s.latency.transcript ?? s.latency.translation ?? s.latency.reply) !== undefined)) items.push('latency medians')
+  if (farmer?.tools?.length) items.push('tool names')
+  if (farmer?.advice?.length) items.push('private-advice kinds')
+  if (deal) items.push('the deal terms')
+  return items
+}
+
+/** "a, b and c". */
+export function plainList(items: string[]): string {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
 }
 
 /** True when a deal card was kept as terms only (no party said yes). */
@@ -249,13 +279,24 @@ export function termsOnlyDeal(call: Answers, deal: StoredDeal | null | undefined
   return Boolean(deal) && (deal?.termsOnly ?? !hasYes(call))
 }
 
+/** Whether a live call will be kept: still waiting on an answer, or final with the parties who said yes. */
+export type LiveConsent = { state: 'pending'; yes: LegRole[]; waiting: LegRole[] } | { state: 'final'; kept: LegRole[] }
+
+const ROLES: LegRole[] = ['farmer', 'buyer']
+
 /**
- * The parties whose answer to the remembering question was yes, in the order farmer, buyer; an empty list when the
- * answers are known and nobody said yes; null before any answer is known.
+ * The live call's consent status. Final only once both parties' answers are in, or once the call has ended (a missing
+ * answer then counts as none, as the backend records it). Pending while one answer is still out. Null before any
+ * answer, for a stored call, and for a scripted call that ended without answers (it never asked).
  */
-export function consentKept(consent: Partial<Record<LegRole, Consent>> | undefined): LegRole[] | null {
-  if (!consent || Object.keys(consent).length === 0) return null
-  return (['farmer', 'buyer'] as const).filter((role) => consent[role] === 'YES')
+export function liveConsent(call: Pick<CallView, 'consent' | 'ended' | 'origin'>): LiveConsent | null {
+  if (call.origin === 'stored') return null
+  const answers = call.consent ?? {}
+  const known = ROLES.filter((role) => answers[role] !== undefined)
+  const ended = Boolean(call.ended) && (known.length > 0 || call.origin === 'feed')
+  if (known.length === ROLES.length || ended) return { state: 'final', kept: ROLES.filter((role) => answers[role] === 'YES') }
+  if (known.length === 0) return null
+  return { state: 'pending', yes: known.filter((role) => answers[role] === 'YES'), waiting: ROLES.filter((role) => answers[role] === undefined) }
 }
 
 const PARTY: Record<LegRole, string> = { farmer: 'farmer', buyer: 'buyer' }
@@ -494,4 +535,61 @@ export type AnalyticsTab = 'live' | 'calls'
 /** "#/analytics" is the live call; "#/analytics/calls" the stored calls, and "?id=" one of them. */
 export function tabOf(param: string | null): AnalyticsTab {
   return param === 'calls' ? 'calls' : 'live'
+}
+
+/** The backend's 503 code when its one-time privacy cleanup of old rows did not finish. */
+export const CLEANUP_FAILED = 'analytics_privacy_cleanup_failed'
+
+/** How long the Calls tab waits before asking again while the privacy cleanup runs. */
+export const RETRY_MS = 5000
+
+/** One answer from the backend for the Calls tab: the list and figures, one record, or why they could not load. */
+export interface CallsLoad {
+  calls?: CallSummary[]
+  summary?: AnalyticsSummary
+  record?: CallRecordView
+  failure: ApiFailure | null
+  failureCode: string | null
+}
+
+interface Timers {
+  setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
+  clearTimer: (id: ReturnType<typeof setTimeout>) => void
+}
+
+const REAL_TIMERS: Timers = { setTimer: (fn, ms) => setTimeout(fn, ms), clearTimer: (id) => clearTimeout(id) }
+
+/**
+ * Loads the Calls tab (one record when `callId` is set) and reports each answer. While the backend's one-time privacy
+ * cleanup runs (503 in progress) it asks again every {@link RETRY_MS}; a failed cleanup waits for the viewer. The
+ * returned stop function clears any pending retry and drops answers that arrive after it.
+ */
+export function watchCalls(callId: string | null, emit: (load: CallsLoad) => void, timers: Timers = REAL_TIMERS): () => void {
+  let stopped = false
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const run = () => {
+    timer = null
+    const load: Promise<CallsLoad> = callId
+      ? api(`/api/analytics/calls/${encodeURIComponent(callId)}`).then((r) => ({ record: r as CallRecordView, failure: null, failureCode: null }))
+      : Promise.all([api('/api/analytics/calls?limit=500'), api('/api/analytics/summary')]).then(([list, s]) => ({
+          calls: ((list as { calls?: CallSummary[] } | null)?.calls) ?? [],
+          summary: s as AnalyticsSummary,
+          failure: null,
+          failureCode: null,
+        }))
+    load
+      .then((answer) => { if (!stopped) emit(answer) })
+      .catch((err: unknown) => {
+        if (stopped) return
+        const failure = err instanceof ApiError ? err.failure : 'unreachable'
+        const failureCode = err instanceof ApiError ? err.code : null
+        emit({ failure, failureCode })
+        if (failure === 'unavailable' && failureCode !== CLEANUP_FAILED) timer = timers.setTimer(run, RETRY_MS)
+      })
+  }
+  run()
+  return () => {
+    stopped = true
+    if (timer !== null) timers.clearTimer(timer)
+  }
 }

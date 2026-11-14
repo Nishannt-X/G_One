@@ -1,3 +1,4 @@
+import { api } from './api'
 import type { Origin } from '../types/console'
 
 export interface MemoryFact {
@@ -62,4 +63,16 @@ export function isCallerKey(value: string): boolean {
  */
 export function forgetResult(body: unknown): 'done' | 'completing' {
   return (body as { status?: unknown } | null)?.status === 'accepted_completing' ? 'completing' : 'done'
+}
+
+/** Asks the backend to forget a caller (DELETE /api/memory/{key}); throws an ApiError when it refuses. */
+export async function forgetCaller(callerKey: string): Promise<'done' | 'completing'> {
+  return forgetResult(await api(`/api/memory/${encodeURIComponent(callerKey)}`, { method: 'DELETE' }))
+}
+
+/** The notice after a forget: done, or accepted and still completing (nothing claims the memory is gone yet). */
+export function forgetNotice(who: string, result: 'done' | 'completing'): string {
+  return result === 'completing'
+    ? `Forget accepted for ${who}, completing: their call records are unlinked, and the memory is removed when G-One retries.`
+    : `${who} has been forgotten.`
 }

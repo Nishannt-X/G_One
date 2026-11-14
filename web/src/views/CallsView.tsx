@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import CallBoard from '../live/CallBoard'
 import {
   callCode,
+  CLEANUP_FAILED,
   CONSENT_LABEL,
   filterCalls,
   isAnonymous,
@@ -9,12 +10,15 @@ import {
   keyPoints,
   languagesOf,
   NO_FILTER,
-  NOT_KEPT_NOTE,
+  keptItems,
+  MINIMAL_NOTE,
+  plainList,
   OUTCOME_LABEL,
   outcomeLabel,
   TERMS_ONLY_LABEL,
   termsOnlyDeal,
   toCallView,
+  watchCalls,
   type AnalyticsSummary,
   type CallFilter,
   type CallRecordView,
@@ -124,9 +128,10 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
         </div>
       )}
       <p className="text-xs text-muted">
-        Figures cover every finished call. Times, tools, languages and the deal terms are kept for every call; per-turn times, the farmer’s name and memory are kept only with a yes. No call keeps its words or audio.
+        Figures cover the calls stored now. Every finished call is stored, up to the newest 500; calls deleted, forgotten or held back by the privacy cleanup are not counted.
+        {' '}When available, a call keeps its times, languages, tool names, private-advice kinds, latency medians and deal terms, whether or not anyone said yes. Per-turn times are kept only for a party that said yes, and the farmer’s name and memory only with the farmer’s yes. No call keeps transcripts, subtitles, translations or audio.
         {approximate && ' Medians across calls are approximate: each call keeps only its own medians.'}
-        {(summary.unsavedCalls ?? 0) > 0 && ` ${summary.unsavedCalls} finished ${summary.unsavedCalls === 1 ? 'call is' : 'calls are'} waiting to be saved and not counted yet.`}
+        {(summary.unsavedCalls ?? 0) > 0 && ` ${summary.unsavedCalls} finished ${summary.unsavedCalls === 1 ? 'call is' : 'calls are'} waiting to be saved and ${summary.unsavedCalls === 1 ? 'is' : 'are'} not counted yet.`}
       </p>
     </section>
   )
@@ -232,6 +237,7 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
   const [copied, setCopied] = useState(false)
   const older = (record.schemaVersion ?? 1) < 2
   const note = keptNote(record)
+  const items = keptItems(record)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -252,10 +258,10 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
       {note && (
         <section aria-label="What was not kept" className="rounded-xl bg-sunk px-4 py-3 text-sm">
           <p className="font-semibold">{note}.</p>
-          {note === NOT_KEPT_NOTE ? (
-            <p className="mt-0.5 text-muted">Kept, as for every call: times, who joined, languages, latency medians, tool names, private-advice kinds and the deal terms. Not kept: per-turn times, the caller key, and the farmer’s name and memory. No call keeps its words or audio.</p>
+          {note === MINIMAL_NOTE ? (
+            <p className="mt-0.5 text-muted">Its other details could not be built or read safely, so they were left out.</p>
           ) : (
-            <p className="mt-0.5 text-muted">The rest of this record could not be read safely, so it was left out.</p>
+            <p className="mt-0.5 text-muted">Kept in this record: {plainList(items)}. Not kept: per-turn times, the caller key, and the farmer’s name and memory. No call keeps transcripts, subtitles, translations or audio.</p>
           )}
         </section>
       )}
@@ -274,8 +280,6 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
 function failureText(failure: ApiFailure): string {
   return failure === 'unreachable' ? 'The backend did not answer. Start it and try again.' : 'The calls could not be loaded.'
 }
-
-const CLEANUP_FAILED = 'analytics_privacy_cleanup_failed'
 
 /** The backend answered 503: its one-time privacy cleanup of older records is running, or did not finish. */
 export function NotReadyNote({ code, onRetry }: { code: string | null; onRetry: () => void }) {
@@ -307,34 +311,17 @@ export default function CallsView({ callId }: { callId: string | null }) {
   const [notice, setNotice] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<{ callId: string; found: boolean } | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    const load = callId
-      ? api(`/api/analytics/calls/${encodeURIComponent(callId)}`).then((r) => { if (!cancelled) setRecord(r as CallRecordView) })
-      : Promise.all([api('/api/analytics/calls?limit=500'), api('/api/analytics/summary')]).then(([list, s]) => {
-          if (cancelled) return
-          setCalls(((list as { calls?: CallSummary[] } | null)?.calls) ?? [])
-          setSummary(s as AnalyticsSummary)
-        })
-    load
-      .then(() => { if (!cancelled) setFailure(null) })
-      .catch((err) => {
-        if (cancelled) return
-        setFailure(err instanceof ApiError ? err.failure : 'unreachable')
-        setFailureCode(err instanceof ApiError ? err.code : null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [callId, reload])
-
-  // While the cleanup runs, try again on a timer; a failed cleanup waits for the viewer.
-  const waiting = failure === 'unavailable' && failureCode !== CLEANUP_FAILED
-  useEffect(() => {
-    if (!waiting) return
-    const timer = setTimeout(() => setReload((r) => r + 1), 5000)
-    return () => clearTimeout(timer)
-  }, [waiting, reload])
+  useEffect(
+    () =>
+      watchCalls(callId, (load) => {
+        if (load.record) setRecord(load.record)
+        if (load.calls) setCalls(load.calls)
+        if (load.summary) setSummary(load.summary)
+        setFailure(load.failure)
+        setFailureCode(load.failureCode)
+      }),
+    [callId, reload],
+  )
 
   // The receipt lives in the backend's memory, so it is gone after a restart: link to it only when it is still there.
   const hasYes = Boolean(record?.data.deal && (record.data.deal.state === 'agreed' || record.data.deal.farmerYes || record.data.deal.buyerYes))

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import CallHeader from '../live/CallHeader'
-import { callCode, consentKept, hasYes, isAnonymous, keyPoints, NO_FILTER, toCallView, type CallRecordView, type CallSummary } from '../lib/analytics'
+import { callCode, hasYes, isAnonymous, liveConsent, keyPoints, NO_FILTER, toCallView, type CallRecordView, type CallSummary } from '../lib/analytics'
 import { api, ApiError } from '../lib/api'
 import { feedReducer, initialFeed, type FeedState } from '../lib/callState'
 import { rupees } from '../lib/format'
@@ -17,18 +17,18 @@ const deal = { state: 'agreed' as const, commodity: 'onion', variety: null, mark
 const consented: CallSummary = {
   callId: 'call-synthetic-yes', startedMs: T0 + 3000, endedMs: T0 + 63_000, durationMs: 60_000, endReason: 'deal_agreed',
   languages: { farmer: 'hi-IN', buyer: 'ta-IN' }, outcome: 'agreed', consentFarmer: 'YES', consentBuyer: 'NO', deal,
-  buyerName: 'Sharma Traders', cautions: 0, tools: 1, consentScope: 'farmer', termsOnly: false, schemaVersion: 4,
+  buyerName: 'Sharma Traders', cautions: 0, tools: 1, consentScope: 'farmer', termsOnly: false, keyed: true, schemaVersion: 4,
 }
 const saidNo: CallSummary = {
   callId: 'call-synthetic-no', startedMs: T0 + 2000, endedMs: T0 + 42_000, durationMs: 40_000, endReason: 'hangup',
   languages: { farmer: 'hi-IN', buyer: 'ta-IN' }, outcome: 'no_deal', consentFarmer: 'NO', consentBuyer: 'NONE',
   deal: { ...deal, state: 'confirming', buyerYes: false, termsOnly: true, label: 'kept without consent: terms only' },
-  buyerName: 'Sharma Traders', cautions: 1, tools: 1, consentScope: 'none', termsOnly: true, schemaVersion: 4,
+  buyerName: 'Sharma Traders', cautions: 1, tools: 1, consentScope: 'none', termsOnly: true, keyed: false, schemaVersion: 4,
 }
 const hangUp: CallSummary = {
   callId: 'call-synthetic-hangup', startedMs: T0 + 1000, endedMs: T0 + 9000, durationMs: 8000, endReason: 'hangup',
   languages: { farmer: 'hi-IN' }, outcome: 'no_terms', consentFarmer: 'NONE', consentBuyer: 'NONE', deal: null,
-  cautions: 0, tools: 0, consentScope: 'none', termsOnly: true, schemaVersion: 4,
+  cautions: 0, tools: 0, consentScope: 'none', termsOnly: true, keyed: false, schemaVersion: 4,
 }
 
 /** Each list row's markup, newest first. */
@@ -84,7 +84,7 @@ describe('the Calls list shows every call', () => {
   it('says a call kept only its times and answers when the record is minimal', () => {
     const [row] = rows([{ ...hangUp, consentFarmer: 'YES', consentScope: 'farmer', termsOnly: true }])
     expect(row).not.toContain('no one said yes')
-    expect(row).toContain('Only the times and the answers were kept')
+    expect(row).toContain('This record is minimal: only times and consent answers were saved')
   })
 
   it('has an honest empty state', () => {
@@ -103,7 +103,7 @@ describe('the figures strip', () => {
     expect(html).toContain('1 with a yes · 2 without')
     expect(html).toContain('Median reply time (measured, approximate)')
     expect(html).toContain('Speech to text, approximate median')
-    expect(html).toContain('Figures cover every finished call.')
+    expect(html).toContain('Figures cover the calls stored now.')
     expect(html).not.toContain('stored only when a party says yes')
     expect(html).not.toMatch(/real.?time|instant|verified identity|blocks scams/i)
   })
@@ -185,8 +185,8 @@ describe('a stored call nobody said yes to', () => {
   it('opens a minimal record, which keeps only its times and answers', () => {
     const minimal = { ...noYesRecord(), consentFarmer: 'YES', outcome: 'no_terms', endReason: 'other', languages: {}, data: { consentScope: 'farmer', termsOnly: true, keyed: false, minimal: true, deal: null, notStored: {}, farmer: null, buyer: null } } as CallRecordView
     const html = renderToStaticMarkup(<CallDetail record={minimal} />)
-    expect(html).toContain('Only the times and the answers were kept')
-    expect(html).not.toContain('no one said yes')
+    expect(html).toContain('This record is minimal: only times and consent answers were saved.')
+    expect(html).not.toContain('Kept in this record')
   })
 
   it('opens a record with optional fields and arrays missing', () => {
@@ -234,33 +234,62 @@ describe('API states', () => {
 })
 
 describe('the live call says whether it will be kept', () => {
-  function feed(...consents: ['farmer' | 'buyer', 'YES' | 'NO' | 'NONE'][]): FeedState {
+  type Answer = ['farmer' | 'buyer', 'YES' | 'NO' | 'NONE']
+  function feed(answers: Answer[], options: { buyer?: boolean; ended?: boolean } = {}): FeedState {
     let state: FeedState = initialFeed
-    state = feedReducer(state, { type: 'event', event: { type: 'call_started', callId: 'c', atMs: T0, language: 'hi-IN' } })
-    state = feedReducer(state, { type: 'event', event: { type: 'leg_joined', callId: 'c', atMs: T0, legId: 'f', role: 'farmer', source: 'simulator', language: 'hi-IN' } })
-    for (const [role, consent] of consents) {
-      state = feedReducer(state, { type: 'event', event: { type: 'consent_recorded', callId: 'c', atMs: T0 + 9000, role, consent } })
-    }
+    const apply = (action: Parameters<typeof feedReducer>[1]) => { state = feedReducer(state, action) }
+    apply({ type: 'event', event: { type: 'call_started', callId: 'c', atMs: T0, language: 'hi-IN' } })
+    apply({ type: 'event', event: { type: 'leg_joined', callId: 'c', atMs: T0, legId: 'f', role: 'farmer', source: 'simulator', language: 'hi-IN' } })
+    if (options.buyer !== false) apply({ type: 'event', event: { type: 'leg_joined', callId: 'c', atMs: T0 + 1, legId: 'b', role: 'buyer', source: 'simulator', language: 'en-IN' } })
+    for (const [role, consent] of answers) apply({ type: 'event', event: { type: 'consent_recorded', callId: 'c', atMs: T0 + 9000, role, consent } })
+    if (options.ended) apply({ type: 'event', event: { type: 'call_ended', callId: 'c', atMs: T0 + 9001, durationMs: 9001, reason: 'hangup' } })
     return state
   }
+  const header = (state: FeedState) => renderToStaticMarkup(<CallHeader call={state.calls.c} calls={[state.calls.c]} onPick={() => {}} />)
 
   it('shows nothing before the consent answers are known', () => {
-    const call = feed().calls.c
-    expect(consentKept(call.consent)).toBeNull()
-    const html = renderToStaticMarkup(<CallHeader call={call} calls={[call]} onPick={() => {}} />)
-    expect(html).not.toContain('Kept with a yes')
-    expect(html).not.toContain('not kept')
+    const state = feed([])
+    expect(liveConsent(state.calls.c)).toBeNull()
+    expect(header(state)).not.toContain('Kept with a yes')
+    expect(header(state)).not.toContain('not kept')
   })
 
-  it('names who said yes, or says nothing is kept', () => {
-    expect(consentKept(feed(['farmer', 'YES'], ['buyer', 'NO']).calls.c.consent)).toEqual(['farmer'])
-    expect(consentKept(feed(['farmer', 'YES'], ['buyer', 'YES']).calls.c.consent)).toEqual(['farmer', 'buyer'])
-    expect(consentKept(feed(['farmer', 'NONE'], ['buyer', 'NONE']).calls.c.consent)).toEqual([])
+  it('never says "no one said yes" while the buyer has not answered: farmer NO, then buyer YES', () => {
+    const first = feed([['farmer', 'NO']])
+    expect(liveConsent(first.calls.c)).toEqual({ state: 'pending', yes: [], waiting: ['buyer'] })
+    expect(header(first)).not.toContain('no one said yes')
+    expect(header(first)).not.toContain('Kept with a yes')
+    const both = feed([['farmer', 'NO'], ['buyer', 'YES']])
+    expect(liveConsent(both.calls.c)).toEqual({ state: 'final', kept: ['buyer'] })
+    expect(header(both)).toContain('Kept with a yes: Buyer')
+    expect(header(both)).not.toContain('no one said yes')
+  })
 
-    const kept = feed(['farmer', 'YES'], ['buyer', 'NO']).calls.c
-    expect(renderToStaticMarkup(<CallHeader call={kept} calls={[kept]} onPick={() => {}} />)).toContain('Kept with a yes: Farmer')
-    const none = feed(['farmer', 'NONE'], ['buyer', 'NONE']).calls.c
-    expect(renderToStaticMarkup(<CallHeader call={none} calls={[none]} onPick={() => {}} />)).toContain('Conversation not kept: no one said yes')
+  it('shows a partial scope as pending, then the final scope: farmer YES, then buyer NO', () => {
+    const first = feed([['farmer', 'YES']])
+    expect(header(first)).toContain('Farmer said yes; waiting for: Buyer')
+    expect(header(first)).not.toContain('Kept with a yes')
+    const both = feed([['farmer', 'YES'], ['buyer', 'NO']])
+    expect(header(both)).toContain('Kept with a yes: Farmer')
+    expect(header(both)).not.toContain('waiting for')
+  })
+
+  it('treats a missing answer as none once the call ends: only a farmer leg, no buyer joined', () => {
+    const state = feed([['farmer', 'NO']], { buyer: false, ended: true })
+    expect(liveConsent(state.calls.c)).toEqual({ state: 'final', kept: [] })
+    expect(header(state)).toContain('Conversation not kept: no one said yes')
+    const yes = feed([['farmer', 'YES']], { buyer: false, ended: true })
+    expect(header(yes)).toContain('Kept with a yes: Farmer')
+  })
+
+  it('says nothing is kept for a call that ended without any answer', () => {
+    const state = feed([], { ended: true })
+    expect(liveConsent(state.calls.c)).toEqual({ state: 'final', kept: [] })
+    expect(header(state)).toContain('Conversation not kept: no one said yes')
+  })
+
+  it('names both parties when both said yes', () => {
+    expect(header(feed([['farmer', 'YES'], ['buyer', 'YES']]))).toContain('Kept with a yes: Farmer, Buyer')
   })
 
   it('never shows the live indicator on a stored call', () => {

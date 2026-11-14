@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { humanize, shortDate } from '../lib/format'
 import { useI18n } from '../lib/i18n'
-import { forgetResult, isCallerKey, parseMemory, type MemoryRecord } from '../lib/memory'
+import { forgetCaller, isCallerKey, parseMemory, type MemoryRecord } from '../lib/memory'
 import { AlertIcon, CheckIcon, TrashIcon, WheatIcon } from '../ui/icons'
 import { Card, Dialog, Empty, ErrorNote, Skeleton } from '../ui/parts'
 import { ProvenanceChip } from './ProvenanceChip'
@@ -62,7 +62,7 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
     if (!activeKey) return
     setForgetting(true)
     try {
-      const result = forgetResult(await api(`/api/memory/${encodeURIComponent(activeKey)}`, { method: 'DELETE' }))
+      const result = await forgetCaller(activeKey)
       setConfirmForget(false)
       setForgetSuccess(result)
       setMemory((prev) => (prev ? { ...prev, known: false, facts: [], gists: [] } : null))

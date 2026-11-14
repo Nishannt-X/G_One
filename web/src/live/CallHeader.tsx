@@ -1,4 +1,4 @@
-import { consentKept } from '../lib/analytics'
+import { liveConsent } from '../lib/analytics'
 import type { CallView } from '../lib/callState'
 import { duration, languageLabel, shortId } from '../lib/format'
 import { useI18n } from '../lib/i18n'
@@ -19,8 +19,9 @@ export default function CallHeader({ call, calls, onPick }: { call: CallView; ca
   const live = !call.ended
   const stored = call.origin === 'stored'
   const languages = [...new Set(call.legs.map((l) => l.language).filter(Boolean))]
-  // Known only once the consent answers arrive (just before the call ends); a stored call says it on its own page.
-  const kept = stored ? null : consentKept(call.consent)
+  // Final only once both answers are in or the call has ended; a stored call says it on its own page.
+  const consent = liveConsent(call)
+  const names = (roles: string[]) => roles.map((role) => t(role as 'farmer' | 'buyer')).join(', ')
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
       <span className={`chip min-h-8 px-3 ${live ? 'bg-ok-soft text-ok' : stored ? 'bg-brand-soft text-brand' : 'bg-sunk text-muted'}`}>
@@ -30,10 +31,13 @@ export default function CallHeader({ call, calls, onPick }: { call: CallView; ca
         </span>
         {live ? t('on_the_line') : stored ? t('call_stored') : t('call_ended')}
       </span>
-      {kept && (
-        <span role="status" className={`chip ${kept.length ? 'bg-ok-soft text-ok' : 'bg-sunk text-muted'}`}>
-          {kept.length ? t('kept_with_yes', { parties: kept.map((role) => t(role)).join(', ') }) : t('kept_none')}
+      {consent?.state === 'final' && (
+        <span role="status" className={`chip ${consent.kept.length ? 'bg-ok-soft text-ok' : 'bg-sunk text-muted'}`}>
+          {consent.kept.length ? t('kept_with_yes', { parties: names(consent.kept) }) : t('kept_none')}
         </span>
+      )}
+      {consent?.state === 'pending' && consent.yes.length > 0 && (
+        <span role="status" className="chip bg-sunk text-muted">{t('kept_pending', { parties: names(consent.yes), waiting: names(consent.waiting) })}</span>
       )}
       <Timer call={call} />
       {stored && <p className="text-muted">{t('call_started_at', { time: startedAt(call.startedMs) })}</p>}

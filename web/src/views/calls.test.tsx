@@ -92,7 +92,7 @@ describe('the Calls list', () => {
   it('says the figures cover every finished call', () => {
     const html = renderToStaticMarkup(<KpiStrip summary={{ storedCalls: 2, bothYesDeals: 1, averageDurationMs: 90_000, languagePairs: { 'hi-IN ⇄ ta-IN': 1 }, medianMs: { reply: 1200 }, toolCounts: { get_mandi_price: 1 } }} />)
     expect(html).toContain('Finished calls')
-    expect(html).toContain('Figures cover every finished call.')
+    expect(html).toContain('Figures cover the calls stored now.')
     expect(html).not.toContain('Figures cover stored calls only')
     expect(html).not.toMatch(/farmers helped|impact/i)
   })

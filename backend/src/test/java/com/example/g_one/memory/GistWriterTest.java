@@ -128,6 +128,45 @@ class GistWriterTest {
     }
 
     @Test
+    void structuredFieldsAreStoredOnlyWithTheirFixedValuesAndNamesInEnglishLetters() throws Exception {
+        llmAnswers(Map.of(
+                "gist", "Ramesh agreed \u201C20 quintal onion\u201D at \"Rs 1,200 per quintal\" with the buyer.",
+                "followUps", List.of(),
+                "profileUpdates", List.of(
+                        Map.of("field", "name", "value", "रमेश पाटिल"),
+                        Map.of("field", "typicalQuantity", "value", "40 quintal per sale"),
+                        Map.of("field", "transport", "value", "needs a truck"),
+                        Map.of("field", "paymentPreference", "value", "upi"),
+                        Map.of("field", "storageAccess", "value", "maybe later"),
+                        Map.of("field", "buyerPayment", "value", "cash"))));
+
+        GistWriter.Result r = writer.write(FarmerMemory.empty(SURESH), transcript("Truck chahiye, UPI se paisa."));
+
+        FarmerMemory m = memory();
+        assertThat(m.fact("name").orElseThrow().value()).isEqualTo("Ramesh Patil");
+        assertThat(m.fact("typicalQuantity").orElseThrow().value()).isEqualTo("40 quintal per sale");
+        assertThat(m.fact("transport").orElseThrow().value()).isEqualTo("needs truck");
+        assertThat(m.fact("paymentPreference").orElseThrow().value()).isEqualTo("UPI");
+        assertThat(m.fact("storageAccess")).as("not one of the fixed values").isEmpty();
+        assertThat(m.fact("buyerPayment")).as("not a farmer field").isEmpty();
+        assertThat(r.facts()).allMatch(f -> f.provenance().saidOrInferred() == Provenance.Origin.INFERRED);
+        assertThat(memory().gists().get(0).summary()).as("a short note, no quoted speech")
+                .isEqualTo("Ramesh agreed 20 quintal onion at Rs 1,200 per quintal with the buyer.");
+    }
+
+    @Test
+    void theSummarizerIsAskedForEnglishNamesAndOneShortSentence() {
+        assertThat(LlmCallSummarizer.SYSTEM).contains("ONE short factual sentence", "English letters",
+                "typicalQuantity", "transport", "paymentPreference", "storageAccess", "never the buyer");
+        CallSummarizer.Draft d = LlmCallSummarizer.parse(JSON.valueToTree(Map.of("gist", "x", "profileUpdates", List.of(
+                Map.of("field", "transport", "value", "own vehicle"), Map.of("field", "storageAccess", "value", "no"),
+                Map.of("field", "typicalQuantity", "value", 40)))));
+        assertThat(d.profileUpdates()).as("non-text values are skipped").containsExactly(
+                new CallSummarizer.FactUpdate("transport", "own vehicle"),
+                new CallSummarizer.FactUpdate("storageAccess", "no"));
+    }
+
+    @Test
     void secretLookingNumbersNeverReachTheLlmOrTheStore() throws Exception {
         llmAnswers(Map.of(
                 "gist", "He read out 4829 13 and account 123456789012 by mistake. Agreed 20 quintal at Rs 120000, "

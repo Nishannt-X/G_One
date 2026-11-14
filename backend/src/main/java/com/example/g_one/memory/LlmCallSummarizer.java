@@ -34,18 +34,24 @@ public final class LlmCallSummarizer implements CallSummarizer {
                             "id": string or null}],
              "profileUpdates": [{"field": string, "value": string}]}
             Rules:
-            - gist: at most 80 words, third person, plain English. Say what the farmer asked, what happened (prices
-              quoted as dated references, buyer connected or not, deal terms both sides said yes to) and what is
-              still open. Only facts the transcript states. Never call anything verified, binding or a live price.
+            - gist: ONE short factual sentence, at most 25 words, third person, plain English: what the farmer asked
+              for and what was agreed or left open. A note, never a replay of the conversation: no quotes, no "he
+              said", no greetings. No numbers except the agreed deal terms (crop, quantity, price with its unit).
+              Never call anything verified, binding or a live price.
             - Never write phone numbers, OTPs, PINs, account, Aadhaar or other ID numbers anywhere.
             - followUps: things G-One should do on a later call. When this call completed an earlier open follow-up
               (openFollowUps), list it with its "id" and status DONE.
             - After a deal both sides confirmed, add an OPEN follow-up to check the pickup and payment with that
               buyer, with the pickup day as dueHint.
             - transcriptOmitted, when present, counts earlier lines left out of a long call.
-            - profileUpdates: only stable facts about the FARMER (never the buyer). Allowed fields: name, village,
-              district, state, crops (one entry per crop), usualMandi, language (one of HI, EN, HI_EN, BN). Leave a
-              field out when unsure.
+            - profileUpdates: only stable facts about the FARMER that the farmer clearly stated; never the buyer, never
+              a guess. Leave a field out when unsure. Allowed fields and values:
+              name (the farmer's own name in English letters, e.g. "Ramesh Patil", never Devanagari or another
+              script), village, district, state, usualMandi (place names in English letters), crops (one entry per
+              crop, English crop name), language (one of HI, EN, HI_EN, BN), typicalQuantity (how much they usually
+              sell at once, short, e.g. "40 quintal per sale"), transport (one of "own vehicle", "needs truck",
+              "buyer arranges"), paymentPreference (one of "cash", "UPI", "bank transfer", "on delivery"),
+              storageAccess (one of "has cold storage", "cold storage nearby", "no cold storage").
             """;
 
     private final LlmClient llm;

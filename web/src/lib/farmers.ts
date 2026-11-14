@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
 import type { FeedState } from './callState'
+import { englishName, englishText } from './farmersScript'
+import { languageLabel } from './format'
 import type { MemoryFact, MemoryGist, MemoryRecord } from './memory'
+import type { Origin } from '../types/console'
 
 /**
  * The backend can read one farmer by caller key but cannot list them, and a key cannot be worked out here because it is
@@ -19,6 +22,8 @@ export interface SeenCaller {
 
 export interface FarmerDeal {
   id: string
+  /** The call the deal was made on. */
+  callId?: string
   commodity: string
   quantity: string
   price: number | null
@@ -26,11 +31,22 @@ export interface FarmerDeal {
   pickup: string
   state: string
   atMs: number
+  /** The market named on the receipt, when there is one. */
+  market?: string
+  /** The buyer as the farmer may see them: a city and a kind, e.g. "Trader, Pune". Never a phone number. */
+  buyer?: string
+}
+
+/** One stored fact as the Farmers tab shows it: English letters, with whether the farmer told it. */
+export interface FarmerValue {
+  value: string
+  source: Origin
 }
 
 export interface Farmer {
   callerKey: string
   origin: FarmerOrigin
+  /** Always English letters (a stored native-script name is transliterated), or null when none was given. */
   name: string | null
   district: string | null
   language: string
@@ -40,7 +56,15 @@ export interface Farmer {
   facts: MemoryFact[]
   gists: MemoryGist[]
   deals?: FarmerDeal[]
+  /** The profile fields, each in English letters with its provenance; absent when not told yet. */
+  profile: Partial<Record<ProfileField, FarmerValue>>
+  /** Each crop with its provenance, English letters. */
+  cropFacts: (FarmerValue & { name: string })[]
 }
+
+/** The single profile fields the backend stores (memory/ProfileFields.java), in display order. */
+export const PROFILE_FIELDS = ['name', 'village', 'district', 'state', 'usualMandi', 'typicalQuantity', 'transport', 'paymentPreference', 'storageAccess', 'language'] as const
+export type ProfileField = (typeof PROFILE_FIELDS)[number]
 
 const KEY = 'g-one-seen-callers'
 const MAX = 100
@@ -101,14 +125,6 @@ export function useFarmerRegistry(feed: FeedState) {
   }, [feed])
 }
 
-function factValue(facts: MemoryFact[], ...fields: string[]): string | null {
-  for (const field of fields) {
-    const fact = facts.find((f) => f.field === field)
-    if (fact) return fact.value
-  }
-  return null
-}
-
 const CROP_PREFIX = 'crop:'
 
 /**
@@ -158,20 +174,90 @@ export function openFollowUps(gists: ReadonlyArray<{ startedMs: number; followUp
   return out
 }
 
+/** The backend's stored language codes as the console's language codes. */
+const LANGUAGE_CODES: Record<string, string> = { HI: 'hi-IN', EN: 'en-IN', HI_EN: 'hi-en', BN: 'bn-IN' }
+
+function profileOf(facts: MemoryFact[]): Farmer['profile'] {
+  const out: Farmer['profile'] = {}
+  for (const field of PROFILE_FIELDS) {
+    const fact = facts.find((f) => f.field === field)
+    if (!fact) continue
+    const raw = fact.value.trim()
+    const value = field === 'language' ? (LANGUAGE_CODES[raw.toUpperCase()] ?? raw) : field === 'name' ? englishName(raw) : englishText(raw)
+    if (value) out[field] = { value, source: fact.source }
+  }
+  return out
+}
+
+function cropFactsOf(facts: MemoryFact[]): Farmer['cropFacts'] {
+  const out: Farmer['cropFacts'] = []
+  for (const f of facts) {
+    const names = f.field.startsWith(CROP_PREFIX) ? [f.value.trim() || f.field.slice(CROP_PREFIX.length)] : f.field === 'crops' || f.field === 'crop' || f.field === 'main_crop' ? f.value.split(/[,/]/) : []
+    for (const n of names) {
+      const name = englishText(n.trim())
+      if (name && !out.some((c) => c.name.toLowerCase() === name.toLowerCase())) out.push({ name, value: name, source: f.source })
+    }
+  }
+  return out
+}
+
 export function toFarmer(callerKey: string, origin: FarmerOrigin, language: string, seenMs: number, facts: MemoryFact[], gists: MemoryGist[], deals?: FarmerDeal[]): Farmer {
+  const profile = profileOf(facts)
+  const cropFacts = cropFactsOf(facts)
   return {
     callerKey,
     origin,
-    name: factValue(facts, 'name'),
-    district: factValue(facts, 'district', 'village'),
-    language: factValue(facts, 'language') ?? language,
-    crops: cropsOf(facts),
+    name: profile.name?.value ?? null,
+    district: profile.district?.value ?? profile.village?.value ?? null,
+    language: profile.language?.value ?? language,
+    crops: cropFacts.map((c) => c.name),
     lastCallMs: gists[0]?.startedMs || seenMs,
     callCount: gists.length,
     facts,
     gists,
     deals,
+    profile,
+    cropFacts,
   }
+}
+
+/** "Nashik, Maharashtra": where the farmer is, from the district (or village) and state. */
+export function placeOf(farmer: Farmer): string | null {
+  const parts = [farmer.district, farmer.profile.state?.value].filter((p): p is string => Boolean(p))
+  return parts.length > 0 ? parts.join(', ') : null
+}
+
+/** The first three crops, and how many more there are: ["onion", "tomato", "garlic"] and 2. */
+export function cropSummary(crops: string[], max = 3): { shown: string[]; more: number } {
+  return { shown: crops.slice(0, max), more: Math.max(0, crops.length - max) }
+}
+
+/** Reads GET /api/deals/{callId}/receipt for the Farmers tab; null when the body is not a receipt. */
+export function parseReceipt(body: unknown, callId: string): FarmerDeal | null {
+  if (typeof body !== 'object' || body === null) return null
+  const r = body as Record<string, unknown>
+  if (typeof r.commodity !== 'string' || !r.commodity) return null
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  return {
+    id: text(r.id) || callId,
+    callId,
+    commodity: r.commodity,
+    quantity: text(r.quantity),
+    price: typeof r.price === 'number' ? r.price : null,
+    unit: text(r.unit),
+    pickup: text(r.pickup),
+    state: text(r.state),
+    atMs: typeof r.atMs === 'number' ? r.atMs : 0,
+    market: text(r.market) || undefined,
+  }
+}
+
+/** How a call ended, as the call log shows it: the deal made on it, or none. */
+export function callOutcome(callId: string, deals: FarmerDeal[]): { label: string; tone: 'ok' | 'warn' | 'plain' } {
+  const deal = deals.find((d) => d.callId === callId || d.id === callId)
+  if (!deal) return { label: 'No deal', tone: 'plain' }
+  if (deal.state === 'agreed') return { label: 'Deal agreed', tone: 'ok' }
+  return { label: deal.state ? `Deal ${deal.state.replace(/_/g, ' ')}` : 'Deal discussed', tone: 'warn' }
 }
 
 export function fromRecord(seen: SeenCaller, record: MemoryRecord): Farmer {
@@ -186,5 +272,5 @@ export function maskedKey(callerKey: string): string {
 export function searchFarmers(farmers: Farmer[], query: string): Farmer[] {
   const needle = query.trim().toLowerCase()
   if (!needle) return farmers
-  return farmers.filter((f) => [f.name ?? '', f.district ?? '', f.language, maskedKey(f.callerKey), ...f.crops].some((s) => s.toLowerCase().includes(needle)))
+  return farmers.filter((f) => [f.name ?? '', f.district ?? '', f.profile.village?.value ?? '', f.profile.state?.value ?? '', f.language, languageLabel(f.language), maskedKey(f.callerKey), ...f.crops].some((s) => s.toLowerCase().includes(needle)))
 }

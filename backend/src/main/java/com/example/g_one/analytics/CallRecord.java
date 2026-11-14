@@ -83,7 +83,7 @@ public record CallRecord(String callId, long startedMs, long endedMs, long durat
         }
         return new Summary(callId, startedMs, endedMs, durationMs, endReason, languages, outcome, consentFarmer,
                 consentBuyer, data.path("deal").isObject() ? data.get("deal") : null, buyerName, cautions,
-                data.path("farmer").path("tools").size(), consentScope(), termsOnly(), schemaVersion);
+                data.path("farmer").path("tools").size(), consentScope(), termsOnly(), farmerKey != null, schemaVersion);
     }
 
     /**
@@ -108,10 +108,11 @@ public record CallRecord(String callId, long startedMs, long endedMs, long durat
      * A row of the calls list. {@code deal} is the stored deal card, or null; {@code buyerName} the connected
      * directory buyer (synthetic); {@code cautions} and {@code tools} are counts from the farmer's leg.
      * {@code consentScope} and {@code termsOnly} (version 3) say whose yes covers the record; {@code termsOnly} is true
-     * when nobody said yes.
+     * when nobody said yes. {@code keyed} is true only when a caller key is stored with the record (never the key
+     * itself): false for a withheld or forgotten caller, a minimal record and any call without the farmer's yes.
      */
     public record Summary(String callId, long startedMs, long endedMs, long durationMs, String endReason,
                           Map<String, String> languages, String outcome, Consent consentFarmer, Consent consentBuyer,
                           JsonNode deal, String buyerName, int cautions, int tools, String consentScope,
-                          boolean termsOnly, int schemaVersion) {}
+                          boolean termsOnly, boolean keyed, int schemaVersion) {}
 }

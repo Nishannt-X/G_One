@@ -1,78 +1,41 @@
 import { describe, expect, it } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import DealMapPage, { SIMULATED_BANNER } from '../views/DealMapPage'
-import { etaHours, freightRupees, SAMPLE_TRUCK } from './freight'
 import freightTable from '../../../backend/src/main/resources/advisory/freight-table.sample.json'
-import { BOUNDS, indiaDots, insideBounds, insidePolygon, MAP_HEIGHT, MAP_WIDTH, project, quadPoint, splitQuad } from './geo'
-import { LANGUAGES, languageColour, type LanguageCode } from './languages'
-import { clockAt, formatClock, locate, nextStepTime, statusOf, stepStart, threadLanguages, totalSeconds, whisperOn } from './playback'
-import { SCENARIOS, STAGES, STEP_ORDER } from './scenarios'
+import DealMapPage, { SIMULATED_BANNER } from '../views/DealMapPage'
+import { browse } from './browse'
+import { DEALS, kmOf, minutesOf, STATUS, totalOf, type DealStatus } from './deals'
+import { freightRupees, SAMPLE_TRUCK } from './freight'
+import { BOUNDS, fitView, FULL_VIEW, insideBounds, insideIndia, MAP_HEIGHT, MAP_WIDTH, pointAlong, project, slicePolyline, viewTransform } from './geo'
+import { BORDERS, OUTLINE } from './indiaMapData'
+import { clusterNumber, clusterPins, placeLabels } from './labels'
+import { LANGUAGES } from './languages'
+import { demoSteps, demoView, displayPosition, INITIAL_PLAYER, locate, reducePlayer, stepStart, totalSeconds, type PlayerState } from './playback'
+import { legPoints, routePoints, truckPoint } from './routes'
 
-const stageIndex = (id: string) => STAGES.findIndex((s) => s.id === id)
+const textOf = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ')
+const HONEST = /real[- ]time|instant|verified|legally binding|blocks? scams?|money saved|e-?NAM|guarantee(?!s no)/i
 
-describe('stage order', () => {
-  it('lists the eight stages in the order a deal happens', () => {
-    expect(STAGES.map((s) => s.id)).toEqual(['call', 'deal', 'dispatch', 'storage', 'pickup', 'transit', 'arrival', 'payment'])
+describe('India map data', () => {
+  it('is small enough to ship and has an outline and state borders', async () => {
+    const size = (await Bun.file(new URL('./indiaMapData.ts', import.meta.url)).arrayBuffer()).byteLength
+    expect(size).toBeLessThan(150_000)
+    expect(OUTLINE.length).toBeGreaterThan(5)
+    expect(BORDERS.length).toBeGreaterThan(30)
+    for (const line of [...OUTLINE, ...BORDERS]) {
+      expect(line.length % 2).toBe(0)
+      for (let i = 0; i < line.length; i += 2) expect(insideBounds([line[i], line[i + 1]])).toBe(true)
+    }
   })
 
-  it('keeps every step in stage order and covers every stage, from the first ring to payment', () => {
-    const order = STEP_ORDER.map((s) => stageIndex(s.stage))
-    expect(order).toEqual([...order].sort((a, b) => a - b))
-    expect(new Set(order).size).toBe(STAGES.length)
-    expect(STEP_ORDER[0].id).toBe('ring')
-    expect(STEP_ORDER[STEP_ORDER.length - 1].id).toBe('payment')
+  it("follows India's official boundaries: all of Jammu and Kashmir, Ladakh and Arunachal Pradesh are inside", () => {
+    const inside = { Delhi: [77.21, 28.61], Srinagar: [74.8, 34.08], Leh: [77.58, 34.15], Muzaffarabad: [73.47, 34.37], Gilgit: [74.31, 35.92], 'Aksai Chin': [79.5, 35.2], Tawang: [91.86, 27.59], 'Port Blair': [92.73, 11.62], Kanyakumari: [77.54, 8.09] } as const
+    const outside = { Lahore: [74.35, 31.55], Dhaka: [90.4, 23.8], Kathmandu: [85.3, 27.7], Colombo: [79.86, 6.93], Thimphu: [89.64, 27.47], 'Arabian Sea': [65, 15] } as const
+    for (const [name, at] of Object.entries(inside)) expect([name, insideIndia(at)]).toEqual([name, true])
+    for (const [name, at] of Object.entries(outside)) expect([name, insideIndia(at)]).toEqual([name, false])
   })
 })
 
-describe('playback', () => {
-  const steps = SCENARIOS[0].steps
-
-  it('locates the playhead in the right step, and past the end every step is done', () => {
-    expect(locate(steps, 0)).toEqual({ index: 0, fraction: 0 })
-    expect(locate(steps, stepStart(steps, 3) + steps[3].seconds / 2)).toEqual({ index: 3, fraction: 0.5 })
-    expect(locate(steps, totalSeconds(steps)).index).toBe(steps.length)
-    expect(statusOf(2, { index: 3, fraction: 0 })).toBe('done')
-    expect(statusOf(3, { index: 3, fraction: 0 })).toBe('active')
-    expect(statusOf(4, { index: 3, fraction: 0 })).toBe('upcoming')
-  })
-
-  it('steps one step at a time from the first ring to the payment, then stops at the end', () => {
-    let t = 0
-    const seen: string[] = []
-    while (t < totalSeconds(steps)) {
-      seen.push(steps[locate(steps, t).index].id)
-      t = nextStepTime(steps, t)
-    }
-    expect(seen).toEqual(STEP_ORDER.map((s) => s.id))
-    expect(nextStepTime(steps, t)).toBe(totalSeconds(steps))
-  })
-
-  it('keeps the scenario clock moving forward and formats it as day and time', () => {
-    for (const scenario of SCENARIOS) {
-      const times = scenario.steps.map((s) => s.atMin)
-      expect(times).toEqual([...times].sort((a, b) => a - b))
-      const transit = scenario.steps.findIndex((s) => s.id === 'transit')
-      const mid = clockAt(scenario, { index: transit, fraction: 0.5 })
-      expect(mid).toBeGreaterThan(scenario.steps[transit].atMin)
-      expect(mid).toBeLessThan(scenario.steps[transit + 1].atMin)
-      expect(scenario.steps[transit + 1].atMin - scenario.steps[transit].atMin).toBe(scenario.etaHours * 60)
-    }
-    expect(formatClock(9 * 60)).toBe('Day 1, 09:00')
-    expect(formatClock(24 * 60 + 16 * 60 + 5)).toBe('Day 2, 16:05')
-  })
-
-  it('switches the language on one half of the thread, and shows the halo only at the private beats on the farmer side', () => {
-    const scenario = SCENARIOS[0]
-    const at = (id: string, fraction = 0.5) => ({ index: scenario.steps.findIndex((s) => s.id === id), fraction })
-    expect(threadLanguages(scenario, at('connect'))).toEqual({ farmer: 'kn', buyer: 'bn' })
-    expect(threadLanguages(scenario, at('switch', 0.1))).toEqual({ farmer: 'kn', buyer: 'bn' })
-    expect(threadLanguages(scenario, at('switch', 0.6))).toEqual({ farmer: 'kn', buyer: 'hi' })
-    const whispering = scenario.steps.filter((_, i) => whisperOn(scenario, { index: i, fraction: 0.5 })).map((s) => s.id)
-    expect(whispering).toEqual(['price-ref', 'caution'])
-  })
-})
-
-describe('map geometry', () => {
+describe('projection and view', () => {
   it('projects the bounds to the corners of the map box', () => {
     expect(project([BOUNDS.west, BOUNDS.north])).toEqual({ x: 0, y: 0 })
     const se = project([BOUNDS.east, BOUNDS.south])
@@ -80,79 +43,137 @@ describe('map geometry', () => {
     expect(se.y).toBeCloseTo(MAP_HEIGHT)
   })
 
-  it('puts the real towns inside India, and the dot grid inside the map box', () => {
-    const towns = { Gadag: [75.63, 15.43], Kolkata: [88.36, 22.57], Nashik: [73.79, 20.0], Chennai: [80.27, 13.08], Delhi: [77.21, 28.61] } as const
-    for (const at of Object.values(towns)) {
-      expect(insideBounds(at)).toBe(true)
-      expect(insidePolygon(at)).toBe(true)
-    }
-    expect(insidePolygon([65, 20])).toBe(false)
-    expect(insidePolygon([90.4, 23.8])).toBe(false) // Dhaka, outside the outline
-    const dots = indiaDots()
-    expect(dots.length).toBeGreaterThan(500)
-    for (const d of dots) {
-      expect(d.x).toBeGreaterThanOrEqual(0)
-      expect(d.x).toBeLessThanOrEqual(MAP_WIDTH)
-      expect(d.y).toBeGreaterThanOrEqual(0)
-      expect(d.y).toBeLessThanOrEqual(MAP_HEIGHT)
-    }
-  })
-
-  it('interpolates the route from one end to the other and splits the thread at its midpoint', () => {
-    const a = { x: 0, y: 0 }
-    const c = { x: 50, y: -40 }
-    const b = { x: 100, y: 0 }
-    expect(quadPoint(a, c, b, 0)).toEqual(a)
-    expect(quadPoint(a, c, b, 1)).toEqual(b)
-    expect(quadPoint(a, c, b, 0.5)).toEqual({ x: 50, y: -20 })
-    const [first, second] = splitQuad(a, c, b)
-    expect(first[2]).toEqual(quadPoint(a, c, b, 0.5))
-    expect(second[0]).toEqual(first[2])
-    expect(quadPoint(...first, 0.5).x).toBeCloseTo(quadPoint(a, c, b, 0.25).x)
-    expect(quadPoint(...second, 0.5).y).toBeCloseTo(quadPoint(a, c, b, 0.75).y)
-  })
-})
-
-describe('language colours', () => {
-  it('gives every language a name and a distinct colour in each theme', () => {
-    for (const theme of ['light', 'dark'] as const) {
-      const colours = (Object.keys(LANGUAGES) as LanguageCode[]).map((code) => languageColour(code, theme))
-      expect(new Set(colours).size).toBe(colours.length)
-      for (const c of colours) expect(c).toMatch(/^#[0-9a-f]{6}$/)
-    }
-    expect(LANGUAGES.kn.name).toBe('Kannada')
-    expect(LANGUAGES.bn.name).toBe('Bengali')
-  })
-})
-
-describe('scenario data', () => {
-  it('has at least two scenarios with different language pairs and crops', () => {
-    expect(SCENARIOS.length).toBeGreaterThanOrEqual(2)
-    expect(new Set(SCENARIOS.map((s) => s.deal.crop)).size).toBe(SCENARIOS.length)
-    expect(new Set(SCENARIOS.map((s) => `${s.farmer.language}-${s.buyer.language}`)).size).toBe(SCENARIOS.length)
-  })
-
-  it('matches the voiced demo in the default scenario', () => {
-    const [first] = SCENARIOS
-    expect(first.farmer).toMatchObject({ person: 'Basavaraj', language: 'kn' })
-    expect(first.buyer).toMatchObject({ person: 'Mondal Traders', language: 'bn', name: 'Kolkata' })
-    expect(first.deal).toMatchObject({ crop: 'Onion', quantityQuintals: 40, pricePerQuintal: 1900, total: 76_000 })
-  })
-
-  it('keeps every scenario whole: all steps, every language known, pins inside India, totals and freight calculated', () => {
-    for (const s of SCENARIOS) {
-      expect(s.steps.map((step) => step.id)).toEqual(STEP_ORDER.map((step) => step.id))
-      for (const step of s.steps) {
-        expect(step.line.length).toBeGreaterThan(10)
-        expect(step.who.length).toBeGreaterThan(2)
-        for (const code of step.langs) expect(LANGUAGES[code]).toBeDefined()
+  it('fits a route with padding at the screen aspect, and never zooms closer than the minimum span', () => {
+    for (const deal of DEALS) {
+      const points = routePoints(deal)
+      for (const aspect of [16 / 9, 1, 390 / 480]) {
+        const view = fitView(points, aspect)
+        expect(view.w / view.h).toBeCloseTo(aspect)
+        expect(view.w).toBeGreaterThanOrEqual(90 - 1e-9)
+        for (const p of points) {
+          expect(p.x).toBeGreaterThan(view.x)
+          expect(p.x).toBeLessThan(view.x + view.w)
+          expect(p.y).toBeGreaterThan(view.y)
+          expect(p.y).toBeLessThan(view.y + view.h)
+        }
       }
-      for (const at of [s.farmer.at, s.buyer.at, s.transporter.at, s.storage.at, s.weighbridge.at]) expect(insidePolygon(at)).toBe(true)
-      expect(s.deal.total).toBe(s.deal.quantityQuintals * s.deal.pricePerQuintal)
-      expect(s.freight).toBe(freightRupees(s.km, s.deal.quantityQuintals))
-      expect(s.etaHours).toBe(etaHours(s.km))
-      expect(s.languageSwitch.to).not.toBe(s.languageSwitch.side === 'buyer' ? s.buyer.language : s.farmer.language)
     }
+  })
+
+  it('maps a view onto the screen box and back', () => {
+    const view = fitView(routePoints(DEALS[0]), 800 / 600)
+    const { scale, tx, ty } = viewTransform(view, 800, 600)
+    expect(view.x * scale + tx).toBeCloseTo(0)
+    expect((view.y + view.h) * scale + ty).toBeCloseTo(600)
+    const whole = viewTransform(FULL_VIEW, MAP_WIDTH, MAP_HEIGHT)
+    expect(whole).toEqual({ scale: 1, tx: 0, ty: 0 })
+  })
+
+  it('walks and slices a polyline by length', () => {
+    const line = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 30 }]
+    expect(pointAlong(line, 0)).toEqual({ x: 0, y: 0 })
+    expect(pointAlong(line, 0.5)).toEqual({ x: 10, y: 10 })
+    expect(pointAlong(line, 1)).toEqual({ x: 10, y: 30 })
+    expect(slicePolyline(line, 0.25)).toEqual([{ x: 0, y: 0 }, { x: 10, y: 0 }])
+    expect(slicePolyline(line, 0.5).at(-1)).toEqual({ x: 10, y: 10 })
+  })
+})
+
+describe('pins and labels', () => {
+  it('groups stops that sit on top of each other into one numbered pin', () => {
+    const clusters = clusterPins([{ x: 100, y: 100, label: 'Farm' }, { x: 108, y: 104, label: 'Weighbridge' }, { x: 300, y: 100, label: 'Hub' }])
+    expect(clusters.map(clusterNumber)).toEqual(['1–2', '3'])
+    expect(clusters[0].label).toBe('Farm, Weighbridge')
+  })
+
+  it('places labels on screen, clear of each other and of every pin', () => {
+    const pins = [{ x: 200, y: 200, label: 'Gadag weighbridge' }, { x: 240, y: 200, label: 'Hyderabad hub' }, { x: 220, y: 240, label: 'Near Rajahmundry' }, { x: 790, y: 10, label: 'Corner' }]
+    const clusters = clusterPins(pins)
+    const placed = placeLabels(clusters, 800, 600)
+    const boxes = placed.filter((p) => p !== null).map((p) => p!.box)
+    expect(boxes.length).toBeGreaterThanOrEqual(3)
+    for (const [i, a] of boxes.entries()) {
+      expect(a.x).toBeGreaterThanOrEqual(4)
+      expect(a.x + a.w).toBeLessThanOrEqual(796)
+      for (const b of boxes.slice(i + 1)) expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false)
+      for (const c of clusters) expect(c.x > a.x && c.x < a.x + a.w && c.y > a.y && c.y < a.y + a.h).toBe(false)
+    }
+  })
+})
+
+describe('deal data', () => {
+  it('has about ten deals with unique ids, two playable demos, and every status at least once', () => {
+    expect(DEALS.length).toBeGreaterThanOrEqual(10)
+    expect(new Set(DEALS.map((d) => d.id)).size).toBe(DEALS.length)
+    expect(DEALS.filter((d) => d.demo).map((d) => d.id)).toEqual(['onion-gadag-kolkata', 'tomato-nashik-chennai'])
+    expect(new Set(DEALS.map((d) => d.status))).toEqual(new Set(Object.keys(STATUS) as DealStatus[]))
+  })
+
+  it('keeps every deal whole: three or more stops inside India, hand-offs and records named, times in order', () => {
+    for (const deal of DEALS) {
+      expect(deal.stops.length).toBeGreaterThanOrEqual(3)
+      expect(deal.stops[0].km).toBe(0)
+      let previous = minutesOf(deal.call.at)
+      for (const stop of deal.stops) {
+        for (const at of [stop.at, ...(stop.via ?? [])]) {
+          expect(insideBounds(at)).toBe(true)
+          expect([deal.id, stop.place, insideIndia(at)]).toEqual([deal.id, stop.place, true])
+        }
+        expect(stop.handler.role.length).toBeGreaterThan(2)
+        expect(stop.handler.name.length).toBeGreaterThan(2)
+        expect(stop.handoff.length).toBeGreaterThan(10)
+        expect(stop.records.length).toBeGreaterThan(0)
+        for (const r of stop.records) expect(r.item.length * r.heldBy.length).toBeGreaterThan(0)
+        for (const stamp of [stop.arrive, stop.depart]) {
+          if (!stamp) continue
+          expect(minutesOf(stamp)).toBeGreaterThanOrEqual(previous)
+          previous = minutesOf(stamp)
+        }
+        if (stop.difficulty) for (const field of Object.values(stop.difficulty)) expect(String(field).length).toBeGreaterThan(0)
+      }
+      // Once a stop is planned, every later stop is planned too.
+      const planned = deal.stops.map((s) => !!s.planned)
+      expect(planned).toEqual([...planned].sort((a, b) => Number(a) - Number(b)))
+      expect(LANGUAGES[deal.farmer.language]).toBeDefined()
+      expect(LANGUAGES[deal.buyer.language]).toBeDefined()
+    }
+  })
+
+  it('states every price with its basis, and works totals and freight out from the numbers', () => {
+    for (const deal of DEALS) {
+      expect(deal.price.per).toBe(deal.quantity.unit)
+      expect(deal.price.basis).toMatch(new RegExp(`^per (10 kg )?${deal.price.per}`))
+      expect(totalOf(deal)).toBe(deal.quantity.amount * deal.price.rupees)
+      expect(deal.freight.rupees).toBe(freightRupees(kmOf(deal), deal.quantity.quintals))
+      expect(deal.payment.method).toMatch(/simulated/)
+      if (deal.payment.state === 'paid' && !deal.stops.some((s) => s.difficulty?.costImpact.includes('less'))) expect(deal.payment.rupees).toBe(totalOf(deal))
+    }
+  })
+
+  it('puts a truck on the road for deals in transit or delayed, on a real leg', () => {
+    for (const deal of DEALS) {
+      if (deal.status === 'in-transit' || deal.status === 'delayed') {
+        expect(deal.truck).toBeDefined()
+        const { leg, fraction } = deal.truck!
+        expect(deal.stops[leg].planned).toBe(true)
+        expect(deal.stops[leg - 1].planned).toBeFalsy()
+        expect(fraction).toBeGreaterThanOrEqual(0)
+        expect(fraction).toBeLessThanOrEqual(1)
+        const p = truckPoint(deal, deal.truck!)
+        expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true)
+      } else {
+        expect(deal.truck).toBeUndefined()
+      }
+    }
+    expect(legPoints(DEALS[0], 0)).toHaveLength(1)
+  })
+
+  it('holds no phone numbers, no overclaims, and keeps G-One out of the role of weigher, grader or payer', () => {
+    const copy = JSON.stringify(DEALS)
+    expect(copy).not.toMatch(/(\+91[\s-]?)?\b[6-9]\d{9}\b/)
+    expect(copy).not.toMatch(/\d{10,}/)
+    expect(copy).not.toMatch(HONEST)
+    for (const deal of DEALS) for (const stop of deal.stops) expect(stop.handler.name).not.toMatch(/G-One/)
   })
 
   it('copies the truck rate from the sample freight table', () => {
@@ -162,33 +183,147 @@ describe('scenario data', () => {
     expect(freightRupees(100, 100)).toBe(5500)
     expect(freightRupees(10, 10)).toBe(2500)
   })
+})
 
-  it('says nothing it cannot back: no real-time, instant, verified or scam-blocking claims, no e-NAM', () => {
-    const copy = JSON.stringify(SCENARIOS)
-    expect(copy).not.toMatch(/real[- ]time|instant|verified|blocks? scams?|money saved|e-?NAM|guarantee/i)
+describe('demo player', () => {
+  const deal = DEALS.find((d) => d.id === 'onion-gadag-kolkata')!
+  const steps = demoSteps(deal)
+  const total = totalSeconds(steps)
+  const run = (state: PlayerState, ...actions: Parameters<typeof reducePlayer>[1][]) => actions.reduce((s, a) => reducePlayer(s, a, steps), state)
+
+  it('builds a call step, then a drive and a stop for every stop', () => {
+    expect(steps[0].kind).toBe('call')
+    expect(steps.filter((s) => s.kind === 'stop')).toHaveLength(deal.stops.length)
+    expect(steps.filter((s) => s.kind === 'travel')).toHaveLength(deal.stops.length - 1)
+  })
+
+  it('advances with time, at the chosen speed, and stops at the end', () => {
+    let state = run(INITIAL_PLAYER, { type: 'play' })
+    expect(state).toMatchObject({ playing: true, started: true, t: 0 })
+    state = run(state, { type: 'tick', dt: 0.1 })
+    expect(state.t).toBeCloseTo(0.1)
+    state = run(state, { type: 'speed', speed: 4 }, { type: 'tick', dt: 0.1 })
+    expect(state.t).toBeCloseTo(0.5)
+    state = run(state, { type: 'tick', dt: 5 }) // a long gap counts as a quarter second at most
+    expect(state.t).toBeCloseTo(1.5)
+    for (let i = 0; i < 1000 && state.playing; i++) state = run(state, { type: 'tick', dt: 0.25 })
+    expect(state).toMatchObject({ t: total, playing: false })
+    expect(run(state, { type: 'play' }).t).toBe(0)
+  })
+
+  it('steps one step at a time, restarts from zero and resets to the whole deal', () => {
+    let state = run(INITIAL_PLAYER, { type: 'step' }, { type: 'step' })
+    expect(state).toMatchObject({ t: stepStart(steps, 2), playing: false, started: true })
+    state = run(state, { type: 'speed', speed: 2 }, { type: 'restart' })
+    expect(state).toMatchObject({ t: 0, playing: true, speed: 2 })
+    expect(run(state, { type: 'reset' })).toEqual({ ...INITIAL_PLAYER, speed: 2 })
+    expect(run(INITIAL_PLAYER, { type: 'pause' }, { type: 'tick', dt: 0.2 }).t).toBe(0)
+  })
+
+  it('reveals stops in order, highlights the current one, shows the difficulty when reached, and ends on the final status', () => {
+    let reached = 0
+    const statuses: string[] = []
+    for (let i = 0; i <= steps.length; i++) {
+      const view = demoView(deal, steps, { index: i, fraction: 0.5 })
+      expect(view.reached).toBeGreaterThanOrEqual(reached)
+      reached = view.reached
+      if (statuses.at(-1) !== view.status) statuses.push(view.status)
+      const step = steps[i]
+      if (step?.kind === 'stop') expect(view.current).toBe(step.stop)
+      if (step?.kind === 'travel') expect(view.truck).toEqual({ leg: step.stop, fraction: 0.5 })
+    }
+    expect(reached).toBe(deal.stops.length)
+    expect(statuses[0]).toBe('awaiting-pickup')
+    expect(statuses).toContain('delayed')
+    expect(statuses.at(-1)).toBe(deal.status)
+    const tyre = deal.stops.findIndex((s) => s.kind === 'roadside')
+    const atTyre = steps.findIndex((s) => s.kind === 'stop' && s.stop === tyre)
+    expect(demoView(deal, steps, { index: atTyre - 1, fraction: 0.9 }).reached).toBe(tyre)
+    expect(demoView(deal, steps, { index: atTyre, fraction: 0 }).reached).toBe(tyre + 1)
+  })
+
+  it('jumps from step to step with reduced motion: the truck is never shown part-way', () => {
+    const travel = steps.findIndex((s) => s.kind === 'travel')
+    const mid = locate(steps, stepStart(steps, travel) + steps[travel].seconds / 3)
+    expect(mid.fraction).toBeCloseTo(1 / 3)
+    expect(displayPosition(mid, true)).toEqual({ index: travel, fraction: 1 })
+    expect(displayPosition(mid, false)).toEqual(mid)
+    expect(demoView(deal, steps, displayPosition(mid, true)).truck?.fraction).toBe(1)
+  })
+
+  it('every demo deal ends on its own status', () => {
+    for (const d of DEALS.filter((x) => x.demo)) {
+      const s = demoSteps(d)
+      expect(d.stops.at(-1)!.statusAfter).toBe(d.status)
+      expect(demoView(d, s, { index: s.length, fraction: 1 })).toMatchObject({ status: d.status, reached: d.stops.length, ended: true })
+    }
+  })
+})
+
+describe('deal browser', () => {
+  it('opens a deal and goes back to the list, remembering which item to focus', () => {
+    let state = { selected: null as string | null, lastOpened: null as string | null }
+    state = browse(state, { type: 'select', id: 'chilli-guntur-delhi' })
+    expect(state).toEqual({ selected: 'chilli-guntur-delhi', lastOpened: 'chilli-guntur-delhi' })
+    state = browse(state, { type: 'back' })
+    expect(state).toEqual({ selected: null, lastOpened: 'chilli-guntur-delhi' })
   })
 })
 
 describe('Deal map page', () => {
-  const html = renderToStaticMarkup(<DealMapPage />)
-  const text = html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ')
+  const svgOf = (html: string) => html.slice(html.indexOf('<svg viewBox'), html.indexOf('</svg>', html.indexOf('<svg viewBox')))
 
-  it('shows the simulated banner', () => {
+  it('lists every deal as a button, with the simulated banner and the map', () => {
+    const html = renderToStaticMarkup(<DealMapPage />)
+    const text = textOf(html)
     expect(text).toContain(SIMULATED_BANNER)
-    expect(SIMULATED_BANNER).toContain('guarantees no truck, price or payment')
+    expect(SIMULATED_BANNER).toMatch(/made-up example deals, not real transactions, transporters or payments/)
+    for (const deal of DEALS) expect(html).toContain(`id="deal-item-${deal.id}"`)
+    expect(text).toContain(`All deals (${DEALS.length})`)
+    expect((html.match(/<button[^>]*id="deal-item-/g) ?? []).length).toBe(DEALS.length)
+    expect(text).not.toMatch(HONEST)
+    expect(svgOf(html)).toContain('data-layer="base"')
   })
 
-  it('names every stage and every step of the default scenario', () => {
-    for (const stage of STAGES) expect(text).toContain(stage.name)
-    for (const step of SCENARIOS[0].steps) expect(text).toContain(step.title)
+  it('shows a delivered deal stop by stop, with hand-offs, records and the difficulty, and no list', () => {
+    const deal = DEALS.find((d) => d.id === 'onion-gadag-kolkata')!
+    const html = renderToStaticMarkup(<DealMapPage initialDealId={deal.id} />)
+    const text = textOf(html)
+    expect(text).not.toContain(`All deals (${DEALS.length})`)
+    expect(text).toContain('All deals')
+    expect(text).toContain('Deal agreed on a call')
+    expect(text).toContain('No transcript, no audio and no phone numbers are stored.')
+    for (const stop of deal.stops) {
+      expect(text).toContain(stop.handoff)
+      expect(text).toContain(stop.handler.name)
+    }
+    expect(text).toContain(deal.price.basis.replace(/'/g, "'"))
+    expect((text.match(/Difficulty, about/g) ?? []).length).toBe(2)
+    expect(text).toMatch(/Play the journey/)
+    expect(html).toContain('aria-label="Speed"')
+    expect(html).toMatch(/aria-pressed="true"[^>]*>1x/)
+    expect(text).not.toMatch(HONEST)
   })
 
-  it('has the controls, the scenario switcher, the language legend and the hand-off line', () => {
-    for (const label of [/Play|Pause/, 'Step', 'Restart', '1x', '2x', '4x', 'Kannada', 'Bengali', 'Hindi']) expect(text).toMatch(label)
-    expect(html).toContain('aria-label="Scenario"')
-    for (const s of SCENARIOS) expect(text).toContain(s.label)
-    expect(text).toContain('weighment and grading happen at the mandi, not by G-One')
-    expect(text).toMatch(/simulated/i)
-    expect(text).not.toMatch(/real[- ]time|instant|verified|blocks scams|money saved|e-?NAM/i)
+  it('draws numbered stops on the route and never puts G-One on the map', () => {
+    for (const deal of DEALS) {
+      const svg = svgOf(renderToStaticMarkup(<DealMapPage initialDealId={deal.id} />))
+      expect(svg).toContain('data-layer="route"')
+      expect(svg).not.toMatch(/G-One/)
+      expect((svg.match(/data-stop="/g) ?? []).length).toBeGreaterThan(0)
+      expect(svg.includes('data-layer="truck"')).toBe(!!deal.truck)
+    }
+  })
+
+  it('keeps the layout safe on a phone: one column by default, nothing wider than the screen outside desktop classes', () => {
+    const html = renderToStaticMarkup(<DealMapPage initialDealId="tomato-nashik-chennai" />)
+    const classes = [...html.matchAll(/class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/))
+    const wide = classes.filter((c) => /^(min-w|w)-\[(\d+)(px|rem)\]$/.test(c)).filter((c) => {
+      const [, , n, unit] = c.match(/^(min-w|w)-\[(\d+)(px|rem)\]$/)!
+      return (unit === 'rem' ? Number(n) * 16 : Number(n)) > 358
+    })
+    expect(wide).toEqual([])
+    expect(html).toContain('lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]')
+    expect(html).toContain('min-h-[300px]')
   })
 })

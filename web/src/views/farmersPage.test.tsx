@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { seedFarmers } from '../dev/seedFarmers'
 import { callOutcome, cropSummary, forgetSeen, mergeSeen, parseReceipt, placeOf, readSeen, toFarmer, type Farmer, type SeenCaller } from '../lib/farmers'
-import { rupees } from '../lib/format'
+import { callRows } from '../lib/farmersOverlay'
+import { rupees, shortDate } from '../lib/format'
 import { forgetNotice } from '../lib/memory'
-import { FarmerDetail, FarmerRow } from './FarmersPage'
+import { CallDetail, FarmerDetail, FarmerRow } from './FarmersPage'
 
 // Synthetic farmers only.
 const NOW = 1_794_132_000_000
@@ -17,7 +18,7 @@ const sparse = byKey('f6')
 const nameless = byKey('a7')
 
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ')
-const detail = (f: Farmer) => text(renderToStaticMarkup(<FarmerDetail farmer={f} deals={f.deals ?? []} onClose={() => {}} onForget={() => {}} />))
+const detail = (f: Farmer) => text(renderToStaticMarkup(<FarmerDetail farmer={f} deals={f.deals ?? []} onClose={() => {}} onForget={() => {}} onOpenCall={() => {}} />))
 const row = (f: Farmer) => text(renderToStaticMarkup(<ul><FarmerRow farmer={f} /></ul>))
 const NATIVE = /[ऀ-ൿ]/
 
@@ -45,6 +46,13 @@ describe('Farmers tab: rows', () => {
     expect(html).not.toContain('lang=')
   })
 
+  test('a row links to its overlay, keeps the dev seed on, and is the focus-return target', () => {
+    const html = renderToStaticMarkup(<ul><FarmerRow farmer={rich} seed /></ul>)
+    expect(html).toContain(`href="#/farmers/${rich.callerKey}?seed=1"`)
+    expect(html).toContain(`data-farmer-row="${rich.callerKey}"`)
+    expect(renderToStaticMarkup(<ul><FarmerRow farmer={rich} /></ul>)).toContain(`href="#/farmers/${rich.callerKey}"`)
+  })
+
   test('a farmer without a name or deals still reads cleanly', () => {
     expect(row(nameless)).toContain('Name not given')
     expect(row(byKey('c3'))).toContain('0 deals')
@@ -52,64 +60,109 @@ describe('Farmers tab: rows', () => {
   })
 })
 
-describe('Farmers tab: card detail', () => {
-  test('a detail is made of the six cards and the forget footer', () => {
-    const d = detail(rich)
-    for (const title of ['Profile', 'What they sell', 'How they work', 'Deals', 'Calls', 'Follow-ups']) {
-      expect(renderToStaticMarkup(<FarmerDetail farmer={rich} deals={rich.deals ?? []} onClose={() => {}} onForget={() => {}} />)).toContain(`aria-label="${title}"`)
-    }
-    expect(d).toContain('Forget this farmer')
-    expect(d).not.toMatch(NATIVE)
-  })
-
-  test('profile and how-they-work fields carry their values and provenance', () => {
+describe('Farmers tab: farmer overlay', () => {
+  test('the overlay has a header, the inferred profile in four groups, the calls and the forget footer', () => {
+    const html = renderToStaticMarkup(<FarmerDetail farmer={rich} deals={rich.deals} onClose={() => {}} onForget={() => {}} onOpenCall={() => {}} />)
+    for (const group of ['Identity', 'Produce', 'Selling', 'Logistics']) expect(html).toContain(`aria-label="${group}"`)
+    expect(html).toContain('id="farmer-overlay-title"')
+    expect(html).toContain('data-autofocus')
     const d = detail(rich)
     expect(d).toContain('Rameshwar Patil')
+    expect(d).toContain('Caller ••••a1a1 · Hindi')
+    expect(d).toContain('Synthetic')
+    expect(d).toContain('3 calls')
+    expect(d).toContain('Profile completeness 11 of 11 known')
+    expect(d).toContain('Forget this farmer')
+    expect(d).not.toMatch(NATIVE)
+    expect(html).not.toContain('animate-drawer')
+  })
+
+  test('each known variable carries its value, Told or Inferred, and when it was last confirmed', () => {
+    const d = detail(rich)
     expect(d).toContain('Pimpalgaon')
     expect(d).toContain('Lasalgaon APMC')
     expect(d).toContain('40 quintal per sale')
     expect(d).toContain('Needs truck')
     expect(d).toContain('UPI')
     expect(d).toContain('Cold storage nearby')
+    expect(d).toContain('red onion, tomato, grapes (inferred), garlic')
     expect(d).toContain('Told')
     expect(d).toContain('Inferred')
+    expect(d).toContain(`Last confirmed ${shortDate(NOW - 86_400_000)}`)
     expect(d).not.toContain('Not told yet')
   })
 
-  test('deals show the price with its basis, the buyer and the state', () => {
-    const d = detail(rich)
-    expect(d).toContain('10 quintal red onion')
-    expect(d).toContain(text(`${rupees(2200)} per quintal`))
-    expect(d).toContain('Trader, Pune')
-    expect(d).toContain('Agreed')
-    expect(detail(bengali)).toContain(text(`${rupees(26000)} total`))
-    expect(detail(byKey('d4'))).toContain('offer open')
-  })
-
-  test('calls are a compact log with an outcome and a labelled short note', () => {
-    const d = detail(rich)
-    expect(d).toContain("G-One's short note, not a transcript")
-    expect(d).toContain('Short note:')
-    expect(d).toContain('Deal agreed')
-    expect(d).toContain('No deal')
-    expect(d).toContain('6:00')
-    expect(d).toContain('Check the pickup and UPI payment')
-  })
-
-  test('missing data says "Not told yet", never a blank', () => {
+  test('missing variables say "Not told yet" and the completeness counts only what is known', () => {
     const d = detail(sparse)
     expect(d).toContain('Basavaraj')
     expect(d).toContain('Kannada')
+    expect(d).toContain('Profile completeness 2 of 11 known')
     expect(d.match(/Not told yet/g)?.length).toBe(9)
-    expect(d).toContain('No recorded deals yet.')
-    expect(d).toContain('Nothing open.')
     expect(detail(nameless)).toContain('Name not given')
   })
 
-  test('a native-script name is shown in English letters in the card and the forget notice', () => {
+  test('calls are compact rows: date and time, length, language, outcome, deal line and follow-ups', () => {
+    const html = renderToStaticMarkup(<FarmerDetail farmer={rich} deals={rich.deals} onClose={() => {}} onForget={() => {}} onOpenCall={() => {}} />)
+    expect(html.match(/<button type="button" data-call-row=/g)?.length).toBe(3)
+    const d = detail(rich)
+    expect(d).toContain('6:00')
+    expect(d).toContain('Hindi')
+    expect(d).toContain('Deal agreed')
+    expect(d).toContain('No deal')
+    expect(d).toContain('10 quintal red onion · 1 follow-up')
+    expect(d).toContain('0 follow-ups')
+    // The long note and the price stay in the call overlay.
+    expect(d).not.toContain('Pune trader, pickup at the farm')
+    expect(d).not.toContain(text(rupees(2200)))
+  })
+
+  test('while deals are being looked up the outcome says so', () => {
+    const d = text(renderToStaticMarkup(<FarmerDetail farmer={rich} deals={undefined} onClose={() => {}} onForget={() => {}} onOpenCall={() => {}} />))
+    expect(d).toContain('Checking deal…')
+  })
+
+  test('a native-script name is shown in English letters in the overlay and the forget notice', () => {
     expect(detail(bengali)).toContain('Mita Das')
     expect(detail(tamil)).toContain('Selvi')
     expect(forgetNotice(bengali.name ?? '', 'done')).toBe('Mita Das has been forgotten.')
+  })
+})
+
+describe('Farmers tab: call overlay', () => {
+  const call = (f: Farmer, callId: string, checking = false) => {
+    const row = callRows(f, checking ? undefined : f.deals).find((r) => r.callId === callId)
+    if (!row) throw new Error(callId)
+    return text(renderToStaticMarkup(<CallDetail farmer={f} row={row} checking={checking} onClose={() => {}} />))
+  }
+
+  test('only the basics: when, length, language, outcome, the deal with its price basis and buyer', () => {
+    const c = call(rich, 'seed-1')
+    expect(c).toContain('Rameshwar Patil')
+    expect(c).toContain('6:00')
+    expect(c).toContain('Hindi')
+    expect(c).toContain('Deal agreed')
+    expect(c).toContain('Red onion')
+    expect(c).toContain('10 quintal')
+    expect(c).toContain(text(`${rupees(2200)} per quintal`))
+    expect(c).toContain('Trader, Pune')
+    expect(c).toContain('Check the pickup and UPI payment')
+    expect(call(bengali, 'seed-3')).toContain(text(`${rupees(26000)} total`))
+    expect(call(byKey('d4'), 'seed-5')).toContain('Deal offer open')
+  })
+
+  test("the note is labelled as a short note, and the call links to Analytics", () => {
+    const html = renderToStaticMarkup(<CallDetail farmer={rich} row={callRows(rich, rich.deals)[0]} onClose={() => {}} />)
+    expect(text(html)).toContain('short note, not a transcript')
+    expect(text(html)).toContain('Agreed 10 quintal red onion with a Pune trader')
+    expect(html).toContain('href="#/analytics/calls?id=seed-1"')
+    expect(html).toContain('id="call-overlay-title"')
+  })
+
+  test('a call without a deal or follow-ups says so', () => {
+    const c = call(rich, 'seed-2')
+    expect(c).toContain('No deal was recorded on this call.')
+    expect(c).toContain('None.')
+    expect(call(rich, 'seed-1', true)).not.toContain('No deal was recorded')
   })
 })
 

@@ -258,7 +258,7 @@ class CallRecordDetailTest {
                         farmer_key_hash TEXT, data TEXT NOT NULL, created_at INTEGER NOT NULL)""");
             st.execute("""
                     INSERT INTO call_records VALUES ('call-old', 1000, 61000, 60000, 'hangup', '{"farmer":"hi-IN"}',
-                    'no_terms', 'YES', 'NONE', 'key-old',
+                    'no_terms', 'YES', 'NONE', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
                     '{"deal":null,"notStored":{"buyer":"no_leg"},"farmer":{"legId":"f","source":"simulator",
                     "language":"hi-IN","joinedMs":1000,"endReason":"hangup","timings":[],"tools":[],"advice":[],
                     "memory":{"returning":false,"facts":[],"gists":[]}},"buyer":null}', 62000)""");
@@ -266,14 +266,15 @@ class CallRecordDetailTest {
         try (Harness h = new Harness(url)) {
             CallRecord old = h.store.get("call-old").orElseThrow();
             assertThat(old.schemaVersion()).isEqualTo(1);
-            assertThat(old.farmerKey()).isEqualTo("key-old");
+            // An HMAC caller key (64 hex digits) is kept; the scrub keeps nothing else in that column.
+            assertThat(old.farmerKey()).isEqualTo("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
             assertThat(old.data().get("farmer").get("language").asText()).isEqualTo("hi-IN");
             assertThat(old.summary().buyerName()).isNull();
             assertThat(old.summary().consentScope()).isEqualTo("farmer");
             assertThat(old.summary().termsOnly()).isFalse();
             call(h.bus, "call-new", "YES", "YES", true);
             assertThat(h.store.list(10)).extracting(CallRecord::schemaVersion).containsExactly(CallRecord.SCHEMA_VERSION, 1);
-            assertThat(h.store.deleteByFarmerKey("key-old")).isEqualTo(1);
+            assertThat(h.store.deleteByFarmerKey("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")).isEqualTo(1);
         }
         // Opening again does not migrate twice.
         try (Harness h = new Harness(url)) {

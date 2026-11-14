@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,84 +24,119 @@ import org.slf4j.LoggerFactory;
  * parties' consent decides only the conversation-derived fields, and a call without the farmer's yes is anonymous (no
  * caller key). The synthetic sample replay ({@code replay-} call ids) is never stored.
  *
- * <p>No call is dropped. Beyond {@link #MAX_OPEN_CALLS} open calls the oldest is recorded early as an incomplete call
- * (end reason {@code evicted}). A record that fails to save stays in a bounded queue and is retried with backoff, on
- * every later call end and on a periodic tick; it is logged loudly while it stays unsaved.
+ * <p>Every record passes {@link RecordSchema} (closed values only) before it is kept anywhere.
  *
- * <p>A forget (the caller's own "forget me", or the console's) is applied at once: the store deletes the caller's
- * records and keeps a tombstone, and open or queued calls of that caller lose their caller key, stated name, memory
- * snapshot and farmer timeline.
+ * <p>No call is lost. A record that cannot be built becomes a minimal record. Each record goes to the durable
+ * {@link RecordSpool} before the insert and leaves it after; while the store is down records wait in the spool
+ * (disk-bound, never dropped) and are replayed when a save succeeds again, on a periodic tick, at startup and at
+ * shutdown. Beyond {@link #MAX_OPEN_CALLS} open calls the oldest is recorded early as incomplete ({@code evicted});
+ * calls still open at shutdown are recorded as {@code shutdown}.
+ *
+ * <p>Before any read is served the writer runs the one-time scrub of old rows and applies the forget tombstones
+ * ({@link #readiness()}); the controller refuses reads until it is {@link Readiness#READY}.
+ *
+ * <p>A forget ({@link #forget}) is written to the store first and fails loudly when it cannot be: the console and the
+ * "forget me" tool call it before memory forgets. Open calls and spooled records of that caller lose everything
+ * linked to them at once.
  */
 public final class CallRecordWriter implements AutoCloseable {
     /** Open calls kept before the oldest is recorded early as incomplete. */
     static final int MAX_OPEN_CALLS = 500;
-    /** Unsaved records kept for retry; beyond this the oldest is dropped with an error. */
-    static final int MAX_PENDING = 1_000;
-    /** Waits before the first retries; after them, every {@link #SLOW_RETRY_MS}. */
-    static final long[] BACKOFF_MS = {1_000, 5_000, 30_000};
-    static final long SLOW_RETRY_MS = 60_000;
+    /** Every this many waiting records, the writer logs an error: the store has been down a long time. */
+    static final int LOUD_BACKLOG = 1_000;
+    static final long TICK_MS = 1_000;
     static final String EVICTED = "evicted";
+    static final String SHUTDOWN = "shutdown";
 
     private static final Logger log = LoggerFactory.getLogger(CallRecordWriter.class);
+
+    /** Whether reads may be served: the one-time scrub and the tombstone sweep have run. */
+    public enum Readiness { CLEANING, READY, FAILED }
 
     private final CallRecordStore store;
     private final ObjectMapper json;
     private final Clock clock;
-    private final DealVocabulary vocab;
+    private final Vocabulary vocab;
+    private final RecordSchema schema;
+    private final RecordSpool spool;
     private final int maxOpen;
     private final Map<CallId, CallAccumulator> open = new LinkedHashMap<>();
-    private final List<Pending> pending = new ArrayList<>();
-    /** Forgets the store could not take yet: caller key to forget time. */
-    private final Map<String, Long> pendingForgets = new LinkedHashMap<>();
+    /** Records the spool could not take (a disk failure): kept here and spooled again on the next tick. */
+    private final List<CallRecord> unspooled = new ArrayList<>();
     private final ConsoleBus.Subscription subscription;
-    private final ScheduledExecutorService retries;
-
-    /** A record waiting to be saved again. */
-    private static final class Pending {
-        CallRecord record;
-        int attempts;
-        long nextAtMs;
-
-        Pending(CallRecord record, int attempts, long nextAtMs) {
-            this.record = record;
-            this.attempts = attempts;
-            this.nextAtMs = nextAtMs;
-        }
-    }
+    private final ScheduledExecutorService ticks;
+    private volatile Readiness readiness = Readiness.CLEANING;
+    private boolean storeDown;
+    private int loudAt = LOUD_BACKLOG;
+    /** Builds a finished call's record; a test seam for build failures. */
+    private BiFunction<CallAccumulator, String, CallRecord> builder;
 
     public CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock) {
-        this(bus, store, json, clock, DealVocabulary.bundled(json));
+        this(bus, store, json, clock, Vocabulary.bundled(json), new MemoryRecordSpool());
     }
 
-    public CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, DealVocabulary vocab) {
-        this(bus, store, json, clock, vocab, MAX_OPEN_CALLS, true);
+    CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, Vocabulary vocab,
+                     RecordSpool spool) {
+        this(bus, store, json, clock, vocab, spool, MAX_OPEN_CALLS, true);
     }
 
-    /** @param scheduleRetries false for tests that drive {@link #retryDue()} themselves */
-    CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, DealVocabulary vocab,
-                     int maxOpen, boolean scheduleRetries) {
+    /** @param tick false for tests that drive {@link #tick()} themselves */
+    CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, Vocabulary vocab,
+                     RecordSpool spool, int maxOpen, boolean tick) {
         this.store = store;
         this.json = json;
         this.clock = clock;
         this.vocab = vocab;
+        this.schema = new RecordSchema(vocab, json);
+        this.spool = spool;
         this.maxOpen = maxOpen;
-        try {
-            int scrubbed = store.scrubLegacy(r -> RecordScrubber.scrub(r, vocab, json));
-            if (scrubbed > 0) log.info("Call records: scrubbed {} records stored before the privacy review", scrubbed);
-        } catch (RuntimeException e) {
-            log.error("Could not scrub call records stored before the privacy review", e);
+        this.builder = (call, reason) -> call.toRecord(json, vocab.deals(), clock.millis(), reason);
+        synchronized (this) {
+            cleanup();
         }
-        if (scheduleRetries) {
-            retries = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "call-record-retry");
+        if (tick) {
+            ticks = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "call-record-writer");
                 t.setDaemon(true);
                 return t;
             });
-            retries.scheduleWithFixedDelay(this::retryDueQuietly, 1, 1, TimeUnit.SECONDS);
+            ticks.scheduleWithFixedDelay(this::tickQuietly, TICK_MS, TICK_MS, TimeUnit.MILLISECONDS);
         } else {
-            retries = null;
+            ticks = null;
         }
         this.subscription = bus.subscribe(this::accept);
+    }
+
+    /** Whether the controller may serve reads. */
+    public Readiness readiness() {
+        return readiness;
+    }
+
+    RecordSchema schema() {
+        return schema;
+    }
+
+    synchronized void buildWith(BiFunction<CallAccumulator, String, CallRecord> builder) {
+        this.builder = builder;
+    }
+
+    /** The one-time scrub of old rows, the tombstone sweep, then the spool: before any read is served. */
+    private void cleanup() {
+        try {
+            CallRecordStore.ScrubReport report = store.scrubLegacy(schema);
+            if (report.scrubbed() + report.minimised() > 0) {
+                log.info("Call records: scrubbed {} and minimised {} records stored before the privacy review",
+                        report.scrubbed(), report.minimised());
+            }
+            int swept = store.applyTombstones();
+            if (swept > 0) log.info("Call records: {} records of forgotten callers deleted at startup", swept);
+            flush();
+            readiness = report.ok() ? Readiness.READY : Readiness.FAILED;
+            if (!report.ok()) log.error("Call records: {} old rows could not be cleaned; reads stay closed", report.failed());
+        } catch (RuntimeException e) {
+            readiness = Readiness.FAILED;
+            log.error("Call records: privacy cleanup failed; reads stay closed until it succeeds", e);
+        }
     }
 
     synchronized void accept(ConsoleEvent event) {
@@ -118,29 +154,40 @@ public final class CallRecordWriter implements AutoCloseable {
         }
         call.accept(event, json);
         if (event instanceof ConsoleEvent.ToolCalled t && t.ok() && t.tool().equals(ForgetMeTool.NAME)) {
-            // The farmer asked to be forgotten: their earlier records go now, and open calls of theirs lose the key.
-            call.farmerKey().ifPresent(key -> forgetQuietly(key, t.atMs()));
+            // Normally the tool already told the writer (before memory forgot); this repeat is harmless.
+            call.farmerKey().ifPresent(key -> {
+                try {
+                    forget(key, t.atMs());
+                } catch (RuntimeException e) {
+                    // Logged in forget(); the call's own record is withdrawn by its accumulator regardless.
+                }
+            });
         }
         if (event instanceof ConsoleEvent.CallEnded) {
             open.remove(event.callId());
-            // Earlier unsaved records first, so a store that has recovered takes them in order.
-            retryAll();
             finish(call, null);
         }
     }
 
     /**
-     * Forgets a caller key now (the console's forget): the store deletes its records and keeps a tombstone; open and
-     * queued calls of that caller lose everything linked to it. Throws when the store could not take the forget, after
-     * stripping what is held in memory and queuing the forget for retry.
+     * Forgets a caller key: open calls and spooled records of that caller that began at or before {@code atMs} lose
+     * everything linked to it, then the store deletes its records and keeps a durable tombstone, in one transaction.
+     * Throws when the store cannot take it, so the caller (the console, the "forget me" tool) fails closed.
      */
     public synchronized void forget(String farmerKey, long atMs) {
-        stripHeld(farmerKey, atMs);
+        for (CallAccumulator call : open.values()) {
+            if (call.farmerKey().filter(farmerKey::equals).isPresent() && call.startedMs() <= atMs) {
+                call.withdrawKey();
+            }
+        }
+        for (CallRecord r : spool.all()) {
+            if (farmerKey.equals(r.farmerKey()) && r.startedMs() <= atMs) spool.put(r.withdrawn());
+        }
+        unspooled.replaceAll(r -> farmerKey.equals(r.farmerKey()) && r.startedMs() <= atMs ? r.withdrawn() : r);
         try {
             store.forget(farmerKey, atMs);
         } catch (RuntimeException e) {
-            pendingForgets.merge(farmerKey, atMs, Math::max);
-            log.error("Could not store a forget for call records; it is queued for retry", e);
+            log.error("Could not store a forget for call records; the forget is refused", e);
             throw e;
         }
     }
@@ -150,53 +197,78 @@ public final class CallRecordWriter implements AutoCloseable {
         forget(farmerKey, clock.millis());
     }
 
-    private void forgetQuietly(String farmerKey, long atMs) {
-        try {
-            forget(farmerKey, atMs);
-        } catch (RuntimeException e) {
-            // Logged and queued in forget().
-        }
-    }
-
-    /** Open calls and queued records of this caller that began at or before the forget lose the linked fields. */
-    private void stripHeld(String farmerKey, long atMs) {
-        for (CallAccumulator call : open.values()) {
-            if (call.farmerKey().filter(farmerKey::equals).isPresent() && call.startedMs() <= atMs) {
-                call.withdrawKey();
-            }
-        }
-        for (Pending p : pending) {
-            if (farmerKey.equals(p.record.farmerKey()) && p.record.startedMs() <= atMs) {
-                p.record = p.record.withdrawn();
-            }
-        }
-    }
-
     private void finish(CallAccumulator call, String endReasonIfOpen) {
         CallRecord record;
         try {
-            record = call.toRecord(json, vocab, clock.millis(), endReasonIfOpen);
+            record = schema.project(builder.apply(call, endReasonIfOpen));
         } catch (RuntimeException e) {
-            log.error("Could not build the record of call {}", call.callId(), e);
-            return;
+            log.error("Could not build the record of call {}; storing a minimal record", call.callId());
+            record = call.minimal(schema, clock.millis());
         }
+        persist(record);
+    }
+
+    /** Spool first, then insert; the spool entry goes once the insert succeeded. */
+    private void persist(CallRecord record) {
+        boolean spooled;
         try {
-            store.save(record);
-            log.info("Call {} ended: record stored (consent: {}{})", call.callId(), record.consentScope(),
-                    record.termsOnly() ? ", terms only" : record.farmerKey() == null ? ", anonymous" : "");
+            spool.put(record);
+            spooled = true;
         } catch (RuntimeException e) {
-            log.warn("Could not store the record of call {}; queued for retry", call.callId(), e);
-            enqueue(new Pending(record, 1, clock.millis() + BACKOFF_MS[0]));
+            log.error("Could not spool the record of call {}; kept in memory until the spool works", record.callId());
+            unspooled.add(record);
+            spooled = false;
+        }
+        boolean wasDown = storeDown;
+        if (save(record)) {
+            if (spooled) spool.remove(record.callId());
+            else unspooled.remove(record);
+            log.info("Call {} ended: record stored (consent: {}{})", record.callId(), record.consentScope(),
+                    record.termsOnly() ? ", terms only" : record.farmerKey() == null ? ", anonymous" : "");
+            if (wasDown) flush();
+        } else {
+            warnBacklog();
         }
     }
 
-    private void enqueue(Pending p) {
-        if (pending.size() >= MAX_PENDING) {
-            Pending dropped = pending.remove(0);
-            log.error("Call record queue full: dropped the unsaved record of call {} after {} attempts",
-                    dropped.record.callId(), dropped.attempts);
+    private boolean save(CallRecord record) {
+        try {
+            store.save(record);
+            storeDown = false;
+            return true;
+        } catch (RuntimeException e) {
+            if (!storeDown) log.warn("The call records store failed; records wait in the spool", e);
+            storeDown = true;
+            return false;
         }
-        pending.add(p);
+    }
+
+    /** Replays everything waiting, oldest first, stopping at the first failure (the store is still down). */
+    private void flush() {
+        for (Iterator<CallRecord> it = unspooled.iterator(); it.hasNext(); ) {
+            try {
+                spool.put(it.next());
+                it.remove();
+            } catch (RuntimeException e) {
+                break;
+            }
+        }
+        for (CallRecord r : spool.all()) {
+            if (!save(r)) {
+                warnBacklog();
+                return;
+            }
+            spool.remove(r.callId());
+        }
+        loudAt = LOUD_BACKLOG;
+    }
+
+    private void warnBacklog() {
+        int waiting = pendingRecords();
+        if (waiting >= loudAt) {
+            log.error("{} finished call records are waiting for the store (kept on disk, none dropped)", waiting);
+            loudAt += LOUD_BACKLOG;
+        }
     }
 
     /** Records the oldest open calls early, as incomplete, while more than the cap are open. Never drops one. */
@@ -210,57 +282,23 @@ public final class CallRecordWriter implements AutoCloseable {
         }
     }
 
-    /** Retries the queued records and forgets whose wait is over. */
-    synchronized void retryDue() {
-        retry(false);
+    /** The periodic work: finish a failed cleanup, then replay what waits. */
+    synchronized void tick() {
+        if (readiness != Readiness.READY) cleanup();
+        else flush();
     }
 
-    /** Retries every queued record and forget now (after a call ends). */
-    synchronized void retryAll() {
-        retry(true);
-    }
-
-    private void retryDueQuietly() {
+    private void tickQuietly() {
         try {
-            retryDue();
+            tick();
         } catch (RuntimeException e) {
-            log.error("Call record retry failed", e);
+            log.error("Call record writer tick failed", e);
         }
     }
 
-    private void retry(boolean all) {
-        for (Iterator<Map.Entry<String, Long>> it = pendingForgets.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<String, Long> f = it.next();
-            try {
-                store.forget(f.getKey(), f.getValue());
-                it.remove();
-            } catch (RuntimeException e) {
-                log.error("A queued forget for call records still cannot be stored", e);
-            }
-        }
-        long now = clock.millis();
-        for (Iterator<Pending> it = pending.iterator(); it.hasNext(); ) {
-            Pending p = it.next();
-            if (!all && now < p.nextAtMs) continue;
-            try {
-                store.save(p.record);
-                it.remove();
-                log.info("Call {}: record stored after {} failed attempts", p.record.callId(), p.attempts);
-            } catch (RuntimeException e) {
-                p.attempts++;
-                long wait = p.attempts <= BACKOFF_MS.length ? BACKOFF_MS[p.attempts - 1] : SLOW_RETRY_MS;
-                p.nextAtMs = now + wait;
-                if (p.attempts >= BACKOFF_MS.length) {
-                    log.error("Call {}: record still unsaved after {} attempts; kept queued, retrying", p.record.callId(),
-                            p.attempts, e);
-                }
-            }
-        }
-    }
-
-    /** Records waiting to be saved. */
+    /** Records waiting to be stored (spooled, or held in memory while the spool fails). */
     public synchronized int pendingRecords() {
-        return pending.size();
+        return spool.size() + unspooled.size();
     }
 
     synchronized int openCalls() {
@@ -270,17 +308,18 @@ public final class CallRecordWriter implements AutoCloseable {
     @Override
     public void close() {
         subscription.close();
-        if (retries != null) retries.shutdownNow();
+        if (ticks != null) ticks.shutdownNow();
         synchronized (this) {
             // Calls still open at shutdown are recorded as they stand, rather than lost.
             for (CallAccumulator call : List.copyOf(open.values())) {
-                finish(call, "shutdown");
+                finish(call, SHUTDOWN);
             }
             open.clear();
-            retry(true);
-            for (Pending p : pending) {
-                log.error("Shutting down with the record of call {} unsaved after {} attempts", p.record.callId(),
-                        p.attempts);
+            flush();
+            int waiting = pendingRecords();
+            if (waiting > 0) {
+                log.error("Shutting down with {} call records not yet stored; {} of them stay spooled for the next start",
+                        waiting, spool.size());
             }
         }
     }

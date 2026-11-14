@@ -14,13 +14,14 @@ import java.util.TreeMap;
  * its per-stage medians and counts, so the figure is the median of those medians weighted by their counts (exact for
  * one call; a close estimate across calls). {@code callsWithYes} counts calls at least one party said yes to;
  * {@code callsWithoutYes} the rest, kept as terms only. {@code bothYesDeals} counts deals both parties confirmed on the
- * call (not the remembering question). {@code unsavedCalls} counts finished calls whose record is still queued for a
- * retry after a failed save.
+ * call (not the remembering question). {@code unsavedCalls} counts finished calls whose record is waiting in the
+ * spool for the store. {@code approximate} is true whenever {@code medianMs} spans more than one call: it is then a
+ * count-weighted median of per-call medians, not the true median over every turn.
  */
 public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDurationMs,
                                Map<String, Integer> languagePairs, Map<String, Long> medianMs,
                                Map<String, Integer> toolCounts, int callsWithYes, int callsWithoutYes,
-                               int unsavedCalls) {
+                               int unsavedCalls, boolean approximate) {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<String> STAGES = List.of("transcript", "translation", "reply");
@@ -67,7 +68,7 @@ public record AnalyticsSummary(int storedCalls, int bothYesDeals, long averageDu
             if (!values.isEmpty()) medians.put(stage, weightedMedian(values));
         });
         return new AnalyticsSummary(records.size(), agreed, records.isEmpty() ? 0 : total / records.size(), pairs,
-                medians, tools, withYes, records.size() - withYes, unsaved);
+                medians, tools, withYes, records.size() - withYes, unsaved, records.size() > 1 && !medians.isEmpty());
     }
 
     /** "hi-IN ⇄ ta-IN" when both languages are stored, else the one stored, else "unknown". */

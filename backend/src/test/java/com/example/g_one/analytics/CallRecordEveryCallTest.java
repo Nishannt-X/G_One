@@ -468,9 +468,8 @@ class CallRecordEveryCallTest {
         }
         // Scrubbed once: opening again leaves it as it is.
         try (CallRecordStore s = new CallRecordStore(url)) {
-            assertThat(s.scrubLegacy(r -> {
-                throw new AssertionError("already scrubbed");
-            })).isZero();
+            CallRecordStore.ScrubReport again = s.scrubLegacy(new RecordSchema(Vocabulary.bundled(JSON), JSON));
+            assertThat(again.scrubbed() + again.minimised() + again.failed()).isZero();
         }
     }
 

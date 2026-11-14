@@ -12,6 +12,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.ObjectProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 public class MemoryController {
+    private static final Logger log = LoggerFactory.getLogger(MemoryController.class);
     public static final String HEADER = "X-Access-Code";
 
     /** One fact as the console shows it; {@code at} is ISO-8601 UTC. */
@@ -94,8 +97,15 @@ public class MemoryController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "bad_caller_key"));
         }
+        // Other stores (call records) forget first, durably; if one cannot, nothing is forgotten and the console is told,
+        // so a forget never succeeds in memory while a linked record or its tombstone is missing elsewhere.
+        try {
+            forgetListeners.forEach(l -> l.forgotten(key));
+        } catch (RuntimeException e) {
+            log.error("Forget refused: a linked store could not forget the caller", e);
+            return ResponseEntity.status(503).body(Map.of("error", "forget_failed"));
+        }
         store.forget(key, CallId.of("console-forget"), System.currentTimeMillis());
-        forgetListeners.forEach(l -> l.forgotten(key));
         return ResponseEntity.noContent().build();
     }
 

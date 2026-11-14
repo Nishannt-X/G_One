@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
-import java.util.regex.Pattern;
 
 /**
  * Collects what a record may hold while one call runs, then builds it at the end. Every ended call gets a record; the
@@ -69,11 +68,6 @@ final class CallAccumulator {
     private static final Set<String> INFO_TOOLS = Set.of(MandiPriceTool.NAME, WeatherTool.NAME, FindBuyersTool.NAME);
     /** Newest remembered gists kept with the memory snapshot: the last call and the open follow-ups. */
     static final int MAX_GISTS = 3;
-    /** A machine word (tool name, handler, model id, failure, language code): anything else is stored as "other". */
-    private static final Pattern WORD = Pattern.compile("[A-Za-z0-9._:/-]{1,64}");
-    /** Six or more digits, even with spaces or dashes between them: never kept as a stated name. */
-    private static final Pattern LONG_NUMBER = Pattern.compile("\\d(?:[\\s-]?\\d){5,}", Pattern.UNICODE_CHARACTER_CLASS);
-    static final int MAX_NAME_CHARS = 80;
     static final String TERMS_ONLY_LABEL = "kept without consent: terms only";
 
     private final CallId callId;
@@ -160,19 +154,19 @@ final class CallAccumulator {
                 Side side = sides.computeIfAbsent(e.role(), r -> new Side());
                 side.legId = e.legId().value();
                 side.source = e.source().name().toLowerCase(Locale.ROOT);
-                side.language = word(e.language());
-                side.firstLanguage = word(e.language());
+                side.language = e.language();
+                side.firstLanguage = e.language();
                 side.joinedMs = e.atMs();
                 legRoles.put(e.legId(), e.role());
             }
             case ConsoleEvent.LegEnded e -> {
                 Side side = side(e.role());
-                side.endReason = word(e.reason());
+                side.endReason = e.reason();
                 side.endedMs = e.atMs();
             }
             case ConsoleEvent.LanguageChanged e -> {
                 Side side = side(e.role());
-                side.language = word(e.to());
+                side.language = e.to();
                 side.changes.add(e);
             }
             case ConsoleEvent.TurnHeard e -> {
@@ -258,11 +252,8 @@ final class CallAccumulator {
                 JsonNode field = e.args() == null ? null : e.args().get("field");
                 JsonNode value = e.args() == null ? null : e.args().get("value");
                 if (field != null && "name".equals(field.asText()) && value != null && value.isTextual()) {
-                    String name = value.asText().strip().replaceAll("\\s+", " ");
-                    if (!name.isEmpty() && name.length() <= MAX_NAME_CHARS && !LONG_NUMBER.matcher(name).find()
-                            && !DealCard.unsafe(name)) {
-                        statedName = name;
-                    }
+                    // Only a plain name (Vocabulary.statedName); anything else is not kept at all.
+                    Vocabulary.statedName(value.asText()).ifPresent(n -> statedName = n);
                 }
             }
             case ConnectBuyerTool.NAME -> {
@@ -324,7 +315,21 @@ final class CallAccumulator {
         };
     }
 
-    /** The record of this call: every ended call has one; consent decides only the gated fields. */
+    /**
+     * The smallest record of this call (id, times, the recorded consent answers), for when the full record cannot be
+     * built. It reads nothing but those fields, so it cannot fail.
+     */
+    CallRecord minimal(RecordSchema schema, long nowMs) {
+        long endedMs = ended != null ? ended.atMs() : nowMs;
+        long durationMs = ended != null ? ended.durationMs() : Math.max(0, endedMs - startedMs);
+        return schema.minimal(callId.value(), startedMs, endedMs, durationMs, consent(LegRole.FARMER),
+                consent(LegRole.BUYER), nowMs, CallRecord.SCHEMA_VERSION);
+    }
+
+    /**
+     * The record of this call, before {@link RecordSchema#project} maps every string to its closed set (the writer
+     * never keeps it unprojected). Every ended call has one; consent decides only the gated fields.
+     */
     CallRecord toRecord(ObjectMapper json, DealVocabulary vocab, long nowMs, String endReasonIfOpen) {
         String scope = consentScope();
         boolean termsOnly = scope.equals("none");
@@ -356,7 +361,7 @@ final class CallAccumulator {
         if (buyerJoined() && sides.get(LegRole.BUYER).language != null) {
             languages.put("buyer", sides.get(LegRole.BUYER).language);
         }
-        String reason = ended != null ? word(ended.reason()) : endReasonIfOpen;
+        String reason = ended != null ? ended.reason() : endReasonIfOpen;
         return new CallRecord(callId.value(), startedMs, endedMs, durationMs, reason, languages, outcome(),
                 consent(LegRole.FARMER), consent(LegRole.BUYER), keyed ? memory.callerKey().value() : null, data, nowMs,
                 CallRecord.SCHEMA_VERSION);
@@ -364,7 +369,7 @@ final class CallAccumulator {
 
     private String farmerLanguageNow() {
         Side f = sides.get(LegRole.FARMER);
-        return word(f != null && f.language != null ? f.language : farmerLanguage);
+        return f != null && f.language != null ? f.language : farmerLanguage;
     }
 
     /** "agreed", "no_deal" (terms heard, not agreed), "info_only" (lookups, no buyer, no terms) or "no_terms". */
@@ -421,9 +426,9 @@ final class CallAccumulator {
         ArrayNode changes = s.putArray("languageChanges");
         for (ConsoleEvent.LanguageChanged c : side.changes) {
             ObjectNode n = changes.addObject();
-            n.put("from", word(c.from()));
-            n.put("to", word(c.to()));
-            n.put("reason", word(c.reason()));
+            n.put("from", c.from());
+            n.put("to", c.to());
+            n.put("reason", c.reason());
             n.put("atMs", c.atMs());
         }
         if (timeline) {
@@ -488,13 +493,13 @@ final class CallAccumulator {
         Side side = sides.get(LegRole.FARMER);
         ObjectNode f = side != null ? sideJson(json, side, timelineKept(LegRole.FARMER)) : json.createObjectNode();
         f.put("language", farmerLanguageNow());
-        if (side == null || side.firstLanguage == null) f.put("firstLanguage", word(startLanguage));
+        if (side == null || side.firstLanguage == null) f.put("firstLanguage", startLanguage);
         f.put("identity", identity);
         ArrayNode toolList = f.putArray("tools");
         for (ConsoleEvent.ToolCalled t : tools) {
             // Name, outcome and timing only: never the arguments or the result.
             ObjectNode n = toolList.addObject();
-            n.put("tool", word(t.tool()));
+            n.put("tool", t.tool());
             n.put("ok", t.ok());
             n.put("durationMs", t.durationMs());
             n.put("atMs", t.atMs());
@@ -540,8 +545,8 @@ final class CallAccumulator {
             modelCalls += Math.max(0, t.modelCalls());
             promptTokens += Math.max(0, t.promptTokens());
             completionTokens += Math.max(0, t.completionTokens());
-            handlers.merge(word(t.handler()), 1, Integer::sum);
-            if (t.failure() != null && !t.failure().isBlank()) failures.merge(word(t.failure()), 1, Integer::sum);
+            handlers.merge(String.valueOf(t.handler()), 1, Integer::sum);
+            if (t.failure() != null && !t.failure().isBlank()) failures.merge(String.valueOf(t.failure()), 1, Integer::sum);
         }
         if (!latency.isEmpty()) b.put("latencyMs", median(latency));
         b.put("modelCalls", modelCalls);
@@ -550,11 +555,5 @@ final class CallAccumulator {
         b.set("handlers", json.valueToTree(handlers));
         b.set("failures", json.valueToTree(failures));
         return b;
-    }
-
-    /** A short machine word as it is, or "other": free text never reaches a record through a name field. */
-    static String word(String s) {
-        if (s == null) return null;
-        return WORD.matcher(s).matches() && !DealCard.unsafe(s) ? s : "other";
     }
 }

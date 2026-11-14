@@ -217,6 +217,36 @@ class AgentToolsTest {
                 .startsWith("Nothing was stored").endsWith("Done, I've deleted what I had about you.");
     }
 
+    /** Privacy review round 2, B2: the call records forget first; if they cannot, memory is not touched. */
+    @Test
+    void forgetMeTellsTheCallRecordsFirstAndFailsClosed() {
+        FarmerMemory m = suresh();
+        store.upsertFacts(KEY, m.facts());
+        CallContext ctx = ctx(KEY, store.load(KEY).orElseThrow());
+        gate.answerNameCheck(ctx, true);
+
+        java.util.List<String> order = new java.util.ArrayList<>();
+        com.example.g_one.memory.ForgetListener failing = k -> {
+            order.add("records");
+            throw new IllegalStateException("synthetic analytics failure");
+        };
+        ToolResult refused = new ForgetMeTool(() -> store, gate, lines, CLOCK, () -> java.util.List.of(failing))
+                .invoke(args("{}"), ctx);
+        assertThat(refused.ok()).isFalse();
+        assertThat(refused.content()).startsWith("Not deleted");
+        assertThat(store.load(KEY)).isPresent();
+
+        com.example.g_one.memory.ForgetListener ok = k -> {
+            assertThat(store.load(KEY)).as("memory is still there when the records forget").isPresent();
+            order.add("records-ok:" + k.value());
+        };
+        ToolResult done = new ForgetMeTool(() -> store, gate, lines, CLOCK, () -> java.util.List.of(ok))
+                .invoke(args("{}"), ctx);
+        assertThat(done.ok()).isTrue();
+        assertThat(store.load(KEY)).isEmpty();
+        assertThat(order).containsExactly("records", "records-ok:" + KEY.value());
+    }
+
     @Test
     void forgetMeDeletesNothingWhenWithheldUnansweredOrAnotherSpeaker() {
         CountingStore counting = new CountingStore();

@@ -96,9 +96,12 @@ public record CallRecord(String callId, long startedMs, long endedMs, long durat
         return f && b ? "both" : f ? "farmer" : b ? "buyer" : "none";
     }
 
-    /** True when no party's recorded answer was yes: only operational data and the deal terms were kept. */
+    /**
+     * True when no party's recorded answer was yes (only operational data and the deal terms were kept), and for a
+     * minimal record, which keeps nothing but its times and the answers.
+     */
     public boolean termsOnly() {
-        return consentScope().equals("none");
+        return data.path("minimal").asBoolean(false) || consentScope().equals("none");
     }
 
     /**

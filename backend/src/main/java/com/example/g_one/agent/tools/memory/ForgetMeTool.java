@@ -7,8 +7,10 @@ import com.example.g_one.core.CallerKey;
 import com.example.g_one.core.MemoryStore;
 import com.example.g_one.core.Tool;
 import com.example.g_one.core.ToolResult;
+import com.example.g_one.memory.ForgetListener;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Clock;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
@@ -18,7 +20,8 @@ import org.springframework.stereotype.Component;
 /**
  * {@code forget_me()}: "मुझे भूल जाओ / forget me". Deletes the profile, gists and deals stored for this caller key
  * ({@link MemoryStore#forget}, which also keeps the rest of this call from writing), turns memory off for the rest of
- * the call, and hands the model the fixed spoken confirmation from docs/memory.md.
+ * the call, and hands the model the fixed spoken confirmation from docs/memory.md. The call records ({@link ForgetListener})
+ * forget the caller first; if they cannot, nothing is deleted and the tool says so (fail closed).
  *
  * <p>Deletes nothing when the caller ID is withheld (nothing is stored), while the name check is unanswered, or when
  * the speaker said they are not the remembered farmer: someone else on a shared phone cannot erase the owner's memory.
@@ -32,18 +35,28 @@ public class ForgetMeTool implements Tool {
     private final MemoryGate gate;
     private final FixedLines lines;
     private final Clock clock;
+    /** Other stores (call records) that forget the caller first; read lazily, they may depend on the tools. */
+    private final Supplier<List<ForgetListener>> listeners;
 
     @Autowired
-    public ForgetMeTool(ObjectProvider<MemoryStore> store, MemoryGate gate, FixedLines lines) {
-        this(store::getIfAvailable, gate, lines, Clock.systemUTC());
+    public ForgetMeTool(ObjectProvider<MemoryStore> store, MemoryGate gate, FixedLines lines,
+                        ObjectProvider<ForgetListener> listeners) {
+        this(store::getIfAvailable, gate, lines, Clock.systemUTC(), () -> listeners.orderedStream().toList());
     }
 
     /** @param store gives the store, or null when none is wired */
     public ForgetMeTool(Supplier<MemoryStore> store, MemoryGate gate, FixedLines lines, Clock clock) {
+        this(store, gate, lines, clock, List::of);
+    }
+
+    /** @param listeners told before memory forgets; if one fails, nothing is forgotten and the tool says so */
+    public ForgetMeTool(Supplier<MemoryStore> store, MemoryGate gate, FixedLines lines, Clock clock,
+                        Supplier<List<ForgetListener>> listeners) {
         this.store = store;
         this.gate = gate;
         this.lines = lines;
         this.clock = clock;
+        this.listeners = listeners;
     }
 
     @Override
@@ -80,6 +93,13 @@ public class ForgetMeTool implements Tool {
         }
         MemoryStore s = store.get();
         if (s == null) return ToolResult.error("Not deleted: memory is not available right now. Offer to try later.");
+        // The call records forget first, durably: if they cannot, memory is not touched and nothing claims success.
+        try {
+            listeners.get().forEach(l -> l.forgotten(key.get()));
+        } catch (RuntimeException e) {
+            return ToolResult.error("Not deleted: the forget could not be completed right now. Apologise and offer to "
+                    + "try again in a moment.");
+        }
         boolean had = s.forget(key.get(), ctx.callId(), clock.millis());
         gate.forgotten(ctx);
         String line = lines.forLanguage(ctx.language().code()).forgotten();

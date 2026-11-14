@@ -1,5 +1,8 @@
-import type { LanguageCode } from './languages'
-import type { Scenario, StepId } from './scenarios'
+/**
+ * Playing a demo deal step by step: the steps (the call, then each road leg and each stop), a playhead over them, and
+ * what the map and the detail list show at any moment. Pure functions, so the player can be tested without a browser.
+ */
+import type { Deal, DealStatus } from './deals'
 
 export interface Position {
   /** Index of the current step. Equal to the step count once the whole deal has played. */
@@ -34,56 +37,106 @@ export function nextStepTime(steps: readonly { seconds: number }[], t: number): 
   return stepStart(steps, Math.min(steps.length, index + 1))
 }
 
-export type Status = 'done' | 'active' | 'upcoming'
-
-export function statusOf(stepIndex: number, at: Position): Status {
-  if (stepIndex < at.index) return 'done'
-  return stepIndex === at.index ? 'active' : 'upcoming'
+/** With reduced motion each step shows its finished state, so nothing moves between steps: the map jumps. */
+export function displayPosition(at: Position, reducedMotion: boolean): Position {
+  return reducedMotion ? { index: at.index, fraction: 1 } : at
 }
 
-/** Has the playhead reached at least `fraction` of the step with this id? */
-export function reached(scenario: Scenario, at: Position, id: StepId, fraction = 0): boolean {
-  const index = scenario.steps.findIndex((s) => s.id === id)
-  return at.index > index || (at.index === index && at.fraction >= fraction)
+// The player.
+
+export type Speed = 1 | 2 | 4
+export const SPEEDS: readonly Speed[] = [1, 2, 4]
+
+export interface PlayerState {
+  t: number
+  playing: boolean
+  speed: Speed
+  /** False until the first Play or Step: the deal then shows whole, like any other. */
+  started: boolean
 }
 
-/** 0 to 1 progress through one step: 0 before it, 1 after it. */
-export function progressOf(scenario: Scenario, at: Position, id: StepId): number {
-  const index = scenario.steps.findIndex((s) => s.id === id)
-  if (at.index < index) return 0
-  return at.index > index ? 1 : at.fraction
-}
+export type PlayerAction =
+  | { type: 'play' }
+  | { type: 'pause' }
+  | { type: 'reset' }
+  | { type: 'restart' }
+  | { type: 'step' }
+  | { type: 'speed'; speed: Speed }
+  | { type: 'tick'; dt: number }
 
-/** The language each half of the call thread carries at this moment. */
-export function threadLanguages(scenario: Scenario, at: Position): { farmer: LanguageCode; buyer: LanguageCode } {
-  const switched = reached(scenario, at, 'switch', 0.4)
-  const { side, to } = scenario.languageSwitch
-  return {
-    farmer: switched && side === 'farmer' ? to : scenario.farmer.language,
-    buyer: switched && side === 'buyer' ? to : scenario.buyer.language,
+export const INITIAL_PLAYER: PlayerState = { t: 0, playing: false, speed: 1, started: false }
+
+/** A background tab pauses frames; a long gap must not skip whole steps. */
+const MAX_TICK = 0.25
+
+export function reducePlayer(state: PlayerState, action: PlayerAction, steps: readonly { seconds: number }[]): PlayerState {
+  const total = totalSeconds(steps)
+  switch (action.type) {
+    case 'play':
+      return { ...state, t: state.t >= total ? 0 : state.t, playing: true, started: true }
+    case 'pause':
+      return { ...state, playing: false }
+    case 'reset':
+      return { ...INITIAL_PLAYER, speed: state.speed }
+    case 'restart':
+      return { ...state, t: 0, playing: true, started: true }
+    case 'step':
+      return { ...state, t: nextStepTime(steps, state.t >= total ? 0 : state.t), playing: false, started: true }
+    case 'speed':
+      return { ...state, speed: action.speed }
+    case 'tick': {
+      if (!state.playing) return state
+      const t = Math.min(total, state.t + Math.min(MAX_TICK, Math.max(0, action.dt)) * state.speed)
+      return { ...state, t, playing: t < total }
+    }
   }
 }
 
-/** The farmer's private halo: only during the price-reference and caution beats. */
-export function whisperOn(scenario: Scenario, at: Position): boolean {
-  const step = scenario.steps[at.index]
-  return step?.id === 'price-ref' || step?.id === 'caution'
+// Demo steps.
+
+export type DemoStep =
+  | { kind: 'call'; seconds: number; title: string }
+  | { kind: 'travel'; stop: number; seconds: number; title: string }
+  | { kind: 'stop'; stop: number; seconds: number; title: string }
+
+/** The call, then for each stop the drive to it and the stop itself. Longer legs take a little longer to play. */
+export function demoSteps(deal: Deal): DemoStep[] {
+  const steps: DemoStep[] = [{ kind: 'call', seconds: 3, title: 'Deal agreed on a call' }]
+  deal.stops.forEach((stop, i) => {
+    if (i > 0) steps.push({ kind: 'travel', stop: i, seconds: Math.min(4, 1.2 + stop.km / 250), title: `On the road to ${stop.short}` })
+    steps.push({ kind: 'stop', stop: i, seconds: stop.difficulty ? 4.5 : 2.5, title: `${i + 1}. ${stop.short}` })
+  })
+  return steps
 }
 
-/** The scenario clock: steady within a step, ticking towards the next step's time while the truck is on the road. */
-export function clockAt(scenario: Scenario, at: Position): number {
-  const steps = scenario.steps
-  if (at.index >= steps.length) return steps[steps.length - 1].atMin
+export interface DemoView {
+  /** Stops reached so far: their entries show in the detail list and their pins are solid. */
+  reached: number
+  /** The stop the truck is at, highlighted; null on the road or before pickup. */
+  current: number | null
+  /** The truck: heading to stop `leg`, `fraction` of the way there. */
+  truck: { leg: number; fraction: number } | null
+  status: DealStatus
+  title: string
+  ended: boolean
+}
+
+/** What a demo deal shows at one moment of the playback. */
+export function demoView(deal: Deal, steps: readonly DemoStep[], at: Position): DemoView {
+  if (at.index >= steps.length) {
+    return { reached: deal.stops.length, current: null, truck: null, status: deal.status, title: 'Played to the end', ended: true }
+  }
   const step = steps[at.index]
-  if (step.id !== 'transit') return step.atMin
-  const next = steps[at.index + 1]?.atMin ?? step.atMin
-  return Math.round(step.atMin + (next - step.atMin) * at.fraction)
-}
-
-export function formatClock(minutes: number): string {
-  const day = Math.floor(minutes / 1440) + 1
-  const inDay = minutes % 1440
-  const hh = String(Math.floor(inDay / 60)).padStart(2, '0')
-  const mm = String(inDay % 60).padStart(2, '0')
-  return `Day ${day}, ${hh}:${mm}`
+  const statusAfter = (i: number): DealStatus => {
+    for (let k = i; k >= 0; k--) {
+      const s = deal.stops[k].statusAfter
+      if (s) return s
+    }
+    return 'awaiting-pickup'
+  }
+  if (step.kind === 'call') return { reached: 0, current: null, truck: null, status: 'awaiting-pickup', title: step.title, ended: false }
+  if (step.kind === 'travel') {
+    return { reached: step.stop, current: null, truck: { leg: step.stop, fraction: at.fraction }, status: statusAfter(step.stop - 1), title: step.title, ended: false }
+  }
+  return { reached: step.stop + 1, current: step.stop, truck: { leg: step.stop, fraction: 1 }, status: statusAfter(step.stop), title: step.title, ended: false }
 }

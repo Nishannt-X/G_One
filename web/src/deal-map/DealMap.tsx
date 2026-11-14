@@ -1,198 +1,226 @@
-import type { Theme } from '../lib/theme'
-import { bowControl, indiaDots, MAP_HEIGHT, MAP_WIDTH, project, quadPath, quadPoint, splitQuad, type Point } from './geo'
-import { languageColour, languageName } from './languages'
-import { clockAt, formatClock, progressOf, reached, threadLanguages, whisperOn, type Position } from './playback'
-import { rupees, type Scenario } from './scenarios'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { STOP_KIND, type Deal } from './deals'
+import { BORDERS_PATH, fitView, fullView, mixView, OUTLINE_PATH, polylinePath, project, slicePolyline, viewTransform, type Point, type View } from './geo'
+import { clusterNumber, clusterPins, placeLabels } from './labels'
+import type { DemoView } from './playback'
+import { doneStops, legPoints, routePoints, truckPoint } from './routes'
 
-const DOTS = indiaDots()
+/** Before the first measurement (and in server rendering) the map assumes this size in pixels. */
+const DEFAULT_SIZE = { w: 800, h: 640 }
 
-type Side = 'left' | 'right' | 'below' | 'above'
-
-/** Where each pin's label sits, so the labels near one town do not collide. */
-const LABEL_SIDES: Record<string, { farmer: Side; buyer: Side; transporter: Side; storage: Side; weighbridge: Side }> = {
-  'onion-gadag-kolkata': { farmer: 'left', buyer: 'right', transporter: 'right', storage: 'below', weighbridge: 'below' },
-  'tomato-nashik-chennai': { farmer: 'above', buyer: 'right', transporter: 'left', storage: 'left', weighbridge: 'left' },
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [size, setSize] = useState(DEFAULT_SIZE)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) setSize({ w: Math.round(width), h: Math.round(height) })
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  return [ref, size] as const
 }
 
-const LABEL = 'fill-ink font-semibold text-[21px] md:text-[13px] [paint-order:stroke] [stroke:var(--page)] [stroke-width:4px] [stroke-linejoin:round]'
-const SUB = 'fill-muted text-[17px] md:text-[11px] [paint-order:stroke] [stroke:var(--page)] [stroke-width:4px] [stroke-linejoin:round]'
-
-function Label({ at, side, text, sub, className = LABEL, colour }: { at: Point; side: Side; text: string; sub?: string; className?: string; colour?: string }) {
-  const gap = 12
-  const anchor = side === 'left' ? 'end' : side === 'right' ? 'start' : 'middle'
-  const x = side === 'left' ? at.x - gap : side === 'right' ? at.x + gap : at.x
-  const y = side === 'below' ? at.y + gap + 12 : side === 'above' ? at.y - gap - (sub ? 14 : 0) : at.y + 4
-  return (
-    <text x={x} y={y} textAnchor={anchor} className={className} style={colour ? { fill: colour } : undefined}>
-      {text}
-      {sub && <tspan x={x} dy="1.25em" className={SUB}>{sub}</tspan>}
-    </text>
-  )
-}
-
-function Pin({ at, fill, r = 7 }: { at: Point; fill: string; r?: number }) {
-  return (
-    <g>
-      <circle cx={at.x} cy={at.y} r={r + 4} fill={fill} opacity={0.18} />
-      <circle cx={at.x} cy={at.y} r={r} fill={fill} stroke="var(--surface)" strokeWidth={2} />
-    </g>
-  )
-}
-
-function Square({ at, fill }: { at: Point; fill: string }) {
-  return <rect x={at.x - 5.5} y={at.y - 5.5} width={11} height={11} rx={2.5} fill={fill} stroke="var(--surface)" strokeWidth={2} />
+/** Glides from the view on screen to the target view; with reduced motion it jumps. */
+function useAnimatedView(target: View, reduced: boolean): View {
+  const [shown, setShown] = useState(target)
+  const current = useRef(target)
+  useEffect(() => {
+    if (reduced) {
+      current.current = target
+      return
+    }
+    const from = current.current
+    const start = performance.now()
+    let raf = requestAnimationFrame(function frame(now) {
+      const t = Math.min(1, (now - start) / 550)
+      const eased = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2
+      const view = mixView(from, target, eased)
+      current.current = view
+      setShown(view)
+      if (t < 1) raf = requestAnimationFrame(frame)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [target, reduced])
+  return reduced ? target : shown
 }
 
 function Truck({ at }: { at: Point }) {
   return (
-    <g transform={`translate(${at.x - 13} ${at.y - 9})`} aria-hidden="true">
+    <g transform={`translate(${at.x - 13} ${at.y - 36})`} aria-hidden="true" data-layer="truck">
       <rect x={0} y={2} width={17} height={11} rx={2} fill="var(--accent)" stroke="var(--ink)" strokeWidth={1.5} />
       <path d="M17 6h5l4 4v3h-9z" fill="var(--accent)" stroke="var(--ink)" strokeWidth={1.5} strokeLinejoin="round" />
       <circle cx={6} cy={15} r={2.6} fill="var(--ink)" />
       <circle cx={21} cy={15} r={2.6} fill="var(--ink)" />
+      <path d="M13 19v14" stroke="var(--ink)" strokeWidth={1.5} strokeDasharray="2 2" />
     </g>
   )
 }
 
-const lerp = (a: Point, b: Point, t: number): Point => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+const HALO = { paintOrder: 'stroke', stroke: 'var(--surface)', strokeWidth: 4, strokeLinejoin: 'round' } as const
 
-/** The map of India with the deal drawn on it at one moment of the playback. */
-export default function DealMap({ scenario, at, theme }: { scenario: Scenario; at: Position; theme: Theme }) {
-  const sides = LABEL_SIDES[scenario.id] ?? LABEL_SIDES['onion-gadag-kolkata']
-  const farm = project(scenario.farmer.at)
-  const buyer = project(scenario.buyer.at)
-  const transporter = project(scenario.transporter.at)
-  const storage = project(scenario.storage.at)
-  const weighbridge = project(scenario.weighbridge.at)
+export interface DealMapProps {
+  deals: readonly Deal[]
+  selected: Deal | null
+  /** A deal the list is pointing at (hover or focus), drawn on top in the overview. */
+  highlight?: string | null
+  /** Demo playback; null shows the selected deal whole. */
+  demo?: DemoView | null
+  reduced: boolean
+}
 
-  // The call: a curve from the farmer to the buyer, split at G-One in the middle.
-  const callControl = bowControl(farm, buyer, 0.22)
-  const [farmerHalf, buyerHalf] = splitQuad(farm, callControl, buyer)
-  const gOne = farmerHalf[2]
-  const langs = threadLanguages(scenario, at)
-  const farmerColour = languageColour(langs.farmer, theme)
-  const buyerColour = languageColour(langs.buyer, theme)
-  const farmerDrawn = progressOf(scenario, at, 'ring')
-  const buyerDrawn = progressOf(scenario, at, 'connect')
-  const locked = reached(scenario, at, 'lock', 0.5)
-  const callLive = !locked && farmerDrawn > 0
+/** India with every deal's route, or one deal's route zoomed in with numbered stops. */
+export default function DealMap({ deals, selected, highlight = null, demo = null, reduced }: DealMapProps) {
+  const [ref, size] = useSize<HTMLDivElement>()
+  const aspect = size.w / size.h
+  // The deal whose route the person zoomed out from; any new selection zooms in again.
+  const [wholeFor, setWholeFor] = useState<string | null>(null)
+  const showWhole = !selected || wholeFor === selected.id
+  const selectedId = selected?.id ?? null
+  const target = useMemo(() => {
+    const deal = deals.find((d) => d.id === selectedId)
+    return !deal || showWhole ? fullView(aspect) : fitView(routePoints(deal), aspect)
+  }, [deals, selectedId, showWhole, aspect])
+  const view = useAnimatedView(target, reduced)
+  const { scale, tx, ty } = viewTransform(view, size.w, size.h)
+  const toScreen = (p: Point): Point => ({ x: p.x * scale + tx, y: p.y * scale + ty })
 
-  // The road: a flatter curve the other way, from the farm to the weighbridge near the buyer.
-  const routeControl = bowControl(farm, weighbridge, -0.12)
-  const routeShown = reached(scenario, at, 'dispatch')
-  const transit = progressOf(scenario, at, 'transit')
+  const routes = deals.map((deal) => ({ deal, d: polylinePath(routePoints(deal).map(toScreen)) }))
+  const highlighted = selected ? null : routes.find((r) => r.deal.id === highlight) ?? null
 
-  let truck: Point | null = null
-  if (reached(scenario, at, 'dispatch')) {
-    const toFarm = 0.7 * progressOf(scenario, at, 'dispatch') + 0.3 * progressOf(scenario, at, 'pickup')
-    truck = transit > 0 ? quadPoint(farm, routeControl, weighbridge, transit) : lerp(transporter, farm, toFarm)
+  let detail = null
+  if (selected) {
+    const reached = demo ? demo.reached : doneStops(selected)
+    const truck = demo ? demo.truck : selected.truck ?? null
+    const current = demo ? demo.current : null
+    const legs = selected.stops.map((_, i) => (i === 0 ? null : legPoints(selected, i).map(toScreen)))
+    const pins = selected.stops.map((s) => ({ ...toScreen(project(s.at)), label: s.short }))
+    const clusters = clusterPins(pins)
+    const truckAt = truck ? toScreen(truckPoint(selected, truck)) : null
+    // Keep labels off the truck and from under the zoom button in the top right corner.
+    const avoid = [{ x: size.w - 140, y: 0, w: 140, h: 50 }, ...(truckAt ? [{ x: truckAt.x - 15, y: truckAt.y - 38, w: 30, h: 22 }] : [])]
+    const labels = placeLabels(clusters, size.w, size.h, { avoid })
+
+    detail = (
+      <g data-layer="route" aria-hidden="true">
+        {legs.map((points, i) => {
+          if (!points) return null
+          const done = i < reached
+          const partial = truck && truck.leg === i && !done ? slicePolyline(points, truck.fraction) : null
+          return (
+            <g key={i}>
+              <path d={polylinePath(points)} fill="none" stroke="var(--surface)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" opacity={0.8} />
+              {done ? (
+                <path d={polylinePath(points)} fill="none" stroke="var(--brand)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" data-leg="done" />
+              ) : (
+                <path d={polylinePath(points)} fill="none" stroke="var(--line-strong)" strokeWidth={2.5} strokeDasharray="2 6" strokeLinecap="round" strokeLinejoin="round" data-leg="planned" />
+              )}
+              {partial && partial.length > 1 && <path d={polylinePath(partial)} fill="none" stroke="var(--brand)" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />}
+            </g>
+          )
+        })}
+        {clusters.map((c, ci) => {
+          const isReached = c.stops.some((i) => i < reached)
+          const isCurrent = current !== null && c.stops.includes(current)
+          const trouble = c.stops.some((i) => i < reached && selected.stops[i].difficulty)
+          const text = clusterNumber(c)
+          const w = text.length > 1 ? 12 + text.length * 6.5 : 22
+          const label = labels[ci]
+          return (
+            <g key={ci} data-stop={text}>
+              {isCurrent && <circle cx={c.x} cy={c.y} r={18} fill="var(--accent)" opacity={0.28} className="motion-safe:animate-beat [transform-box:fill-box] [transform-origin:center]" />}
+              <rect
+                x={c.x - w / 2}
+                y={c.y - 11}
+                width={w}
+                height={22}
+                rx={11}
+                fill={isCurrent ? 'var(--accent)' : isReached ? 'var(--brand)' : 'var(--surface)'}
+                stroke={isReached || isCurrent ? 'var(--surface)' : 'var(--line-strong)'}
+                strokeWidth={2}
+                strokeDasharray={isReached || isCurrent ? undefined : '3 2'}
+              />
+              <text x={c.x} y={c.y + 4} textAnchor="middle" className="text-[12px] font-bold" fill={isCurrent ? 'var(--on-accent)' : isReached ? 'var(--on-brand)' : 'var(--ink)'}>
+                {text}
+              </text>
+              {trouble && (
+                <g>
+                  <circle cx={c.x + w / 2} cy={c.y - 10} r={7} fill="var(--warn)" stroke="var(--surface)" strokeWidth={1.5} />
+                  <text x={c.x + w / 2} y={c.y - 6.5} textAnchor="middle" className="text-[10px] font-bold" fill="var(--warn-soft)">!</text>
+                </g>
+              )}
+              {label && (
+                <text x={label.x} y={label.y} textAnchor={label.anchor} className="text-[12.5px] font-semibold" fill="var(--ink)" style={HALO}>
+                  {c.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+        {truckAt && <Truck at={truckAt} />}
+      </g>
+    )
   }
-  const paying = progressOf(scenario, at, 'payment')
-  const coin = paying > 0 ? quadPoint(buyer, callControl, farm, paying) : null
-  const whisper = whisperOn(scenario, at)
-  const farmerLabelPoint = quadPoint(farm, callControl, buyer, 0.3)
-  const buyerLabelPoint = quadPoint(farm, callControl, buyer, 0.7)
+
+  const description = selected
+    ? `Route of the ${selected.crop.toLowerCase()} deal from ${selected.lane.from} to ${selected.lane.to}, ${selected.stops.length} stops: ${selected.stops.map((s, i) => `${i + 1}, ${STOP_KIND[s.kind]}, ${s.place}`).join('; ')}.`
+    : `Routes of all ${deals.length} example deals across India.`
 
   return (
-    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} role="img" aria-labelledby="deal-map-title deal-map-desc" className="mx-auto block h-auto max-h-[62vh] w-full lg:max-h-[calc(100dvh-20rem)]">
-      <title id="deal-map-title">Simplified map of India with the simulated deal</title>
-      <desc id="deal-map-desc">{`${scenario.summary} Call thread, truck route and pins are drawn on a simplified outline, not to scale.`}</desc>
-      <defs>
-        <radialGradient id="gone-glow">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.75} />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-        </radialGradient>
-        <radialGradient id="whisper-glow">
-          <stop offset="55%" stopColor="var(--whisper-edge)" stopOpacity={0.28} />
-          <stop offset="100%" stopColor="var(--whisper-edge)" stopOpacity={0} />
-        </radialGradient>
-      </defs>
-
-      <g fill="var(--line-strong)" opacity={0.4}>
-        {DOTS.map((d, i) => <circle key={i} cx={d.x} cy={d.y} r={1.9} />)}
-      </g>
-
-      {routeShown && (
-        <g>
-          <path d={quadPath([farm, routeControl, weighbridge])} fill="none" stroke="var(--line-strong)" strokeWidth={3} strokeDasharray="2 7" strokeLinecap="round" />
-          <path d={quadPath([farm, routeControl, weighbridge])} fill="none" stroke="var(--accent)" strokeWidth={4} strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - transit} />
+    <div className="relative h-full min-h-0 w-full" ref={ref}>
+      <svg viewBox={`0 0 ${size.w} ${size.h}`} className="absolute inset-0 block h-full w-full" role="img" aria-labelledby="deal-map-title deal-map-desc">
+        <title id="deal-map-title">Map of India with simulated deal routes</title>
+        <desc id="deal-map-desc">{description}</desc>
+        <rect width={size.w} height={size.h} fill="color-mix(in oklab, var(--buyer) 7%, var(--surface))" />
+        <g transform={`matrix(${scale} 0 0 ${scale} ${tx} ${ty})`} data-layer="base">
+          <path d={OUTLINE_PATH} fill="color-mix(in oklab, var(--brand) 9%, var(--surface))" stroke="var(--line-strong)" strokeWidth={1} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+          <path d={BORDERS_PATH} fill="none" stroke="var(--line-strong)" strokeOpacity={0.45} strokeWidth={0.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         </g>
-      )}
-
-      {/* The call thread, one colour per language, changing colour at G-One. */}
-      <g opacity={locked ? 0.5 : 1} className="transition-opacity duration-700">
-        {farmerDrawn > 0 && (
-          <path d={quadPath(farmerHalf)} fill="none" stroke={farmerColour} strokeWidth={5} strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - farmerDrawn} className="transition-[stroke] duration-700" />
-        )}
-        {buyerDrawn > 0 && (
-          <path d={quadPath(buyerHalf)} fill="none" stroke={buyerColour} strokeWidth={5} strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - buyerDrawn} className="transition-[stroke] duration-700" />
-        )}
-        {callLive && buyerDrawn >= 1 && (
-          <g stroke="var(--surface)" strokeWidth={2} strokeDasharray="3 9" fill="none" opacity={0.7}>
-            <path d={quadPath(farmerHalf)} className="motion-safe:animate-flow" />
-            <path d={quadPath(buyerHalf)} className="motion-safe:animate-flow-back" />
-          </g>
-        )}
-        {farmerDrawn > 0.5 && <Label at={farmerLabelPoint} side="above" text={languageName(langs.farmer)} colour={farmerColour} />}
-        {buyerDrawn > 0.5 && <Label at={buyerLabelPoint} side="above" text={languageName(langs.buyer)} colour={buyerColour} />}
-      </g>
-
-      {/* Pins that join as the deal moves on. */}
-      {reached(scenario, at, 'storage') && (
-        <g>
-          <Square at={storage} fill="var(--buyer)" />
-          <Label at={storage} side={sides.storage} text="Cold store (option)" />
+        <g data-layer="routes" aria-hidden="true">
+          {routes.map(({ deal, d }) => (
+            <path
+              key={deal.id}
+              d={d}
+              fill="none"
+              stroke={selected ? 'var(--line-strong)' : 'var(--brand)'}
+              strokeOpacity={selected ? (deal.id === selected.id ? 0 : 0.18) : 0.55}
+              strokeWidth={selected ? 1.5 : 2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {!selected &&
+            routes.map(({ deal }) => {
+              const a = toScreen(project(deal.stops[0].at))
+              const b = toScreen(project(deal.stops[deal.stops.length - 1].at))
+              return (
+                <g key={deal.id}>
+                  <circle cx={a.x} cy={a.y} r={4} fill="var(--farmer)" stroke="var(--surface)" strokeWidth={1.5} />
+                  <rect x={b.x - 4} y={b.y - 4} width={8} height={8} rx={1.5} fill="var(--buyer)" stroke="var(--surface)" strokeWidth={1.5} />
+                </g>
+              )
+            })}
+          {highlighted && (
+            <g>
+              <path d={highlighted.d} fill="none" stroke="var(--surface)" strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
+              <path d={highlighted.d} fill="none" stroke="var(--accent)" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
+            </g>
+          )}
         </g>
+        {detail}
+      </svg>
+      {selected && (
+        <div className="absolute top-2 right-2 flex gap-1.5">
+          {showWhole ? (
+            <button type="button" className="btn-quiet btn-sm shadow-card" onClick={() => setWholeFor(null)}>Zoom to route</button>
+          ) : (
+            <button type="button" className="btn-quiet btn-sm shadow-card" onClick={() => setWholeFor(selected.id)}>Reset view</button>
+          )}
+        </div>
       )}
-      {reached(scenario, at, 'dispatch') && (
-        <g>
-          <Square at={transporter} fill="var(--ink)" />
-          <Label at={transporter} side={sides.transporter} text="Transporter" />
-        </g>
-      )}
-      {reached(scenario, at, 'transit') && (
-        <g>
-          <Square at={weighbridge} fill="var(--line-strong)" />
-          <Label at={weighbridge} side={sides.weighbridge} text="Weighbridge" sub="mandi agent" />
-        </g>
-      )}
-
-      {whisper && (
-        <g>
-          <circle cx={farm.x} cy={farm.y} r={38} fill="url(#whisper-glow)" />
-          <circle cx={farm.x} cy={farm.y} r={24} fill="none" stroke="var(--whisper-edge)" strokeWidth={2} strokeDasharray="4 4" />
-          <circle cx={farm.x} cy={farm.y} r={24} fill="none" stroke="var(--whisper-edge)" strokeWidth={2} className="motion-safe:animate-beat [transform-box:fill-box] [transform-origin:center] motion-reduce:hidden" />
-          <Label at={{ x: farm.x, y: farm.y + 28 }} side="below" text="private to the farmer" colour="var(--whisper)" />
-        </g>
-      )}
-
-      <g>
-        <Pin at={farm} fill="var(--farmer)" />
-        <Label at={farm} side={sides.farmer} text={scenario.farmer.person} sub="farmer" />
-      </g>
-      <g opacity={buyerDrawn > 0 ? 1 : 0.55}>
-        <Pin at={buyer} fill="var(--buyer)" />
-        <Label at={buyer} side={sides.buyer} text={scenario.buyer.person} sub="buyer" />
-      </g>
-
-      {farmerDrawn >= 1 && (
-        <g>
-          <circle cx={gOne.x} cy={gOne.y} r={30} fill="url(#gone-glow)" className={callLive ? 'motion-safe:animate-shimmer' : ''} />
-          <circle cx={gOne.x} cy={gOne.y} r={10} fill="var(--assistant)" stroke="var(--surface)" strokeWidth={2.5} />
-          <Label at={gOne} side="above" text="G-One" />
-        </g>
-      )}
-
-      {truck && <Truck at={truck} />}
-      {coin && (
-        <g>
-          <circle cx={coin.x} cy={coin.y} r={11} fill="var(--accent)" stroke="var(--ink)" strokeWidth={1.5} />
-          <text x={coin.x} y={coin.y + 4.5} textAnchor="middle" className="fill-on-accent text-[13px] font-bold">₹</text>
-          <Label at={coin} side="right" text={`${rupees(scenario.deal.total)}`} sub="simulated" />
-        </g>
-      )}
-
-      <text x={MAP_WIDTH - 10} y={MAP_HEIGHT - 12} textAnchor="end" className={SUB}>{`${formatClock(clockAt(scenario, at))}, simulated clock`}</text>
-    </svg>
+    </div>
   )
 }

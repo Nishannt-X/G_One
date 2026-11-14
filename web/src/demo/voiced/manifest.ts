@@ -59,6 +59,8 @@ export interface Manifest {
   version: number
   label: string
   sampleRate: number
+  /** How much faster than natural every line was made, at the same pitch, when the clips were generated. */
+  tempo: number
   farmer: { name: string; language: string; languages: string[] }
   buyer: { name: string; language: string; languages: string[] }
   phones: Record<LegRole, PhoneMessage>

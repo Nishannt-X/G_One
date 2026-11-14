@@ -40,6 +40,7 @@ describe('the copy says only what the records hold', () => {
     const html = renderToStaticMarkup(<KpiStrip summary={summary} />)
     expect(html).toContain('Figures cover the calls stored now.')
     expect(html).toContain('up to the newest 500')
+    expect(html).toContain('held back by the privacy cleanup are not counted')
     expect(html).toContain('When available, a call keeps')
     expect(html).not.toContain('are kept for every call')
     expect(html).not.toContain('Figures cover every finished call')

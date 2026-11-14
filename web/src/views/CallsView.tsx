@@ -128,7 +128,7 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
         </div>
       )}
       <p className="text-xs text-muted">
-        Figures cover the calls stored now. Every finished call is stored, up to the newest 500; calls deleted or forgotten are not counted.
+        Figures cover the calls stored now. Every finished call is stored, up to the newest 500; calls deleted, forgotten or held back by the privacy cleanup are not counted.
         {' '}When available, a call keeps its times, languages, tool names, private-advice kinds, latency medians and deal terms, whether or not anyone said yes. Per-turn times are kept only for a party that said yes, and the farmer’s name and memory only with the farmer’s yes. No call keeps transcripts, subtitles, translations or audio.
         {approximate && ' Medians across calls are approximate: each call keeps only its own medians.'}
         {(summary.unsavedCalls ?? 0) > 0 && ` ${summary.unsavedCalls} finished ${summary.unsavedCalls === 1 ? 'call is' : 'calls are'} waiting to be saved and ${summary.unsavedCalls === 1 ? 'is' : 'are'} not counted yet.`}

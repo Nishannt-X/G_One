@@ -206,17 +206,17 @@ class OfflineDemoTest {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
                 .anyMatch(a -> a.text().contains("धन्यवाद रमेश जी")));
         endAndAgree(first);
-        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("Ramesh"));
 
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.HINDI, key);
         keepHearing(second);
         registry.register(second);
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
-                .anyMatch(a -> a.text().contains("क्या मैं रमेश जी से बात कर रही हूँ?")));
+                .anyMatch(a -> a.text().contains("क्या मैं Ramesh जी से बात कर रही हूँ?")));
         sleep();
         typed.say(second.id(), "हाँ");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
-                .anyMatch(a -> a.text().startsWith("नमस्ते रमेश जी, फिर से स्वागत है।")));
+                .anyMatch(a -> a.text().startsWith("नमस्ते Ramesh जी, फिर से स्वागत है।")));
         second.remoteHangup();
     }
 
@@ -239,22 +239,22 @@ class OfflineDemoTest {
         sleep();
         typed.say(first.id(), "रमेश");
         endAndAgree(first);
-        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("रमेश"));
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("Ramesh"));
 
         events.clear();
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
         keepHearing(second);
         registry.register(second);
         waitForSaid(1);
-        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(0).text()).contains("Which language").doesNotContain("रमेश");
+        assertThat(eventsOf(ConsoleEvent.AssistantSaid.class).get(0).text()).contains("Which language").doesNotContain("Ramesh").doesNotContain("रमेश");
         sleep();
         typed.say(second.id(), "हिंदी");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
-                .anyMatch(a -> a.text().contains("क्या मैं रमेश जी से बात कर रही हूँ?")));
+                .anyMatch(a -> a.text().contains("क्या मैं Ramesh जी से बात कर रही हूँ?")));
         sleep();
         typed.say(second.id(), "हाँ");
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
-                .anyMatch(a -> a.text().startsWith("नमस्ते रमेश जी, फिर से स्वागत है।")));
+                .anyMatch(a -> a.text().startsWith("नमस्ते Ramesh जी, फिर से स्वागत है।")));
         second.remoteHangup();
     }
 
@@ -291,7 +291,7 @@ class OfflineDemoTest {
         sleep();
         typed.say(first.id(), "मेरा नाम सुरेश है");
         endAndAgree(first);
-        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("सुरेश"));
+        waitFor(() -> assertThat(store.load(key).flatMap(m -> m.fact("name")).map(f -> f.value())).contains("Suresh"));
 
         events.clear();
         FakeLeg second = new FakeLeg(CallId.random(), LegRole.FARMER, LegSource.SIMULATOR, FakeLeg.ENGLISH, key).pendingLanguage();
@@ -302,7 +302,7 @@ class OfflineDemoTest {
         typed.say(second.id(), "Hindi, what is the wheat price?");
         // An English sentence that mentions Hindi is English to the detector: the flow is the same in either language.
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class))
-                .anyMatch(a -> a.text().contains("Am I speaking with सुरेश ji?")));
+                .anyMatch(a -> a.text().contains("Am I speaking with Suresh ji?")));
         sleep();
         assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).as("nothing answered before the name check")
                 .noneMatch(t -> t.tool().equals("get_mandi_price") || t.tool().equals("confirm_name"));
@@ -310,7 +310,7 @@ class OfflineDemoTest {
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.ToolCalled.class)).extracting(ConsoleEvent.ToolCalled::tool)
                 .containsSubsequence("confirm_name", "get_mandi_price"));
         waitFor(() -> assertThat(eventsOf(ConsoleEvent.AssistantSaid.class)).extracting(ConsoleEvent.AssistantSaid::text)
-                .anyMatch(t -> t.startsWith("Welcome back, सुरेश ji."))
+                .anyMatch(t -> t.startsWith("Welcome back, Suresh ji."))
                 .anyMatch(t -> t.contains("AGMARKNET")));
         second.remoteHangup();
     }

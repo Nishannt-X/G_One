@@ -105,7 +105,18 @@ public class MemoryController {
             log.error("Forget refused: a linked store could not forget the caller", e);
             return ResponseEntity.status(503).body(Map.of("error", "forget_failed"));
         }
-        store.forget(key, CallId.of("console-forget"), System.currentTimeMillis());
+        try {
+            store.forget(key, CallId.of("console-forget"), System.currentTimeMillis());
+        } catch (RuntimeException e) {
+            if (forgetListeners.isEmpty()) {
+                log.error("Forget failed: memory could not forget the caller", e);
+                return ResponseEntity.status(503).body(Map.of("error", "forget_failed"));
+            }
+            // The call records already committed, with a durable intent to forget memory that is completed at the
+            // next startup or tick. Accepted, not done: nothing claims the memory is gone yet.
+            log.error("Memory could not forget the caller now; the durable forget intent will complete it", e);
+            return ResponseEntity.status(202).body(Map.of("status", "accepted_completing"));
+        }
         return ResponseEntity.noContent().build();
     }
 

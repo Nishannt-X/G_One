@@ -31,10 +31,38 @@ function Bars({ timings }: { timings: TurnTiming[] }) {
   )
 }
 
+/** A stored call without per-turn times (nobody said yes): the medians kept for every call, on the same card. */
+function StoredMedians({ call }: { call: CallView }) {
+  const { t } = useI18n()
+  const latency = call.recorded?.latency
+  if (!latency) return null
+  const cells = [
+    { label: t('latency_transcript'), hint: t('latency_transcript_hint'), value: latency.transcript, bar: STAGE_BAR.transcript },
+    { label: t('latency_translation'), hint: t('latency_translation_hint'), value: latency.translation, bar: STAGE_BAR.translation },
+    { label: t('latency_reply'), hint: t('latency_reply_hint'), value: latency.reply, bar: STAGE_BAR.reply },
+  ]
+  return (
+    <Card title={t('latency_title')} aside={<span className="chip bg-ok-soft text-ok">{t('latency_measured')}</span>}>
+      <dl className="grid grid-cols-3 gap-2">
+        {cells.map((cell) => (
+          <div key={cell.label} title={cell.hint} className="min-w-0">
+            <dt className="flex items-start gap-1.5 text-xs leading-tight font-semibold text-muted">
+              <i aria-hidden="true" className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-sm ${cell.bar}`} /> {cell.label}
+            </dt>
+            <dd className="mt-1 font-mono text-xl font-bold tabular-nums">{cell.value !== undefined ? millis(cell.value) : '—'}</dd>
+            <dd className="text-xs text-muted tabular-nums">{t('latency_stored_median')}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-xs text-muted">{t('latency_stored_note')}{latency.approximate ? ` ${t('latency_stored_approximate')}` : ''}</p>
+    </Card>
+  )
+}
+
 /** Per-turn timings, measured on the server's clock from the events' own timestamps. */
 export default function LatencyHud({ call }: { call: CallView }) {
   const { t } = useI18n()
-  if (call.timings.length === 0) return null
+  if (call.timings.length === 0) return call.origin === 'stored' ? <StoredMedians call={call} /> : null
   const summary = summarize(call.timings)
   const scripted = call.origin === 'mock' || call.origin === 'sample'
   const cells = [

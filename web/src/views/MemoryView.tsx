@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../lib/api'
 import { humanize, shortDate } from '../lib/format'
 import { useI18n } from '../lib/i18n'
-import { isCallerKey, parseMemory, type MemoryRecord } from '../lib/memory'
+import { forgetResult, isCallerKey, parseMemory, type MemoryRecord } from '../lib/memory'
 import { AlertIcon, CheckIcon, TrashIcon, WheatIcon } from '../ui/icons'
 import { Card, Dialog, Empty, ErrorNote, Skeleton } from '../ui/parts'
 import { ProvenanceChip } from './ProvenanceChip'
@@ -16,7 +16,7 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
   const [error, setError] = useState<string | null>(null)
   const [confirmForget, setConfirmForget] = useState(false)
   const [forgetting, setForgetting] = useState(false)
-  const [forgetSuccess, setForgetSuccess] = useState(false)
+  const [forgetSuccess, setForgetSuccess] = useState<false | 'done' | 'completing'>(false)
 
   useEffect(() => {
     if (!initialKey) return
@@ -62,9 +62,9 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
     if (!activeKey) return
     setForgetting(true)
     try {
-      await api(`/api/memory/${encodeURIComponent(activeKey)}`, { method: 'DELETE' })
+      const result = forgetResult(await api(`/api/memory/${encodeURIComponent(activeKey)}`, { method: 'DELETE' }))
       setConfirmForget(false)
-      setForgetSuccess(true)
+      setForgetSuccess(result)
       setMemory((prev) => (prev ? { ...prev, known: false, facts: [], gists: [] } : null))
     } catch (err) {
       setError(err instanceof ApiError ? err.failure : 'unreachable')
@@ -126,7 +126,7 @@ export default function MemoryView({ initialKey }: { initialKey?: string | null 
 
       {forgetSuccess && (
         <div role="status" className="flex items-center gap-2 rounded-xl bg-ok-soft p-4 font-semibold text-ok">
-          <CheckIcon /> {t('memory_forgotten')}
+          <CheckIcon /> {t(forgetSuccess === 'completing' ? 'memory_forget_completing' : 'memory_forgotten')}
         </div>
       )}
 

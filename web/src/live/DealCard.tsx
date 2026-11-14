@@ -45,6 +45,7 @@ export default function DealCard({ call }: { call: CallView }) {
       title={t('deal_title')}
       aside={deal?.state === 'agreed' ? <span className="chip bg-ok-soft text-ok"><CheckIcon /> {t('deal_agreed')}</span> : closed ? <span className="chip bg-bad-soft text-bad"><CrossIcon /> {t('deal_closed')}</span> : undefined}
     >
+      {call.recorded?.termsOnly && <p className="mb-3"><span className="chip bg-sunk text-muted">{t('deal_terms_only')}</span></p>}
       <ol className="mb-3 grid grid-cols-4 gap-1" aria-label={t('deal_progress')}>
         {STEPS.map((step, i) => (
           <li key={step.state} aria-current={i === reached ? 'step' : undefined}>

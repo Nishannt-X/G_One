@@ -4,11 +4,16 @@ import {
   callCode,
   CONSENT_LABEL,
   filterCalls,
+  isAnonymous,
+  keptNote,
   keyPoints,
   languagesOf,
   NO_FILTER,
+  NOT_KEPT_NOTE,
   OUTCOME_LABEL,
   outcomeLabel,
+  TERMS_ONLY_LABEL,
+  termsOnlyDeal,
   toCallView,
   type AnalyticsSummary,
   type CallFilter,
@@ -31,6 +36,11 @@ const CONSENT_CLASS: Record<Consent, string> = {
 
 function ConsentChip({ who, consent }: { who: string; consent: Consent }) {
   return <span className={`chip ${CONSENT_CLASS[consent]}`}>{who}: {CONSENT_LABEL[consent]}</span>
+}
+
+/** Marks a call that is not linked to any farmer: no caller key was kept. */
+function AnonymousChip() {
+  return <span className="chip bg-sunk text-muted" title="No caller key was kept, so this call is not linked to any farmer.">Anonymous</span>
 }
 
 function dateTime(ms: number): string {
@@ -81,15 +91,18 @@ function AccessForm({ onSaved }: { onSaved: () => void }) {
   )
 }
 
-/** The figures strip. Every number comes from the stored calls only. */
+/** The figures strip. Every number comes from the stored records, which cover every finished call. */
 export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
   const pairs = Object.entries(summary.languagePairs).sort((a, b) => b[1] - a[1])
   const tools = Object.entries(summary.toolCounts).sort((a, b) => b[1] - a[1])
+  const approximate = summary.approximate === true
+  const split = summary.callsWithYes !== undefined && summary.callsWithoutYes !== undefined ? `${summary.callsWithYes} with a yes · ${summary.callsWithoutYes} without` : null
+  const median = approximate ? 'approximate median' : 'median'
   const tiles = [
-    { label: 'Stored calls', value: String(summary.storedCalls) },
-    { label: 'Both said yes to terms', value: String(summary.bothYesDeals) },
-    { label: 'Average length', value: summary.storedCalls ? duration(summary.averageDurationMs) : '—' },
-    { label: 'Median reply time (measured)', value: summary.medianMs.reply !== undefined ? millis(summary.medianMs.reply) : '—' },
+    { label: 'Finished calls', value: String(summary.storedCalls), note: split },
+    { label: 'Both said yes to terms', value: String(summary.bothYesDeals), note: null },
+    { label: 'Average length', value: summary.storedCalls ? duration(summary.averageDurationMs) : '—', note: null },
+    { label: `Median reply time (measured${approximate ? ', approximate' : ''})`, value: summary.medianMs.reply !== undefined ? millis(summary.medianMs.reply) : '—', note: null },
   ]
   return (
     <section aria-label="Figures from stored calls" className="min-w-0 space-y-3">
@@ -98,31 +111,36 @@ export function KpiStrip({ summary }: { summary: AnalyticsSummary }) {
           <div key={tile.label} className="card min-w-0 p-4">
             <dt className="text-sm font-semibold break-words text-muted">{tile.label}</dt>
             <dd className="mt-1 font-mono text-2xl font-bold tabular-nums">{tile.value}</dd>
+            {tile.note && <dd className="mt-0.5 text-sm text-muted tabular-nums">{tile.note}</dd>}
           </div>
         ))}
       </dl>
       {(pairs.length > 0 || tools.length > 0 || summary.medianMs.transcript !== undefined) && (
         <div className="flex min-w-0 flex-wrap gap-x-6 gap-y-2 text-sm break-words text-muted">
-          {summary.medianMs.transcript !== undefined && <p>Speech to text, median: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.transcript)}</span></p>}
-          {summary.medianMs.translation !== undefined && <p>Translation, median: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.translation)}</span></p>}
+          {summary.medianMs.transcript !== undefined && <p>Speech to text, {median}: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.transcript)}</span></p>}
+          {summary.medianMs.translation !== undefined && <p>Translation, {median}: <span className="font-semibold text-ink tabular-nums">{millis(summary.medianMs.translation)}</span></p>}
           {pairs.length > 0 && <p>Languages: {pairs.map(([pair, n]) => <span key={pair} className="font-semibold text-ink">{pair.split(' ⇄ ').map((l) => (l === 'unknown' ? 'Not stored' : languageLabel(l))).join(' ⇄ ')} ({n}) </span>)}</p>}
           {tools.length > 0 && <p>Tools: {tools.map(([tool, n]) => <span key={tool} className="font-mono font-semibold break-all text-ink">{tool} ({n}) </span>)}</p>}
         </div>
       )}
-      <p className="text-xs text-muted">Figures cover stored calls only. A call is stored only when a party says yes to remembering it.</p>
+      <p className="text-xs text-muted">
+        Figures cover every finished call. Times, tools, languages and the deal terms are kept for every call; per-turn times, the farmer’s name and memory are kept only with a yes. No call keeps its words or audio.
+        {approximate && ' Medians across calls are approximate: each call keeps only its own medians.'}
+        {(summary.unsavedCalls ?? 0) > 0 && ` ${summary.unsavedCalls} finished ${summary.unsavedCalls === 1 ? 'call is' : 'calls are'} waiting to be saved and not counted yet.`}
+      </p>
     </section>
   )
 }
 
-/** The stored calls table with filters and sort. */
+/** Every finished call, with filters and sort. A call nobody said yes to says so in its row. */
 export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; filter: CallFilter; onFilter: (f: CallFilter) => void }) {
   if (calls.length === 0) {
-    return <Card><Empty title="No calls stored yet">A call is stored only when a party says yes to remembering it. Calls where nobody said yes leave nothing behind.</Empty></Card>
+    return <Card><Empty title="No finished calls yet">Every finished call is listed here, including calls where nobody said yes. Calls appear once they end.</Empty></Card>
   }
   const shown = filterCalls(calls, filter)
   const languages = languagesOf(calls)
   return (
-    <section aria-label="Stored calls" className="card overflow-hidden">
+    <section aria-label="Calls" className="card overflow-hidden">
       <div className="flex flex-wrap items-end gap-3 border-b border-line p-3">
         <label className="min-w-0 flex-1 basis-40 text-sm font-semibold">Language
           <select className="field mt-1" value={filter.language} onChange={(e) => onFilter({ ...filter, language: e.target.value })}>
@@ -145,12 +163,13 @@ export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; 
         </label>
       </div>
       {shown.length === 0 ? (
-        <Empty title="No stored calls match">Change the language or outcome filter.</Empty>
+        <Empty title="No calls match">Change the language or outcome filter.</Empty>
       ) : (
         <ul className="divide-y divide-line">
           {shown.map((c) => {
             const terms = dealLine(c.deal)
             const extras = rowExtras(c)
+            const note = keptNote(c)
             return (
               <li key={c.callId}>
                 <a href={`#/analytics/calls?id=${encodeURIComponent(c.callId)}`} className="grid gap-x-4 gap-y-1.5 px-4 py-3 transition-colors hover:bg-sunk md:grid-cols-[8.5rem_4rem_minmax(0,0.9fr)_minmax(0,1.6fr)_auto] md:items-center">
@@ -164,9 +183,12 @@ export function CallsTable({ calls, filter, onFilter }: { calls: CallSummary[]; 
                     <OutcomeChip outcome={c.outcome} />
                     {terms && <span className="min-w-0 font-semibold md:truncate" title={terms}>{terms}</span>}
                     {extras.length > 0 && <span className="text-muted">{extras.join(' · ')}</span>}
+                    {termsOnlyDeal(c, c.deal) && <span className="chip bg-sunk text-muted">{TERMS_ONLY_LABEL}</span>}
+                    {note && <span className="basis-full text-muted">{note}</span>}
                   </span>
                   <span className="flex flex-wrap gap-1.5">
                     <ConsentChip who="Farmer" consent={c.consentFarmer} />
+                    {isAnonymous(c) && <AnonymousChip />}
                     <ConsentChip who="Buyer" consent={c.consentBuyer} />
                   </span>
                 </a>
@@ -209,10 +231,11 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
   const [confirm, setConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
   const older = (record.schemaVersion ?? 1) < 2
+  const note = keptNote(record)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <a href="#/analytics/calls" className="btn-quiet btn-sm"><ArrowIcon className="rotate-180" /> All stored calls</a>
+        <a href="#/analytics/calls" className="btn-quiet btn-sm"><ArrowIcon className="rotate-180" /> All calls</a>
         <h2 className="text-xl font-bold"><span className="font-mono">{callCode(record.callId)}</span></h2>
         <button type="button" className="min-w-0 font-mono text-sm break-all text-faint underline-offset-4 hover:underline" title="Copy the full call id" onClick={() => { void navigator.clipboard?.writeText(record.callId).then(() => setCopied(true)) }}>
           {record.callId}{copied ? ' (copied)' : ''}
@@ -221,10 +244,21 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <ConsentChip who="Farmer" consent={record.consentFarmer} />
+        {isAnonymous(record) && <AnonymousChip />}
         <ConsentChip who="Buyer" consent={record.consentBuyer} />
         <OutcomeChip outcome={record.outcome} />
         {older && <span className="text-sm text-muted">Stored before leg end times, language switches and confirmation times were kept.</span>}
       </div>
+      {note && (
+        <section aria-label="What was not kept" className="rounded-xl bg-sunk px-4 py-3 text-sm">
+          <p className="font-semibold">{note}.</p>
+          {note === NOT_KEPT_NOTE ? (
+            <p className="mt-0.5 text-muted">Kept, as for every call: times, who joined, languages, latency medians, tool names, private-advice kinds and the deal terms. Not kept: per-turn times, the caller key, and the farmer’s name and memory. No call keeps its words or audio.</p>
+          ) : (
+            <p className="mt-0.5 text-muted">The rest of this record could not be read safely, so it was left out.</p>
+          )}
+        </section>
+      )}
       <CallBoard call={call} main={<KeyPointsCard record={record} />} />
       <Dialog open={confirm} onClose={() => setConfirm(false)} title="Delete this call record?">
         <p className="text-muted">The stored record of {callCode(record.callId)} is removed for good. Farmer memory is not changed.</p>
@@ -238,7 +272,27 @@ export function CallDetail({ record, onDelete, receipt = false }: { record: Call
 }
 
 function failureText(failure: ApiFailure): string {
-  return failure === 'unreachable' ? 'The backend did not answer. Start it and try again.' : 'The stored calls could not be loaded.'
+  return failure === 'unreachable' ? 'The backend did not answer. Start it and try again.' : 'The calls could not be loaded.'
+}
+
+const CLEANUP_FAILED = 'analytics_privacy_cleanup_failed'
+
+/** The backend answered 503: its one-time privacy cleanup of older records is running, or did not finish. */
+export function NotReadyNote({ code, onRetry }: { code: string | null; onRetry: () => void }) {
+  const failed = code === CLEANUP_FAILED
+  return (
+    <div role="status" className="flex flex-wrap items-start gap-3 rounded-xl border border-line bg-sunk p-4">
+      <div className="min-w-0 flex-1 basis-56">
+        <p className="font-bold">{failed ? 'The calls are closed for now' : 'The calls will be back shortly'}</p>
+        <p className="mt-0.5 text-muted">
+          {failed
+            ? 'A one-time privacy cleanup of older records did not finish, so no calls are shown. Check the backend log, then try again.'
+            : 'A one-time privacy cleanup of older records is running. This page tries again on its own every few seconds.'}
+        </p>
+      </div>
+      <button type="button" className="btn-quiet" onClick={onRetry}>Try again</button>
+    </div>
+  )
 }
 
 /** The Calls tab: figures, the stored calls, or one call when `callId` is set. */
@@ -247,6 +301,7 @@ export default function CallsView({ callId }: { callId: string | null }) {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
   const [record, setRecord] = useState<CallRecordView | null>(null)
   const [failure, setFailure] = useState<ApiFailure | null>(null)
+  const [failureCode, setFailureCode] = useState<string | null>(null)
   const [filter, setFilter] = useState<CallFilter>(NO_FILTER)
   const [reload, setReload] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
@@ -261,11 +316,25 @@ export default function CallsView({ callId }: { callId: string | null }) {
           setCalls(((list as { calls?: CallSummary[] } | null)?.calls) ?? [])
           setSummary(s as AnalyticsSummary)
         })
-    load.then(() => { if (!cancelled) setFailure(null) }).catch((err) => { if (!cancelled) setFailure(err instanceof ApiError ? err.failure : 'unreachable') })
+    load
+      .then(() => { if (!cancelled) setFailure(null) })
+      .catch((err) => {
+        if (cancelled) return
+        setFailure(err instanceof ApiError ? err.failure : 'unreachable')
+        setFailureCode(err instanceof ApiError ? err.code : null)
+      })
     return () => {
       cancelled = true
     }
   }, [callId, reload])
+
+  // While the cleanup runs, try again on a timer; a failed cleanup waits for the viewer.
+  const waiting = failure === 'unavailable' && failureCode !== CLEANUP_FAILED
+  useEffect(() => {
+    if (!waiting) return
+    const timer = setTimeout(() => setReload((r) => r + 1), 5000)
+    return () => clearTimeout(timer)
+  }, [waiting, reload])
 
   // The receipt lives in the backend's memory, so it is gone after a restart: link to it only when it is still there.
   const hasYes = Boolean(record?.data.deal && (record.data.deal.state === 'agreed' || record.data.deal.farmerYes || record.data.deal.buyerYes))
@@ -294,8 +363,9 @@ export default function CallsView({ callId }: { callId: string | null }) {
 
   if (failure === 'unauthorized') return <AccessForm onSaved={() => setReload((r) => r + 1)} />
   if (failure === 'missing' && callId) {
-    return <Card><Empty title="This call is not stored">It may have been deleted, or nobody said yes to remembering it.</Empty><p className="text-center"><a className="btn-quiet" href="#/analytics/calls">All stored calls</a></p></Card>
+    return <Card><Empty title="This call is not stored">Its record may have been deleted, removed when its farmer asked to be forgotten or to make room for newer calls, or set aside because it could not be read safely.</Empty><p className="text-center"><a className="btn-quiet" href="#/analytics/calls">All calls</a></p></Card>
   }
+  if (failure === 'unavailable') return <NotReadyNote code={failureCode} onRetry={() => setReload((r) => r + 1)} />
   if (failure) return <ErrorNote title={failureText(failure)} onRetry={() => setReload((r) => r + 1)} />
 
   if (callId) {

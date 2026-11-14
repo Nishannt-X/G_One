@@ -10,7 +10,7 @@ describe('parseRoute', () => {
   })
 
   it('keeps the other routes working', () => {
-    for (const view of ['farmers', 'analytics', 'memory', 'buyers', 'simulator', 'join', 'sample-receipt'] as const) {
+    for (const view of ['farmers', 'analytics', 'memory', 'deal-map', 'buyers', 'simulator', 'join', 'sample-receipt'] as const) {
       expect(parseRoute(`#/${view}`).view).toBe(view)
     }
     expect(parseRoute('#/join?call=abc').query.get('call')).toBe('abc')
@@ -60,7 +60,7 @@ describe('MAIN_NAV', () => {
       ['Farmers', '#/farmers'],
       ['Analytics', '#/analytics'],
       ['Buyer directory', '#/buyers'],
-      ['Memory lookup', '#/memory'],
+      ['Deal map', '#/deal-map'],
     ])
     for (const item of MAIN_NAV) expect(parseRoute(item.href).view).toBe(item.view)
   })

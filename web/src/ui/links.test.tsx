@@ -7,7 +7,7 @@ import Shell, { MobileMenu } from './Shell'
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])
 const texts = (html: string) => html.replace(/<[^>]+>/g, '\n').split('\n').map((t) => t.trim()).filter(Boolean)
 
-const PAGES = ['Demo', 'Try a call', 'Farmers', 'Analytics', 'Buyer directory', 'Memory lookup']
+const PAGES = ['Demo', 'Try a call', 'Farmers', 'Analytics', 'Buyer directory', 'Deal map']
 const shell = (hash: string) => renderToStaticMarkup(<Shell route={parseRoute(hash)}><p>page</p></Shell>)
 const navBlock = (html: string, label: string) => {
   const start = html.search(new RegExp(`<nav[^>]* aria-label="${label}"`))
@@ -20,7 +20,7 @@ describe('Shell navigation', () => {
 
   it('shows all six pages in the top bar, in order, and no How it works item', () => {
     expect(texts(navBlock(html, 'Main'))).toEqual(PAGES)
-    expect(hrefs(navBlock(html, 'Main'))).toEqual(['#/demo', '#/call', '#/farmers', '#/analytics', '#/buyers', '#/memory'])
+    expect(hrefs(navBlock(html, 'Main'))).toEqual(['#/demo', '#/call', '#/farmers', '#/analytics', '#/buyers', '#/deal-map'])
     expect(html).not.toContain('How it works')
     expect(hrefs(html)).not.toContain('#/how')
   })
@@ -40,7 +40,7 @@ describe('Shell navigation', () => {
   it('marks the current page, including the pages that used to sit under a menu', () => {
     expect(html).toContain('href="#/farmers" aria-current="page"')
     expect(shell('#/call')).toContain('href="#/call" aria-current="page"')
-    for (const view of ['analytics', 'buyers', 'memory']) {
+    for (const view of ['analytics', 'buyers', 'deal-map']) {
       const page = shell(`#/${view}`)
       expect(navBlock(page, 'Main')).toContain(`href="#/${view}" aria-current="page"`)
       expect(page.match(/aria-current="page"/g)).toHaveLength(1)

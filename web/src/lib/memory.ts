@@ -55,3 +55,11 @@ export function parseMemory(body: unknown, callerKey: string): MemoryRecord {
 export function isCallerKey(value: string): boolean {
   return /^[0-9a-f]{64}$/i.test(value.trim())
 }
+
+/**
+ * What a "forget me" (DELETE /api/memory/{key}) answered: "done" (204), or "completing" (202 "accepted_completing"):
+ * the linked call records are already unlinked and the memory is removed when the backend retries.
+ */
+export function forgetResult(body: unknown): 'done' | 'completing' {
+  return (body as { status?: unknown } | null)?.status === 'accepted_completing' ? 'completing' : 'done'
+}

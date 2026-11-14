@@ -17,6 +17,12 @@ export type MessageKey =
   | 'memory_not_this_farmer'
   | 'memory_not_stored'
   | 'tools_result_not_kept'
+  | 'kept_with_yes'
+  | 'kept_none'
+  | 'deal_terms_only'
+  | 'latency_stored_median'
+  | 'latency_stored_note'
+  | 'latency_stored_approximate'
   | 'ended'
   | 'calls'
   | 'deal_title'
@@ -143,6 +149,7 @@ export type MessageKey =
   | 'memory_forget'
   | 'memory_forget_confirm'
   | 'memory_forgotten'
+  | 'memory_forget_completing'
   | 'memory_empty'
   | 'credit_speech_live'
   | 'credit_speech_sample'
@@ -163,7 +170,13 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_stored_note: 'What G-One remembered when this call began.',
     memory_not_this_farmer: 'The caller said they were not the remembered farmer, so that memory is not attached to this call.',
     memory_not_stored: 'Not stored: the farmer did not say yes to remembering this call.',
-    tools_result_not_kept: 'Not kept: only price lookups keep their result.',
+    tools_result_not_kept: 'Not kept: only the tool, its time and how long it took are stored.',
+    kept_with_yes: 'Kept with a yes: {parties}',
+    kept_none: 'Conversation not kept: no one said yes',
+    deal_terms_only: 'Kept without consent: terms only',
+    latency_stored_median: 'Call median',
+    latency_stored_note: 'Per-turn times are kept only with a yes; these are the medians kept for every call.',
+    latency_stored_approximate: 'Where both sides were measured, the median is approximate.',
     ended: 'Ended',
     calls: 'Calls',
     deal_title: 'Deal Card',
@@ -292,6 +305,7 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_forget: 'Forget Caller Profile',
     memory_forget_confirm: 'Are you sure? This permanently deletes stored facts and call gists for this caller.',
     memory_forgotten: 'Caller profile has been forgotten.',
+    memory_forget_completing: 'Forget accepted, completing: the call records are unlinked, and the profile is removed when G-One retries.',
     memory_empty: 'No profile facts found for this caller.',
   },
   hi: {
@@ -309,7 +323,13 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_stored_note: 'कॉल शुरू होने पर G-One को जो याद था।',
     memory_not_this_farmer: 'कॉल करने वाले ने कहा कि वे याद किए गए किसान नहीं हैं, इसलिए वह जानकारी इस कॉल से नहीं जोड़ी गई।',
     memory_not_stored: 'सहेजा नहीं गया: किसान ने इस कॉल को याद रखने के लिए हाँ नहीं कहा।',
-    tools_result_not_kept: 'नहीं रखा गया: केवल भाव की जानकारी का नतीजा रखा जाता है।',
+    tools_result_not_kept: 'नहीं रखा गया: केवल टूल, उसका समय और लगा समय सहेजा जाता है।',
+    kept_with_yes: 'हाँ कहने पर रखा गया: {parties}',
+    kept_none: 'बातचीत नहीं रखी गई: किसी ने हाँ नहीं कहा',
+    deal_terms_only: 'बिना सहमति के रखा गया: केवल शर्तें',
+    latency_stored_median: 'कॉल का मीडियन',
+    latency_stored_note: 'हर टर्न का समय केवल हाँ कहने पर रखा जाता है; ये हर कॉल के लिए रखे गए मीडियन हैं।',
+    latency_stored_approximate: 'जहाँ दोनों तरफ़ माप हुआ, वहाँ मीडियन अनुमानित है।',
     ended: 'समाप्त',
     calls: 'कॉल्स',
     deal_title: 'सौदा पर्ची',
@@ -438,6 +458,7 @@ const MESSAGES: Record<UiLang, Record<MessageKey, string>> = {
     memory_forget: 'प्रोफाइल हटाएं (Forget)',
     memory_forget_confirm: 'क्या आप सुनिश्चित हैं? इससे इस कॉलर के सभी दर्ज तथ्य और सारांश हटा दिए जाएंगे।',
     memory_forgotten: 'कॉलर का रिकॉर्ड हटा दिया गया है।',
+    memory_forget_completing: 'हटाने का अनुरोध स्वीकार, पूरा हो रहा है: कॉल रिकॉर्ड अलग कर दिए गए, प्रोफाइल दोबारा कोशिश पर हटेगी।',
     memory_empty: 'इस कॉलर का कोई विवरण नहीं मिला।',
   },
 }

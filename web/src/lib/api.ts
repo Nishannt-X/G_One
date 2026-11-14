@@ -1,11 +1,15 @@
 /** What went wrong with a request, in the terms the UI distinguishes. */
-export type ApiFailure = 'unreachable' | 'unauthorized' | 'missing' | 'bad_request' | 'server'
+/** `unavailable`: the backend answered 503, such as while a one-time cleanup runs. */
+export type ApiFailure = 'unreachable' | 'unauthorized' | 'missing' | 'bad_request' | 'server' | 'unavailable'
 
 export class ApiError extends Error {
   readonly failure: ApiFailure
-  constructor(failure: ApiFailure) {
+  /** The backend's `error` code from a JSON error body, when it sent one. */
+  readonly code: string | null
+  constructor(failure: ApiFailure, code: string | null = null) {
     super(failure)
     this.failure = failure
+    this.code = code
   }
 }
 
@@ -13,6 +17,7 @@ export function failureOf(status: number): ApiFailure {
   if (status === 401 || status === 403) return 'unauthorized'
   if (status === 404 || status === 405) return 'missing'
   if (status === 400) return 'bad_request'
+  if (status === 503) return 'unavailable'
   return 'server'
 }
 
@@ -34,6 +39,15 @@ export function setAccessCode(code: string) {
   }
 }
 
+async function errorCode(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { error?: unknown } | null
+    return typeof body?.error === 'string' ? body.error : null
+  } catch {
+    return null
+  }
+}
+
 /** Fetches JSON and turns every failure into an {@link ApiError}. A body-less success resolves to null. */
 export async function api(path: string, init: RequestInit = {}): Promise<unknown> {
   const code = accessCode()
@@ -48,8 +62,9 @@ export async function api(path: string, init: RequestInit = {}): Promise<unknown
   }
   if (!response.ok) {
     // Vite answers 500 when its proxy finds no backend; a real backend error carries JSON.
-    const proxyMiss = response.status === 500 && !response.headers.get('content-type')?.includes('json')
-    throw new ApiError(proxyMiss ? 'unreachable' : failureOf(response.status))
+    const json = response.headers.get('content-type')?.includes('json') ?? false
+    const proxyMiss = response.status === 500 && !json
+    throw new ApiError(proxyMiss ? 'unreachable' : failureOf(response.status), json ? await errorCode(response) : null)
   }
   const text = await response.text()
   if (!text) return null

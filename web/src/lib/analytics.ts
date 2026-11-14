@@ -1,4 +1,4 @@
-import type { CallView, LegView, NotStoredReason, TimelineItem, ToolView, TurnTiming } from './callState'
+import type { CallView, LegView, NotStoredReason, RecordedLatency, TimelineItem, ToolView, TurnTiming } from './callState'
 import { dealPrice, languageLabel, offset, rupees } from './format'
 import { comparePrice, dealValue, parseReference } from './pricing'
 import type { CallGist, DealState, DealUpdated, LegRole, LegSource, MemoryLoaded, ProfileFact, WhisperKind } from '../types/console'
@@ -13,6 +13,9 @@ export type Consent = 'YES' | 'NO' | 'NONE'
  * lookups with no buyer on the call; "no_terms": no terms heard.
  */
 export type Outcome = 'agreed' | 'no_deal' | 'info_only' | 'no_terms'
+
+/** Whose answer to the remembering question was yes. Version 3 and later. */
+export type ConsentScope = 'both' | 'farmer' | 'buyer' | 'none'
 
 export interface StoredDeal {
   state: DealState
@@ -32,9 +35,16 @@ export interface StoredDeal {
   readback?: boolean
   farmerYesMs?: number
   buyerYesMs?: number
+  /** Version 3: true when no party said yes, so the card was kept as terms only. */
+  termsOnly?: boolean
+  /** Version 3: "kept without consent: terms only" on a terms-only card. */
+  label?: string
 }
 
-/** One row of GET /api/analytics/calls. Languages are present only for parties that said yes. */
+/**
+ * One row of GET /api/analytics/calls. Every finished call has one (version 3 and later); on older records the
+ * languages are present only for parties that said yes.
+ */
 export interface CallSummary {
   callId: string
   startedMs: number
@@ -51,6 +61,10 @@ export interface CallSummary {
   /** Private cautions and tools used, counted from the farmer's side (farmer's yes only). */
   cautions?: number
   tools?: number
+  /** Version 3: whose yes covers the record, and true when only operational data and the deal terms were kept. */
+  consentScope?: ConsentScope
+  termsOnly?: boolean
+  schemaVersion?: number
 }
 
 export interface LanguageSwitch {
@@ -66,6 +80,10 @@ export interface StoredLatency {
   transcript?: number
   translation?: number
   reply?: number
+  /** How many turns each median covers (version 3); absent on older records. */
+  transcriptCount?: number
+  translationCount?: number
+  replyCount?: number
 }
 
 export interface StoredSide {
@@ -74,7 +92,8 @@ export interface StoredSide {
   language: string | null
   joinedMs: number
   endReason: string | null
-  timings: TurnTiming[]
+  /** Per-turn times: kept only with that party's yes (always present on version 1 and 2 records). */
+  timings?: TurnTiming[]
   /** Version 2 fields: absent on records stored before them. */
   firstLanguage?: string | null
   endedMs?: number
@@ -83,10 +102,10 @@ export interface StoredSide {
 }
 
 export interface StoredFarmer extends StoredSide {
-  tools: { tool: string; ok: boolean; durationMs: number; atMs: number; result?: string }[]
-  advice: { kind: WhisperKind; atMs: number }[]
-  /** Null when the caller said they were not the remembered farmer. */
-  memory: { returning: boolean; facts: ProfileFact[]; gists: CallGist[] } | null
+  tools?: { tool: string; ok: boolean; durationMs: number; atMs: number; offsetMs?: number; result?: string }[]
+  advice?: { kind: WhisperKind; atMs: number; offsetMs?: number }[]
+  /** Null without the farmer's yes, and when the caller said they were not the remembered farmer. */
+  memory?: { returning: boolean; facts: ProfileFact[]; gists: CallGist[] } | null
   identity?: 'confirmed' | 'denied' | 'unchecked'
 }
 
@@ -101,11 +120,22 @@ export interface CallRecordView extends Omit<CallSummary, 'deal' | 'buyerName' |
   schemaVersion?: number
   data: {
     deal: StoredDeal | null
-    /** Version 2: the newest mandi price reference, kept with any stored call. */
-    price?: { reference: string; atMs: number } | null
-    notStored: Partial<Record<LegRole | 'memory', NotStoredReason>>
+    /** Version 2: the newest mandi price lookup; the reference sentence itself is absent from version 4 on. */
+    price?: { reference?: string; atMs: number; offsetMs?: number; tool?: string } | null
+    /** Absent on some older records. */
+    notStored?: Partial<Record<LegRole | 'memory', NotStoredReason>>
     farmer: StoredFarmer | null
     buyer: StoredBuyer | null
+    /** Version 3 and later: whose yes covers the record. */
+    consentScope?: ConsentScope
+    /** True when only operational data and the deal terms were kept (nobody said yes, or a minimal record). */
+    termsOnly?: boolean
+    /** False when no caller key is kept: the call is not linked to any farmer. */
+    keyed?: boolean
+    /** A record that kept only its times and the answers. */
+    minimal?: boolean
+    /** Version 3 and later: which legs joined the call. */
+    joined?: Partial<Record<LegRole, boolean>>
   }
 }
 
@@ -116,6 +146,13 @@ export interface AnalyticsSummary {
   languagePairs: Record<string, number>
   medianMs: Partial<Record<'transcript' | 'translation' | 'reply', number>>
   toolCounts: Record<string, number>
+  /** Version 3 and later: calls at least one party said yes to, and the rest (kept as terms only). */
+  callsWithYes?: number
+  callsWithoutYes?: number
+  /** Finished calls still waiting to be saved; not counted yet. */
+  unsavedCalls?: number
+  /** True when the medians span more than one call: a count-weighted median of per-call medians. */
+  approximate?: boolean
 }
 
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -179,10 +216,56 @@ export function outcomeLabel(outcome: string): string {
 
 export const CONSENT_LABEL: Record<Consent, string> = { YES: 'Yes', NO: 'No', NONE: 'No answer' }
 
+type Answers = Pick<CallSummary, 'consentFarmer' | 'consentBuyer'>
+
+/** True when at least one party said yes to remembering the call, read from the recorded answers. */
+export function hasYes(call: Answers): boolean {
+  return call.consentFarmer === 'YES' || call.consentBuyer === 'YES'
+}
+
+/**
+ * True when the call is not linked to any farmer: no caller key is kept. The caller key is kept only with the
+ * farmer's yes, so a list row without it is anonymous; a full record also says so for a withheld or forgotten caller.
+ */
+export function isAnonymous(call: Answers & { data?: CallRecordView['data'] }): boolean {
+  const keyed = call.data?.keyed
+  if (typeof keyed === 'boolean') return !keyed
+  const why = call.data?.notStored?.farmer
+  return call.consentFarmer !== 'YES' || why === 'withheld' || why === 'forgotten'
+}
+
+export const NOT_KEPT_NOTE = 'Conversation not kept: no one said yes'
+export const MINIMAL_NOTE = 'Only the times and the answers were kept for this call'
+export const TERMS_ONLY_LABEL = 'Kept without consent: terms only'
+
+/** The short note a list row or a stored call shows when its consent-gated content was not kept, or null. */
+export function keptNote(call: Answers & { termsOnly?: boolean; data?: CallRecordView['data'] }): string | null {
+  if (!hasYes(call)) return NOT_KEPT_NOTE
+  return call.termsOnly || call.data?.minimal ? MINIMAL_NOTE : null
+}
+
+/** True when a deal card was kept as terms only (no party said yes). */
+export function termsOnlyDeal(call: Answers, deal: StoredDeal | null | undefined): boolean {
+  return Boolean(deal) && (deal?.termsOnly ?? !hasYes(call))
+}
+
+/**
+ * The parties whose answer to the remembering question was yes, in the order farmer, buyer; an empty list when the
+ * answers are known and nobody said yes; null before any answer is known.
+ */
+export function consentKept(consent: Partial<Record<LegRole, Consent>> | undefined): LegRole[] | null {
+  if (!consent || Object.keys(consent).length === 0) return null
+  return (['farmer', 'buyer'] as const).filter((role) => consent[role] === 'YES')
+}
+
 const PARTY: Record<LegRole, string> = { farmer: 'farmer', buyer: 'buyer' }
 
-/** A plain sentence for a side that was not stored. */
-export function notStoredText(role: LegRole, reason: NotStoredReason | undefined): string {
+/**
+ * A plain sentence for a side that was not stored. `sideKept` is true when the side's operational details (times,
+ * tools, advice kinds) were kept and only what needs a yes is missing.
+ */
+export function notStoredText(role: LegRole, reason: NotStoredReason | undefined, sideKept = false): string {
+  if (sideKept && reason !== 'no_leg' && reason !== 'not_this_farmer') return keptWithoutYesText(role, reason)
   switch (reason) {
     case 'withheld':
       return 'Not stored: the farmer’s caller ID was withheld, so nothing about the farmer is kept.'
@@ -197,6 +280,55 @@ export function notStoredText(role: LegRole, reason: NotStoredReason | undefined
     default:
       return `Not stored: no consent from the ${PARTY[role]}.`
   }
+}
+
+function keptWithoutYesText(role: LegRole, reason: NotStoredReason | undefined): string {
+  const missing = role === 'farmer' ? 'their per-turn times, name and memory were not kept' : 'their per-turn times were not kept'
+  switch (reason) {
+    case 'withheld':
+      return 'The farmer’s caller ID was withheld: the call is not linked to any farmer, and no name or memory was kept.'
+    case 'forgotten':
+      return 'The farmer asked G-One to forget them: the call is no longer linked to them.'
+    case 'said_no':
+      return `The ${PARTY[role]} said no to remembering this call: ${missing}.`
+    default:
+      return `The ${PARTY[role]} did not say yes to remembering this call: ${missing}.`
+  }
+}
+
+/**
+ * The stored medians of a call without per-turn times, per stage: the count-weighted median of each side's median,
+ * worked out like the backend's summary. `approximate` is true when more than one side's median went into a stage.
+ */
+export function storedLatency(record: CallRecordView): RecordedLatency | null {
+  const sides = [record.data.farmer, record.data.buyer].filter((s): s is StoredSide => Boolean(s?.latency))
+  const out: RecordedLatency = { turns: 0, approximate: false }
+  for (const side of sides) out.turns = Math.max(out.turns, side.latency?.turns ?? 0)
+  for (const stage of ['transcript', 'translation', 'reply'] as const) {
+    const values = sides.flatMap((s) => {
+      const l = s.latency!
+      const v = l[stage]
+      return typeof v === 'number' ? [[v, Math.max(1, l[`${stage}Count`] ?? l.turns ?? 1)] as const] : []
+    })
+    if (values.length === 0) continue
+    if (values.length > 1) out.approximate = true
+    out[stage] = weightedMedian(values)
+  }
+  return out.transcript === undefined && out.translation === undefined && out.reply === undefined ? null : out
+}
+
+function weightedMedian(values: readonly (readonly [number, number])[]): number {
+  const sorted = [...values].sort((a, b) => a[0] - b[0])
+  const n = sorted.reduce((sum, [, count]) => sum + count, 0)
+  const at = (index: number) => {
+    let seen = 0
+    for (const [value, count] of sorted) {
+      seen += count
+      if (index < seen) return value
+    }
+    return sorted[sorted.length - 1][0]
+  }
+  return Math.floor((at(Math.floor((n - 1) / 2)) + at(Math.floor(n / 2))) / 2)
 }
 
 function leg(role: LegRole, side: StoredSide, record: CallRecordView): LegView {
@@ -242,7 +374,7 @@ export function toCallView(record: CallRecordView, options: { receipt?: boolean 
   }))
   const timings = [...(farmer?.timings ?? []), ...(buyer?.timings ?? [])].sort((a, b) => a.heardMs - b.heardMs)
   const memory: MemoryLoaded | null = farmer?.memory
-    ? { type: 'memory_loaded', callId: record.callId, atMs: record.startedMs, callerKey: '', returning: farmer.memory.returning, facts: farmer.memory.facts, gists: farmer.memory.gists.map((g) => ({ ...g, followUps: g.followUps ?? [] })) }
+    ? { type: 'memory_loaded', callId: record.callId, atMs: record.startedMs, callerKey: '', returning: farmer.memory.returning, facts: farmer.memory.facts ?? [], gists: (farmer.memory.gists ?? []).map((g) => ({ ...g, followUps: g.followUps ?? [] })) }
     : null
   const dealView: DealUpdated | null = deal
     ? { type: 'deal_updated', callId: record.callId, atMs: deal.atMs ?? record.endedMs, state: deal.state, commodity: deal.commodity, variety: deal.variety, market: deal.market, quantity: deal.quantity, price: deal.price, unit: deal.unit, pickup: deal.pickup, farmerYes: deal.farmerYes, buyerYes: deal.buyerYes }
@@ -251,7 +383,7 @@ export function toCallView(record: CallRecordView, options: { receipt?: boolean 
     callId: record.callId,
     origin: 'stored',
     startedMs: record.startedMs,
-    language: record.languages.farmer ?? record.languages.buyer ?? '',
+    language: record.languages?.farmer ?? record.languages?.buyer ?? '',
     legs,
     items: wordlessItems(record, timings),
     languageNotes: [],
@@ -262,7 +394,13 @@ export function toCallView(record: CallRecordView, options: { receipt?: boolean 
     deal: dealView,
     ended: { atMs: record.endedMs, durationMs: record.durationMs, reason: record.endReason },
     seq: 0,
-    recorded: { notStored: record.data.notStored ?? {}, priceReference: record.data.price?.reference ?? null, receipt: options.receipt === true },
+    recorded: {
+      notStored: record.data.notStored ?? {},
+      priceReference: record.data.price?.reference ?? null,
+      receipt: options.receipt === true,
+      termsOnly: termsOnlyDeal(record, deal),
+      latency: timings.length === 0 ? storedLatency(record) : null,
+    },
   }
 }
 
@@ -300,7 +438,8 @@ function switches(role: LegRole, side: StoredSide | null): string | null {
  * agreed, with whom, how the price compared, what was confirmed, what advice was given and what memory was used.
  */
 export function keyPoints(record: CallRecordView): KeyPoint[] {
-  const { deal, farmer, buyer, notStored, price } = record.data
+  const { deal, farmer, buyer, price } = record.data
+  const notStored = record.data.notStored ?? {}
   const points: KeyPoint[] = []
   const at = (ms: number) => offset(ms, record.startedMs)
   const outcome = record.outcome
@@ -340,13 +479,13 @@ export function keyPoints(record: CallRecordView): KeyPoint[] {
   if (farmer?.identity === 'denied' || notStored.memory === 'not_this_farmer') {
     points.push({ id: 'memory', tone: 'warn', text: 'The caller said they were not the remembered farmer, so no memory is attached.' })
   } else if (farmer?.memory) {
-    const name = farmer.memory.facts.find((f) => f.field === 'name')?.value
+    const name = (farmer.memory.facts ?? []).find((f) => f.field === 'name')?.value
     points.push({ id: 'memory', tone: 'plain', text: farmer.memory.returning ? `Returning farmer${name ? ` (${name})` : ''}${farmer.identity === 'confirmed' ? ', name confirmed on the call' : ''}.` : 'First call from this farmer: nothing was remembered yet.' })
   }
   const lookups = (farmer?.tools ?? []).filter((t) => t.ok).length
   if (lookups) points.push({ id: 'tools', tone: 'plain', text: `${lookups} assistant ${lookups === 1 ? 'lookup' : 'lookups'} used.` })
-  if (notStored.farmer) points.push({ id: 'ns-farmer', tone: 'plain', text: notStoredText('farmer', notStored.farmer) })
-  if (notStored.buyer) points.push({ id: 'ns-buyer', tone: 'plain', text: notStoredText('buyer', notStored.buyer) })
+  if (notStored.farmer) points.push({ id: 'ns-farmer', tone: 'plain', text: notStoredText('farmer', notStored.farmer, Boolean(farmer)) })
+  if (notStored.buyer) points.push({ id: 'ns-buyer', tone: 'plain', text: notStoredText('buyer', notStored.buyer, Boolean(buyer)) })
   return points
 }
 

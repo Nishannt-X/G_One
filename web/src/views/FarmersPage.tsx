@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { accessCode, api, ApiError, setAccessCode, type ApiFailure } from '../lib/api'
 import { forgetSeen, fromRecord, maskedKey, readSeen, searchFarmers, toFarmer, type Farmer, type FarmerDeal } from '../lib/farmers'
 import { dealPrice, humanize, languageLabel, shortDate } from '../lib/format'
-import { parseMemory } from '../lib/memory'
+import { forgetResult, parseMemory } from '../lib/memory'
 import type { Origin } from '../types/console'
 import { AlertIcon, CheckIcon, ChevronIcon, CrossIcon, LockIcon, PhoneIcon, PlayIcon, SearchIcon, TrashIcon, WheatIcon } from '../ui/icons'
 import { Dialog, Drawer, Empty, ErrorNote, Skeleton } from '../ui/parts'
@@ -230,11 +230,12 @@ export default function FarmersPage({ openKey, seed }: { openKey: string | null;
     setBusy(true)
     setForgetFailed(false)
     try {
-      if (target.origin === 'memory') await api(`/api/memory/${encodeURIComponent(target.callerKey)}`, { method: 'DELETE' })
+      const result = target.origin === 'memory' ? forgetResult(await api(`/api/memory/${encodeURIComponent(target.callerKey)}`, { method: 'DELETE' })) : 'done'
       forgetSeen(target.callerKey)
       setFarmers((list) => list?.filter((f) => f.callerKey !== target.callerKey) ?? null)
       setForgetting(null)
-      setNotice(`${target.name ?? maskedKey(target.callerKey)} has been forgotten.`)
+      const who = target.name ?? maskedKey(target.callerKey)
+      setNotice(result === 'completing' ? `Forget accepted for ${who}, completing: their call records are unlinked, and the memory is removed when G-One retries.` : `${who} has been forgotten.`)
       closeDetail()
     } catch {
       setForgetFailed(true)

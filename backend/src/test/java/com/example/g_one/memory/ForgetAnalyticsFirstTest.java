@@ -102,4 +102,27 @@ class ForgetAnalyticsFirstTest {
             assertThat(store.forgotten(KEY.value(), T0)).isTrue();
         }
     }
+
+    /**
+     * Privacy review round 3, item 3: analytics committed (and recorded a durable intent to forget memory) but the
+     * memory step failed. The console is told the forget is accepted and completing (202), not done (204).
+     */
+    @Test
+    void aMemoryFailureAfterAnalyticsCommittedIsAcceptedNotDone(@TempDir Path dir) {
+        String url = "jdbc:sqlite:" + dir.resolve("g-one.db");
+        try (CallRecordStore store = new CallRecordStore(url);
+             CallRecordWriter writer = new CallRecordWriter(new ConsoleBus(), store, JSON, Clock.systemUTC())) {
+            MemoryController controller = new MemoryController(new CrashingMemory(), PROPS,
+                    List.of(k -> writer.forgetNow(k.value())));
+            ResponseEntity<?> res;
+            try {
+                res = controller.forget(KEY.value(), null);
+            } catch (RuntimeException e) {
+                res = null;
+            }
+            assertThat(res).as("reported, not thrown").isNotNull();
+            assertThat(res.getStatusCode().value()).isEqualTo(202);
+            assertThat(res.getBody().toString()).contains("accepted_completing");
+        }
+    }
 }

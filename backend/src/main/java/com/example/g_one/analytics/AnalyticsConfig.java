@@ -2,6 +2,8 @@ package com.example.g_one.analytics;
 
 import com.example.g_one.agent.tools.buyers.BuyerDirectory;
 import com.example.g_one.agent.tools.mandi.MandiCatalog;
+import com.example.g_one.core.CallId;
+import com.example.g_one.core.CallerKey;
 import com.example.g_one.core.ConsoleBus;
 import com.example.g_one.core.Language;
 import com.example.g_one.core.Tool;
@@ -38,8 +40,9 @@ public class AnalyticsConfig {
     }
 
     /**
-     * A farmer forgotten from the console loses their stored call records too, and leaves a tombstone so a call of
-     * theirs that is still open is recorded without anything linked to them.
+     * Told by the console and the "forget me" tool before memory forgets: the farmer's call records are deleted, a
+     * durable tombstone keeps open and later-saved calls of theirs unlinked, and a durable intent to forget memory is
+     * recorded in the same transaction and completed at once, or at the next startup or tick.
      */
     @Bean
     ForgetListener callRecordsForget(CallRecordWriter writer) {
@@ -53,12 +56,14 @@ public class AnalyticsConfig {
     @Bean
     CallRecordWriter callRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, MandiCatalog catalog,
                                       BuyerDirectory buyers, ObjectProvider<Tool> tools, Language.Registry languages,
-                                      MemoryProperties props) {
+                                      MemoryProperties props, MemoryStore memoryStore) {
         List<String> toolNames = tools.orderedStream().map(Tool::name).toList();
         List<String> codes = languages.all().stream().map(Language::code).toList();
         Vocabulary vocab = new Vocabulary(new DealVocabulary(catalog, buyers), toolNames, codes);
         RecordSpool spool = props.store().equals("in-memory") ? new MemoryRecordSpool()
                 : new FileRecordSpool(Path.of(props.dataDir()).toAbsolutePath().normalize().resolve(SPOOL_DIR), json);
-        return new CallRecordWriter(bus, store, json, Clock.systemUTC(), vocab, spool);
+        // Completes durable memory forget intents (startup and tick); idempotent, as MemoryStore.forget is.
+        MemoryForget memory = (key, call, atMs) -> memoryStore.forget(CallerKey.of(key), CallId.of(call), atMs);
+        return new CallRecordWriter(bus, store, json, Clock.systemUTC(), vocab, spool, memory);
     }
 }

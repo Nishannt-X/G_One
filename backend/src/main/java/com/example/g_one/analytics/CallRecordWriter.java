@@ -47,6 +47,10 @@ public final class CallRecordWriter implements AutoCloseable {
     static final long TICK_MS = 1_000;
     static final String EVICTED = "evicted";
     static final String SHUTDOWN = "shutdown";
+    /** The call id a memory forget intent carries when the forget came from outside a call (the console). */
+    static final String FORGET_INTENT_CALL = "forget-intent";
+    /** Quarantined rows are retried at most this often. */
+    static final long QUARANTINE_RETRY_MS = 60_000;
 
     private static final Logger log = LoggerFactory.getLogger(CallRecordWriter.class);
 
@@ -59,7 +63,10 @@ public final class CallRecordWriter implements AutoCloseable {
     private final Vocabulary vocab;
     private final RecordSchema schema;
     private final RecordSpool spool;
+    /** Completes memory forget intents; null when no memory store is wired (then no intent is recorded). */
+    private final MemoryForget memory;
     private final int maxOpen;
+    private long nextQuarantineRetryMs;
     private final Map<CallId, CallAccumulator> open = new LinkedHashMap<>();
     /** Records the spool could not take (a disk failure): kept here and spooled again on the next tick. */
     private final List<CallRecord> unspooled = new ArrayList<>();
@@ -72,23 +79,30 @@ public final class CallRecordWriter implements AutoCloseable {
     private BiFunction<CallAccumulator, String, CallRecord> builder;
 
     public CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock) {
-        this(bus, store, json, clock, Vocabulary.bundled(json), new MemoryRecordSpool());
+        this(bus, store, json, clock, Vocabulary.bundled(json), new MemoryRecordSpool(), null, MAX_OPEN_CALLS, true);
     }
 
     CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, Vocabulary vocab,
-                     RecordSpool spool) {
-        this(bus, store, json, clock, vocab, spool, MAX_OPEN_CALLS, true);
+                     RecordSpool spool, MemoryForget memory) {
+        this(bus, store, json, clock, vocab, spool, memory, MAX_OPEN_CALLS, true);
+    }
+
+    /** No memory store: forgets touch the call records only. */
+    CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, Vocabulary vocab,
+                     RecordSpool spool, int maxOpen, boolean tick) {
+        this(bus, store, json, clock, vocab, spool, null, maxOpen, tick);
     }
 
     /** @param tick false for tests that drive {@link #tick()} themselves */
     CallRecordWriter(ConsoleBus bus, CallRecordStore store, ObjectMapper json, Clock clock, Vocabulary vocab,
-                     RecordSpool spool, int maxOpen, boolean tick) {
+                     RecordSpool spool, MemoryForget memory, int maxOpen, boolean tick) {
         this.store = store;
         this.json = json;
         this.clock = clock;
         this.vocab = vocab;
         this.schema = new RecordSchema(vocab, json);
         this.spool = spool;
+        this.memory = memory;
         this.maxOpen = maxOpen;
         this.builder = (call, reason) -> call.toRecord(json, vocab.deals(), clock.millis(), reason);
         synchronized (this) {
@@ -120,14 +134,22 @@ public final class CallRecordWriter implements AutoCloseable {
         this.builder = builder;
     }
 
-    /** The one-time scrub of old rows, the tombstone sweep, then the spool: before any read is served. */
+    /**
+     * At startup, before any read is served (memory or call records): completes every pending memory forget intent,
+     * runs the one-time scrub of old rows, sweeps the tombstones, then replays the spool.
+     */
     private void cleanup() {
+        completeIntents();
         try {
             CallRecordStore.ScrubReport report = store.scrubLegacy(schema);
             if (report.scrubbed() + report.minimised() > 0) {
                 log.info("Call records: scrubbed {} and minimised {} records stored before the privacy review",
                         report.scrubbed(), report.minimised());
             }
+            if (report.quarantined() > 0) {
+                log.error("Call records: {} old rows kept but quarantined (hidden); retried later", report.quarantined());
+            }
+            nextQuarantineRetryMs = clock.millis() + QUARANTINE_RETRY_MS;
             int swept = store.applyTombstones();
             if (swept > 0) log.info("Call records: {} records of forgotten callers deleted at startup", swept);
             flush();
@@ -175,6 +197,57 @@ public final class CallRecordWriter implements AutoCloseable {
      * Throws when the store cannot take it, so the caller (the console, the "forget me" tool) fails closed.
      */
     public synchronized void forget(String farmerKey, long atMs) {
+        stripHeld(farmerKey, atMs);
+        try {
+            store.forget(farmerKey, atMs);
+        } catch (RuntimeException e) {
+            log.error("Could not store a forget for call records; the forget is refused", e);
+            throw e;
+        }
+    }
+
+    /**
+     * The forget the console and the "forget me" tool ask for, before memory forgets: the call records forget (as
+     * {@link #forget}) and, in the same transaction, record a durable intent to forget memory; then the intent is
+     * completed at once when it can be. If memory cannot forget now, the intent stays and is completed at the next
+     * startup or tick; this does not throw for it, since the call records already committed. Throws only when the call
+     * records cannot forget (the caller then refuses the forget).
+     */
+    public synchronized void forgetNow(String farmerKey) {
+        long atMs = clock.millis();
+        stripHeld(farmerKey, atMs);
+        try {
+            if (memory != null) store.forgetWithIntent(farmerKey, FORGET_INTENT_CALL, atMs);
+            else store.forget(farmerKey, atMs);
+        } catch (RuntimeException e) {
+            log.error("Could not store a forget for call records; the forget is refused", e);
+            throw e;
+        }
+        completeIntents();
+    }
+
+    /** Completes every pending memory forget intent (idempotent); one that fails stays for the next try. */
+    synchronized void completeIntents() {
+        if (memory == null) return;
+        List<CallRecordStore.ForgetIntent> pending;
+        try {
+            pending = store.pendingIntents();
+        } catch (RuntimeException e) {
+            log.error("Could not read the memory forget intents", e);
+            return;
+        }
+        for (CallRecordStore.ForgetIntent intent : pending) {
+            try {
+                memory.forget(intent.callerKey(), intent.callId(), intent.atMs());
+                store.intentDone(intent);
+            } catch (RuntimeException e) {
+                log.error("A memory forget is still pending; it is retried on the next tick");
+            }
+        }
+    }
+
+    /** Open calls and spooled records of this caller that began at or before the forget lose the linked fields. */
+    private void stripHeld(String farmerKey, long atMs) {
         for (CallAccumulator call : open.values()) {
             if (call.farmerKey().filter(farmerKey::equals).isPresent() && call.startedMs() <= atMs) {
                 call.withdrawKey();
@@ -184,17 +257,6 @@ public final class CallRecordWriter implements AutoCloseable {
             if (farmerKey.equals(r.farmerKey()) && r.startedMs() <= atMs) spool.put(r.withdrawn());
         }
         unspooled.replaceAll(r -> farmerKey.equals(r.farmerKey()) && r.startedMs() <= atMs ? r.withdrawn() : r);
-        try {
-            store.forget(farmerKey, atMs);
-        } catch (RuntimeException e) {
-            log.error("Could not store a forget for call records; the forget is refused", e);
-            throw e;
-        }
-    }
-
-    /** {@link #forget} at the writer's clock time. */
-    public void forgetNow(String farmerKey) {
-        forget(farmerKey, clock.millis());
     }
 
     private void finish(CallAccumulator call, String endReasonIfOpen) {
@@ -282,9 +344,14 @@ public final class CallRecordWriter implements AutoCloseable {
         }
     }
 
-    /** The periodic work: finish a failed cleanup, then replay what waits. */
+    /**
+     * The periodic work: complete pending memory forget intents, finish a failed cleanup or retry quarantined rows (at
+     * most every {@link #QUARANTINE_RETRY_MS}), then replay what waits.
+     */
     synchronized void tick() {
-        if (readiness != Readiness.READY) cleanup();
+        completeIntents();
+        boolean quarantineDue = clock.millis() >= nextQuarantineRetryMs && store.pendingScrub() > 0;
+        if (readiness != Readiness.READY || quarantineDue) cleanup();
         else flush();
     }
 

@@ -94,13 +94,26 @@ public class ForgetMeTool implements Tool {
         MemoryStore s = store.get();
         if (s == null) return ToolResult.error("Not deleted: memory is not available right now. Offer to try later.");
         // The call records forget first, durably: if they cannot, memory is not touched and nothing claims success.
+        List<ForgetListener> told = listeners.get();
         try {
-            listeners.get().forEach(l -> l.forgotten(key.get()));
+            told.forEach(l -> l.forgotten(key.get()));
         } catch (RuntimeException e) {
             return ToolResult.error("Not deleted: the forget could not be completed right now. Apologise and offer to "
                     + "try again in a moment.");
         }
-        boolean had = s.forget(key.get(), ctx.callId(), clock.millis());
+        boolean had;
+        try {
+            had = s.forget(key.get(), ctx.callId(), clock.millis());
+        } catch (RuntimeException e) {
+            if (told.isEmpty()) {
+                return ToolResult.error("Not deleted: memory is not available right now. Offer to try later.");
+            }
+            // The call records committed a durable intent to forget memory, completed at the next startup or tick.
+            gate.forgotten(ctx);
+            return ToolResult.ok("Accepted, not yet done: the call records are cleared and the farmer's memory will be "
+                    + "forgotten shortly. Memory is off for the rest of this call. Tell the farmer plainly that you will "
+                    + "forget their information; do not say it is already deleted.");
+        }
         gate.forgotten(ctx);
         String line = lines.forLanguage(ctx.language().code()).forgotten();
         return ToolResult.ok((had ? "Deleted everything remembered about this farmer."

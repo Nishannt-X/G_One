@@ -107,7 +107,7 @@ public final class GistWriter implements AutoCloseable {
         CallTranscript scrubbed = scrubbed(transcript);
 
         Optional<CallSummarizer.Draft> draft = draft(scrubbed, current);
-        String summary = draft.map(d -> capWords(SecretScrubber.scrub(d.gist()).strip(), MAX_GIST_WORDS)).orElse("");
+        String summary = draft.map(d -> capWords(note(SecretScrubber.scrub(d.gist())), MAX_GIST_WORDS)).orElse("");
         Source source = Source.SUMMARIZER;
         if (summary.isBlank()) {
             summary = template(transcript, current);
@@ -239,14 +239,13 @@ public final class GistWriter implements AutoCloseable {
             if (SecretScrubber.hasSecret(value)) {
                 continue; // a fact is short; one with a secret-looking number is dropped, not patched
             }
-            Optional<String> field = ProfileFields.allowed(u.field(), value);
-            if (field.isEmpty()) {
+            // Names and places in English letters, fixed values for transport, payment and storage.
+            Optional<ProfileFields.Checked> checked = ProfileFields.check(u.field(), value);
+            if (checked.isEmpty()) {
                 continue;
             }
-            if (field.get().equals(ProfileFields.LANGUAGE)) {
-                value = value.toUpperCase(Locale.ROOT);
-            }
-            byField.put(field.get(), new ProfileFact(field.get(), value, provenance));
+            String field = checked.get().field();
+            byField.put(field, new ProfileFact(field, checked.get().value(), provenance));
         }
         return List.copyOf(byField.values());
     }
@@ -271,6 +270,14 @@ public final class GistWriter implements AutoCloseable {
                 .reduce((a, b) -> b)
                 .map(l -> line + " " + l.text())
                 .orElse(line);
+    }
+
+    /**
+     * The summarizer's note as stored: a short factual line, never a replay of what was said, so quotation marks (and
+     * with them any quoted speech) are dropped.
+     */
+    static String note(String gist) {
+        return gist.replaceAll("[\"\u201C\u201D\u201E\u00AB\u00BB]", "").strip();
     }
 
     static String capWords(String text, int max) {

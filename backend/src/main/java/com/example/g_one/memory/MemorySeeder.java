@@ -40,8 +40,7 @@ public final class MemorySeeder {
     public record Result(Status status, int facts, int gists) {}
 
     private static final Pattern ENV_NAME = Pattern.compile("[A-Z][A-Z0-9_]*");
-    private static final List<String> SINGLE = List.of(ProfileFields.NAME, ProfileFields.VILLAGE,
-            ProfileFields.DISTRICT, ProfileFields.STATE, ProfileFields.USUAL_MANDI, ProfileFields.LANGUAGE);
+    private static final List<String> SINGLE = ProfileFields.ORDER;
 
     private MemorySeeder() {}
 
@@ -108,10 +107,9 @@ public final class MemorySeeder {
             case "inferred" -> Provenance.Origin.INFERRED;
             default -> throw new IllegalStateException("Seed fact source must be said or inferred");
         };
-        if (ProfileFields.allowed(field, value).isEmpty()) {
-            throw new IllegalStateException("Seed fact " + field + " is not a profile field or has a bad value");
-        }
-        return new ProfileFact(field, clean(value),
+        String stored = ProfileFields.check(field, value).map(ProfileFields.Checked::value).orElseThrow(() ->
+                new IllegalStateException("Seed fact " + field + " is not a profile field or has a bad value"));
+        return new ProfileFact(field, clean(stored),
                 new Provenance(CallId.of(text(f, "callId")), origin, millis(text(f, "at"))));
     }
 

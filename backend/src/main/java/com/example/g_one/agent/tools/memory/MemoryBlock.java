@@ -60,8 +60,8 @@ public final class MemoryBlock {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
     /** Profile fields in the order docs/memory.md lists them; anything else follows alphabetically. */
-    private static final List<String> FIELD_ORDER =
-            List.of("name", "village", "district", "state", "crops", "usualMandi", "language");
+    private static final List<String> FIELD_ORDER = List.of("name", "village", "district", "state", "crops",
+            "usualMandi", "typicalQuantity", "transport", "paymentPreference", "storageAccess", "language");
     private static final Pattern UNSAFE = Pattern.compile("[\\p{Cntrl}\\p{Zl}\\p{Zp}]+");
     private static final Pattern SPACES = Pattern.compile("\\s+");
 

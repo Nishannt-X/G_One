@@ -247,6 +247,30 @@ class AgentToolsTest {
         assertThat(order).containsExactly("records", "records-ok:" + KEY.value());
     }
 
+    /**
+     * Privacy review round 3, item 3: the call records committed (with a durable intent to forget memory) but memory
+     * itself failed. The tool does not claim the information is deleted; it says it will be forgotten, and memory is off
+     * for the rest of the call.
+     */
+    @Test
+    void forgetMeSaysItWillForgetWhenMemoryFailsAfterTheRecordsCommitted() {
+        InMemoryMemoryStore crashing = new InMemoryMemoryStore() {
+            @Override
+            public boolean forget(CallerKey key, CallId duringCall, long atMs) {
+                throw new IllegalStateException("synthetic memory failure");
+            }
+        };
+        crashing.upsertFacts(KEY, suresh().facts());
+        CallContext ctx = ctx(KEY, crashing.load(KEY).orElseThrow());
+        gate.answerNameCheck(ctx, true);
+        com.example.g_one.memory.ForgetListener committed = k -> { };
+        ToolResult r = new ForgetMeTool(() -> crashing, gate, lines, CLOCK, () -> java.util.List.of(committed))
+                .invoke(args("{}"), ctx);
+        assertThat(r.ok()).isTrue();
+        assertThat(r.content()).startsWith("Accepted").doesNotContain("Deleted everything").contains("will");
+        assertThat(gate.state(ctx)).isEqualTo(MemoryGate.State.FORGOTTEN);
+    }
+
     @Test
     void forgetMeDeletesNothingWhenWithheldUnansweredOrAnotherSpeaker() {
         CountingStore counting = new CountingStore();

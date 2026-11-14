@@ -3,6 +3,10 @@
  * The output is committed, so the demo plays with no keys and no network. Only lines whose text or voice changed call
  * Timbre again; raw responses are cached outside the repo.
  *
+ * Every clip is sped up by TEMPO with a pitch-preserving time-stretch (scripts/wsola.ts), so the sample runs about three
+ * minutes. A new line is stretched right after mastering; a committed clip at its natural speed is stretched in place,
+ * without calling Timbre. The gaps between lines are not stretched.
+ *
  *   GNANI_API_KEY=... bun web/scripts/gen-voiced-sample.ts
  *
  * Everything said here is invented: the people, the firm and the prices.
@@ -11,6 +15,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { stretch } from './wsola'
 
 type Role = 'farmer' | 'buyer' | 'ai'
 type Party = 'farmer' | 'buyer'
@@ -332,6 +337,8 @@ const DRY_OUT = process.env.DRY_OUT
 const CLIP_GAP_MS = 220
 const BEAT_GAP_MS = 320
 const PAN = { farmer: -0.75, buyer: 0.75, whisper: -1 }
+/** How much faster than Timbre's natural pace every line plays, at the same pitch. */
+const TEMPO = 1.3
 
 let calls = 0
 
@@ -486,7 +493,8 @@ for (const beat of BEATS) {
     const voice = voiceFor(beat, line)
     const spoken = spokenOf(line)
     const hash = hashOf(['timbre-v2.5', voice, line.lang, spoken])
-    const file = `${beat.id}-${index + 1}-${hash}.wav`
+    const natural = `${beat.id}-${index + 1}-${hash}.wav`
+    const file = TEMPO === 1 ? natural : `${beat.id}-${index + 1}-${hashOf(['timbre-v2.5', voice, line.lang, spoken, `tempo ${TEMPO}`])}.wav`
     kept.add(file)
     let durationMs = 0
     if (!DRY_OUT) {
@@ -496,10 +504,14 @@ for (const beat of BEATS) {
         const done = pcmOf(new Uint8Array(await Bun.file(target).arrayBuffer()))
         durationMs = Math.round((done.samples.length / done.rate) * 1000)
       } else {
-        const raw = pcmOf(await synthesize(spoken, voice, line.lang, hash))
-        const samples = master(raw.samples, raw.rate)
-        await Bun.write(target, wavOf(samples, raw.rate))
-        durationMs = Math.round((samples.length / raw.rate) * 1000)
+        // A committed clip at natural speed is already mastered: stretch it rather than ask Timbre again.
+        const committed = join(OUT, natural)
+        const source = existsSync(committed)
+          ? pcmOf(new Uint8Array(await Bun.file(committed).arrayBuffer()))
+          : (({ rate, samples }) => ({ rate, samples: master(samples, rate) }))(pcmOf(await synthesize(spoken, voice, line.lang, hash)))
+        const samples = stretch(source.samples, source.rate, TEMPO)
+        await Bun.write(target, wavOf(samples, source.rate))
+        durationMs = Math.round((samples.length / source.rate) * 1000)
       }
     }
     totalMs += durationMs
@@ -543,6 +555,7 @@ const manifest = {
   version: 1,
   label: 'Scripted sample, synthetic voices',
   sampleRate: 24000,
+  tempo: TEMPO,
   voices: { farmer: VOICES.farmer.voice, buyer: VOICES.buyer.voice, ai: VOICES.ai },
   farmer: { name: 'Basavaraj', language: 'kn-IN', languages: ['Kannada', 'English'] },
   buyer: { name: 'Mondal Traders', language: 'bn-IN', languages: ['Bengali', 'Hindi'] },

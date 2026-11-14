@@ -10,8 +10,8 @@ type Side = 'left' | 'right' | 'below' | 'above'
 
 /** Where each pin's label sits, so the labels near one town do not collide. */
 const LABEL_SIDES: Record<string, { farmer: Side; buyer: Side; transporter: Side; storage: Side; weighbridge: Side }> = {
-  'onion-gadag-kolkata': { farmer: 'left', buyer: 'right', transporter: 'right', storage: 'below', weighbridge: 'left' },
-  'tomato-nashik-chennai': { farmer: 'left', buyer: 'right', transporter: 'right', storage: 'below', weighbridge: 'left' },
+  'onion-gadag-kolkata': { farmer: 'left', buyer: 'right', transporter: 'right', storage: 'below', weighbridge: 'below' },
+  'tomato-nashik-chennai': { farmer: 'above', buyer: 'right', transporter: 'left', storage: 'left', weighbridge: 'left' },
 }
 
 const LABEL = 'fill-ink font-semibold text-[21px] md:text-[13px] [paint-order:stroke] [stroke:var(--page)] [stroke-width:4px] [stroke-linejoin:round]'
@@ -90,11 +90,11 @@ export default function DealMap({ scenario, at, theme }: { scenario: Scenario; a
   const paying = progressOf(scenario, at, 'payment')
   const coin = paying > 0 ? quadPoint(buyer, callControl, farm, paying) : null
   const whisper = whisperOn(scenario, at)
-  const farmerLabelPoint = quadPoint(farm, callControl, buyer, 0.2)
-  const buyerLabelPoint = quadPoint(farm, callControl, buyer, 0.8)
+  const farmerLabelPoint = quadPoint(farm, callControl, buyer, 0.3)
+  const buyerLabelPoint = quadPoint(farm, callControl, buyer, 0.7)
 
   return (
-    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} role="img" aria-labelledby="deal-map-title deal-map-desc" className="mx-auto block h-auto max-h-[78vh] w-full">
+    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} role="img" aria-labelledby="deal-map-title deal-map-desc" className="mx-auto block h-auto max-h-[62vh] w-full lg:max-h-[calc(100dvh-20rem)]">
       <title id="deal-map-title">Simplified map of India with the simulated deal</title>
       <desc id="deal-map-desc">{`${scenario.summary} Call thread, truck route and pins are drawn on a simplified outline, not to scale.`}</desc>
       <defs>
@@ -120,7 +120,7 @@ export default function DealMap({ scenario, at, theme }: { scenario: Scenario; a
       )}
 
       {/* The call thread, one colour per language, changing colour at G-One. */}
-      <g opacity={locked ? 0.35 : 1} className="transition-opacity duration-700">
+      <g opacity={locked ? 0.5 : 1} className="transition-opacity duration-700">
         {farmerDrawn > 0 && (
           <path d={quadPath(farmerHalf)} fill="none" stroke={farmerColour} strokeWidth={5} strokeLinecap="round" pathLength={1} strokeDasharray="1 1" strokeDashoffset={1 - farmerDrawn} className="transition-[stroke] duration-700" />
         )}
@@ -162,7 +162,7 @@ export default function DealMap({ scenario, at, theme }: { scenario: Scenario; a
           <circle cx={farm.x} cy={farm.y} r={38} fill="url(#whisper-glow)" />
           <circle cx={farm.x} cy={farm.y} r={24} fill="none" stroke="var(--whisper-edge)" strokeWidth={2} strokeDasharray="4 4" />
           <circle cx={farm.x} cy={farm.y} r={24} fill="none" stroke="var(--whisper-edge)" strokeWidth={2} className="motion-safe:animate-beat [transform-box:fill-box] [transform-origin:center] motion-reduce:hidden" />
-          <Label at={{ x: farm.x, y: farm.y + 18 }} side="below" text="private to the farmer" colour="var(--whisper)" />
+          <Label at={{ x: farm.x, y: farm.y + 28 }} side="below" text="private to the farmer" colour="var(--whisper)" />
         </g>
       )}
 

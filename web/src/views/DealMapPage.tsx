@@ -83,11 +83,34 @@ function DealFacts({ scenario, at }: { scenario: Scenario; at: Position }) {
   )
 }
 
-const SPEEDS: { value: `${Speed}`; label: string }[] = [
-  { value: '1', label: '1x' },
-  { value: '2', label: '2x' },
-  { value: '4', label: '4x' },
-]
+const SPEEDS: readonly Speed[] = [1, 2, 4]
+
+function Controls({ player }: { player: ReturnType<typeof useDealPlayer> }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {player.playing ? (
+        <button type="button" className="btn-primary btn-sm" onClick={player.pause}><PauseIcon /> Pause</button>
+      ) : (
+        <button type="button" className="btn-primary btn-sm" onClick={player.play}><PlayIcon /> {player.ended ? 'Play again' : 'Play'}</button>
+      )}
+      <button type="button" className="btn-quiet btn-sm" onClick={player.step} disabled={player.ended}><SkipIcon /> Step</button>
+      <button type="button" className="btn-quiet btn-sm" onClick={player.restart}><RestartIcon /> Restart</button>
+      <div role="group" aria-label="Speed" className="ml-auto flex gap-0.5 rounded-lg bg-sunk p-0.5">
+        {SPEEDS.map((speed) => (
+          <button
+            key={speed}
+            type="button"
+            aria-pressed={player.speed === speed}
+            onClick={() => player.setSpeed(speed)}
+            className={`min-h-8 cursor-pointer rounded-md px-2.5 text-sm font-semibold transition-colors ${player.speed === speed ? 'bg-surface text-ink shadow-card' : 'text-muted hover:text-ink'}`}
+          >
+            {speed}x
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function Player({ scenario }: { scenario: Scenario }) {
   const reduced = useReducedMotion()
@@ -99,22 +122,13 @@ function Player({ scenario }: { scenario: Scenario }) {
   const current = scenario.steps[Math.min(at.index, scenario.steps.length - 1)]
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start">
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] lg:items-start">
       <div className="space-y-4">
-        <div className="card flex flex-wrap items-center gap-2 p-3">
-          {player.playing ? (
-            <button type="button" className="btn-primary" onClick={player.pause}><PauseIcon /> Pause</button>
-          ) : (
-            <button type="button" className="btn-primary" onClick={player.play}><PlayIcon /> {player.ended ? 'Play again' : 'Play'}</button>
-          )}
-          <button type="button" className="btn-quiet" onClick={player.step} disabled={player.ended}><SkipIcon /> Step</button>
-          <button type="button" className="btn-quiet" onClick={player.restart}><RestartIcon /> Restart</button>
-          <div className="ml-auto w-44">
-            <Segmented label="Speed" value={`${player.speed}` as `${Speed}`} options={SPEEDS} onChange={(v) => player.setSpeed(Number(v) as Speed)} />
+        <div className="card overflow-hidden p-3 sm:p-4">
+          <Controls player={player} />
+          <div className="mt-2">
+            <DealMap scenario={scenario} at={at} theme={theme} />
           </div>
-        </div>
-        <div className="card overflow-hidden p-3 sm:p-5">
-          <DealMap scenario={scenario} at={at} theme={theme} />
           <div className="mt-3 border-t border-line pt-3">
             <Legend scenario={scenario} />
             <p className="mt-2 text-xs text-faint">Simplified outline of India drawn for this prototype, not to scale. Town positions are approximate.</p>
@@ -140,22 +154,21 @@ export default function DealMapPage() {
   const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id)
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]
   return (
-    <div className="mx-auto max-w-[1440px] space-y-5 px-4 py-6 sm:px-6 md:py-8 lg:px-8">
-      <header className="space-y-2">
-        <p className="kicker">Prototype</p>
-        <h1 className="text-headline font-bold">Deal map</h1>
-        <p className="max-w-3xl text-muted">One deal from the first ring to payment on delivery: the call through G-One, the agreed terms, the truck and the hand-off at the mandi.</p>
-      </header>
-      <p role="note" className="flex items-start gap-2 rounded-xl border border-whisper-edge bg-warn-soft px-4 py-3 font-semibold text-warn">
-        <AlertIcon className="mt-0.5" />
-        <span>{SIMULATED_BANNER}</span>
-      </p>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="w-full sm:w-auto sm:min-w-[30rem]">
+    <div className="mx-auto max-w-[1440px] space-y-3 px-4 py-4 sm:px-6 md:py-5 lg:px-8">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <p className="kicker text-xs">Prototype</p>
+          <h1 className="text-3xl font-bold md:text-4xl">Deal map</h1>
+          <p className="max-w-2xl text-muted">One simulated deal, from the first ring to payment on delivery. {scenario.summary}</p>
+        </div>
+        <div className="w-full text-sm md:w-auto md:min-w-[28rem]">
           <Segmented label="Scenario" value={scenario.id} options={SCENARIOS.map((s) => ({ value: s.id, label: s.label }))} onChange={setScenarioId} />
         </div>
-        <p className="text-sm text-muted">{scenario.summary}</p>
-      </div>
+      </header>
+      <p role="note" className="flex items-start gap-2 rounded-xl border border-whisper-edge bg-warn-soft px-3 py-2 text-sm font-semibold text-warn">
+        <AlertIcon className="mt-0.5 shrink-0" />
+        <span>{SIMULATED_BANNER}</span>
+      </p>
       <Player key={scenario.id} scenario={scenario} />
     </div>
   )

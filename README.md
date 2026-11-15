@@ -1,3 +1,5 @@
+<p align="center"><b>📄 One-pager (PDF):</b> <a href="https://drive.google.com/file/d/1KSldr5w3kdeDQoOESzxSF_vwQtJW9lMN/view?usp=sharing">open on Google Drive</a></p>
+
 <div align="center">
 
 <img src="docs/assets/banner.svg" alt="G-One: the voice in the middle, on the farmer's side" width="100%">

@@ -20,7 +20,7 @@
 
 <h3>A farmer shouldn't need an app, English, or a middleman who works for the other side.</h3>
 
-<sub>Built by a team of two for the <b>Gnani.ai Great Indian AI Internship Challenge</b> · <a href="docs/G-One-Pitch.pdf">Pitch (PDF)</a> · <a href="#-how-it-works">How it works</a> · <a href="#-architecture">Architecture</a> · <a href="#-where-gnani-sits">Gnani usage</a> · <a href="#-team">Team</a></sub>
+<sub>Built by a team of two for the <b>Gnani.ai Great Indian AI Internship Challenge</b> · <a href="docs/G-One-Pitch.pdf">Pitch (PDF)</a> · <a href="#-how-it-works">How it works</a> · <a href="#-architecture">Architecture</a> · <a href="#-where-gnani-sits">Gnani usage</a> · <a href="#-how-it-was-built-two-repositories-one-project">History</a> · <a href="#-team">Team</a></sub>
 
 </div>
 
@@ -564,14 +564,24 @@ docs/adr/          architecture decisions with reasons
 
 <br>
 
+## 📜 How it was built: two repositories, one project
+
+G-One was built in two phases. The first repository holds the foundation and its full history; this repository
+continues from it.
+
+| Phase | Where | What was built |
+|---|---|---|
+| **1 · Foundation**<br><sub>7–9 Nov 2026</sub> | [**G_One-AI**](https://github.com/Nishannt-X/G_One-AI) | Research and decisions: [Twilio call topology](https://github.com/Nishannt-X/G_One-AI/issues/4), [the Gnani speech contract for 8 kHz audio](https://github.com/Nishannt-X/G_One-AI/issues/5), [telephony alternatives](https://github.com/Nishannt-X/G_One-AI/issues/34), [call flow](https://github.com/Nishannt-X/G_One-AI/issues/8), [farmer memory](https://github.com/Nishannt-X/G_One-AI/issues/9). Then the core, through 17 merged PRs: [contracts and fakes](https://github.com/Nishannt-X/G_One-AI/pull/38), [call pipeline with barge-in](https://github.com/Nishannt-X/G_One-AI/pull/43), [Gnani speech adapters and turn detection](https://github.com/Nishannt-X/G_One-AI/pull/50), [agent brain with mandi and weather tools](https://github.com/Nishannt-X/G_One-AI/pull/45), [farmer memory](https://github.com/Nishannt-X/G_One-AI/pull/44) [wired into the call](https://github.com/Nishannt-X/G_One-AI/pull/52), [buyer directory and connect tools](https://github.com/Nishannt-X/G_One-AI/pull/54), [mediation with translation and farmer-only whispers](https://github.com/Nishannt-X/G_One-AI/pull/55), [console v1](https://github.com/Nishannt-X/G_One-AI/pull/46) and [v2](https://github.com/Nishannt-X/G_One-AI/pull/48), [browser call simulator](https://github.com/Nishannt-X/G_One-AI/pull/47), [CI](https://github.com/Nishannt-X/G_One-AI/pull/37) and [scam cautions](https://github.com/Nishannt-X/G_One-AI/pull/2). |
+| **2 · Product**<br><sub>9–15 Nov 2026</sub> | **G_One** (this repo) | Started from G_One-AI's code in one initial commit, so the per-person history of phase 1 lives there. Added: a phone joining as the buyer by QR code, consent at the end of every call, memory recall and "welcome back", yes/no reading across six languages, private questions to G-One, the voiced sample call, Analytics, the Farmers tab, the deal map, the homepage and this pitch. |
+
+<br>
+
 ## 👥 Team
 
-| | Member | Lane | Contributions |
-|---|---|---|---|
-| 🧠 | **Nikhil Sah** · [@Sah-Nikhil](https://github.com/Sah-Nikhil) | Brain and memory | Core contracts, agent brain and tools, farmer memory (profile, call gists, HMAC caller key, forget me, seeding), memory demo, product decisions (ADR 0002). |
-| 🖥️ | **Nishant** · [@Nishannt-X](https://github.com/Nishannt-X) | Console, speech and launch | Repository owner. Call pipeline and Gnani speech integration, mediation, the web console (call stage, farmers, analytics, deal map), browser call simulator, demo and launch. |
-
-<sub>G-One started from our earlier project, <a href="https://github.com/Nishannt-X/G_One-AI">G_One-AI</a>, and reuses its verified Gnani integration.</sub>
+| | Member | Contributions (both repositories) |
+|---|---|---|
+| 🧠 | **Nikhil Sah**<br>[@Sah-Nikhil](https://github.com/Sah-Nikhil)<br><sub>Brain, memory and mediation</sub> | Project setup, docs and the agent workflow; the research and decisions on call topology, the Gnani speech contract, call flow and memory. Core contracts and fakes, the call pipeline (greeting, turns, barge-in), the agent brain and its tools, farmer memory (SQLite store, call gists, HMAC caller key) and its wiring into the call, the buyer directory, and mediation with translation and farmer-only whispers. Later: memory recall quality, the guard that keeps model reasoning out of speech, mediation playback fixes, the homepage story, the brand mark, this README and the pitch. |
+| 🖥️ | **Nishant**<br>[@Nishannt-X](https://github.com/Nishannt-X)<br><sub>Speech, console and product</sub> | Repository owner. The first G-One demo site and two-way scam cautions, CI, the runtime runbook, the Gnani telephony speech adapters with turn detection and a live probe, console v1 and v2, and the browser call simulator. Later: a phone joining as the buyer over the local network, the consent-gated end of call and Analytics, yes/no reading in six languages, private questions to G-One, the voiced sample call, the Farmers tab, the calls list and the deal map. |
 
 <br>
 

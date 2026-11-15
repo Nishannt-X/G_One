@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '../lib/i18n'
 import { MAIN_NAV, TRANSLATED_VIEWS, type Route } from '../lib/route'
 import { useTheme } from '../lib/theme'
-import { CrossIcon, Logo, MenuIcon, MoonIcon, PhoneIcon, SunIcon } from './icons'
+import { CrossIcon, Logo, MenuIcon, MoonIcon, PlayIcon, SunIcon } from './icons'
 
 /** The full-width call pages, which already link to each other. */
 const STAGE_VIEWS: readonly Route['view'][] = ['demo', 'call']
@@ -41,9 +41,9 @@ export function MobileMenu({ route, onClose }: { route: Route; onClose: () => vo
     <nav id="mobile-menu" aria-label="Mobile" className="animate-rise border-t border-line bg-page xl:hidden">
       <div className="shell space-y-1 py-3">
         {MAIN_NAV.map((item) => (
-          <a key={item.href} onClick={onClose} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
+          <a key={item.href} onClick={onClose} className="block rounded-xl px-3 py-2.5 text-lg font-semibold hover:bg-sunk" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.view === 'demo' ? 'Conversation' : item.label}</a>
         ))}
-        <a onClick={onClose} href="#/demo" className="btn-accent mt-3 flex w-full"><PhoneIcon /> Try the demo</a>
+        <a onClick={onClose} href="#/demo" className="btn-accent mt-3 flex w-full"><PlayIcon /> Watch a call</a>
       </div>
     </nav>
   )
@@ -60,7 +60,7 @@ function TopNav({ route }: { route: Route }) {
           {/* All six pages plus the buttons wrap below about 1100 px, so the bar shows them from xl and the menu covers narrower screens. */}
           <nav aria-label="Main" className="hidden items-center gap-1 xl:flex">
             {MAIN_NAV.map((item) => (
-              <a key={item.href} className="nav-link" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.label}</a>
+              <a key={item.href} className="nav-link" href={item.href} aria-current={route.view === item.view ? 'page' : undefined}>{item.view === 'demo' ? 'Conversation' : item.label}</a>
             ))}
           </nav>
         </div>
@@ -69,7 +69,7 @@ function TopNav({ route }: { route: Route }) {
           <ThemeButton />
           {!STAGE_VIEWS.includes(route.view) && (
             <a href="#/demo" className="btn-accent ml-1 hidden sm:inline-flex">
-              <PhoneIcon /> Try the demo
+              <PlayIcon /> Watch a call
             </a>
           )}
           <button type="button" className="btn-ghost w-11 px-0 xl:hidden" aria-expanded={menu} aria-controls="mobile-menu" aria-label={menu ? 'Close menu' : 'Open menu'} onClick={() => setMenu((m) => !m)}>
@@ -95,9 +95,10 @@ function Footer() {
           <p>Speech: Gnani Prisma (speech to text) and Gnani Timbre (voice).</p>
           <p>Translation: Sarvam.</p>
         </div>
-        <div className="space-y-2 text-sm text-muted">
-          <h2 className="text-sm font-bold tracking-wide text-ink">About this demo</h2>
-          <p>Synthetic data only. Every name, number and price is made up, and nothing is sent.</p>
+        <div className="space-y-2 text-xs text-muted">
+          <h2 className="text-xs font-bold tracking-wide text-ink">About this demo</h2>
+          <p>This site is a demo that runs in the browser. No phone number is dialled, and the sample call uses synthetic voices.</p>
+          <p>Example names, numbers and prices are made up. Browser calls may send audio and text to the speech and translation services listed in Credits.</p>
           <p>A deal here is a record of what was said on a call, not a contract.</p>
         </div>
       </div>

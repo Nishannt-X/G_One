@@ -1,42 +1,135 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { CheckIcon, LockIcon, Logo, PauseIcon, PlayIcon, StoreIcon, WheatIcon } from '../ui/icons'
+import type { ReactNode } from 'react'
+import { CheckIcon, LockIcon, Logo, StoreIcon, WheatIcon } from '../ui/icons'
 
-type Who = 'farmer' | 'buyer' | 'whisper' | 'deal'
+type Wire = 'right' | 'left' | 'idle' | 'cut'
 
+/** One pane of the illustrative call. Pane `i` illustrates point `i` of "One call. Five things happen." beside it. */
 interface Beat {
-  who: Who
   title: string
-  original?: { lang: string; text: string }
-  translated?: { lang: string; text: string }
+  /** Who is speaking or being spoken to, which lights their ring. */
+  lit: { farmer?: boolean; gone?: boolean; buyer?: boolean }
+  /** The buyer is not on the line (yet), or cannot hear this. */
+  buyerAway?: boolean
+  wires: [Wire, Wire]
+  body: (sz: Sized) => ReactNode
+  /**
+   * The mini scene's pane: the label and the main line of the full pane, word for word. A main line in Kannada or
+   * Bengali also carries `gloss`, the full pane's English line under it, so a visitor can follow it and sees the
+   * translation happen.
+   */
+  brief: { label: string; text: string; lang: string; gloss?: string }
 }
+
+/**
+ * Builds a class list from the phone-size classes plus the larger `sm:` ones. A compact scene (a short window) keeps the
+ * phone sizes at every width, so the whole stage still fits in view beside its point.
+ */
+type Sized = (base: string, wide: string) => string
+
+const type = (sz: Sized) => ({
+  label: sz('flex items-center gap-1.5 text-xs font-bold tracking-wide text-accent', 'sm:text-sm'),
+  big: sz('mt-1 text-lg leading-snug font-semibold text-on-night', 'sm:mt-1.5 sm:text-[1.75rem]'),
+  sub: sz('mt-1 text-sm text-on-night-muted', 'sm:text-lg'),
+  gap: sz('mt-2', 'sm:mt-3'),
+  small: sz('mt-1.5 text-xs text-on-night-muted', 'sm:mt-2 sm:text-sm'),
+})
 
 const BEATS: Beat[] = [
   {
-    who: 'farmer',
-    title: 'Farmer speaks Kannada',
-    original: { lang: 'kn', text: 'ನಲವತ್ತು ಕ್ವಿಂಟಾಲ್ ಈರುಳ್ಳಿ ಇದೆ, ಮಾರಬೇಕು.' },
-    translated: { lang: 'en', text: 'I have forty quintals of onion to sell.' },
+    title: 'The farmer calls',
+    lit: { farmer: true, gone: true },
+    buyerAway: true,
+    wires: ['right', 'cut'],
+    brief: { label: 'The farmer calls G-One', text: 'Ringing…', lang: 'en' },
+    body: (sz) => {
+      const { label, big, sub } = type(sz)
+      return (
+        <>
+          <p className={label}>The farmer calls G-One</p>
+          <p className={big}>Ringing…</p>
+          <p className={sub}>No app and no sign-up. The buyer is not on the line yet.</p>
+        </>
+      )
+    },
   },
   {
-    who: 'buyer',
-    title: 'Buyer answers in Bengali',
-    original: { lang: 'bn', text: 'কুইন্টাল প্রতি উনিশশো টাকা দেব।' },
-    translated: { lang: 'en', text: 'I will give ₹1,900 a quintal.' },
+    title: 'G-One knows them',
+    lit: { farmer: true, gone: true },
+    buyerAway: true,
+    wires: ['left', 'cut'],
+    brief: { label: 'G-One remembers the last call', text: 'ನಮಸ್ಕಾರ ಬಸವರಾಜ್ ಅವರೇ! ಹೋದ ಸಲ ಈರುಳ್ಳಿ rate ಕೇಳಿದ್ರಿ, ನೆನಪಿದೆ.', lang: 'kn', gloss: 'Namaskara, Basavaraj! Last time you asked about the onion rate, I remember.' },
+    body: (sz) => {
+      const { label, big, sub } = type(sz)
+      return (
+        <>
+          <p className={label}>G-One remembers the last call</p>
+          <p lang="kn" className={big}>ನಮಸ್ಕಾರ ಬಸವರಾಜ್ ಅವರೇ! ಹೋದ ಸಲ ಈರುಳ್ಳಿ rate ಕೇಳಿದ್ರಿ, ನೆನಪಿದೆ.</p>
+          <p lang="en" className={sub}>Namaskara, Basavaraj! Last time you asked about the onion rate, I remember.</p>
+        </>
+      )
+    },
   },
   {
-    who: 'whisper',
-    title: 'Only the farmer hears this',
-    original: { lang: 'kn', text: 'ಸ್ಯಾಂಪಲ್ ರೆಫರೆನ್ಸ್ ಪ್ರಕಾರ ಒಂದು ಸಾವಿರದ ಎಂಟು ನೂರು ರೂಪಾಯಿ ಇತ್ತು.' },
-    translated: { lang: 'en', text: 'The dated sample reference was about ₹1,800 a quintal.' },
+    title: 'It asks before it connects',
+    lit: { gone: true, buyer: true },
+    wires: ['idle', 'right'],
+    brief: { label: 'G-One asks the buyer first, on a second line', text: '“Is now a good time? Please say yes or no.”', lang: 'en' },
+    body: (sz) => {
+      const { label, big, gap, small } = type(sz)
+      return (
+        <>
+          <p className={label}>G-One asks the buyer first, on a second line</p>
+          <p className={big}>“Is now a good time? Please say yes or no.”</p>
+          <div className={`${gap} flex flex-wrap gap-2`}>
+            <span className="chip bg-farmer-soft text-farmer"><CheckIcon /> Farmer: yes, connect</span>
+            <span className="chip bg-buyer-soft text-buyer"><CheckIcon /> Buyer: yes, I'll talk</span>
+          </div>
+          <p className={small}>A yes to joining the call, not to any price.</p>
+        </>
+      )
+    },
   },
-  { who: 'deal', title: 'Read back, then two yeses' },
+  {
+    title: 'It translates and advises',
+    lit: { farmer: true, gone: true, buyer: true },
+    wires: ['left', 'left'],
+    brief: { label: 'The buyer speaks Bengali, the farmer hears Kannada', text: 'কুইন্টাল প্রতি উনিশশো টাকা দেব।', lang: 'bn', gloss: 'I will give ₹1,900 a quintal.' },
+    body: (sz) => {
+      const { label, gap } = type(sz)
+      return (
+        <>
+          <p className={label}>The buyer speaks Bengali, the farmer hears Kannada</p>
+          <p lang="bn" className={sz('mt-1 text-lg leading-snug font-semibold text-on-night', 'sm:text-2xl')}>কুইন্টাল প্রতি উনিশশো টাকা দেব।</p>
+          <p lang="en" className={sz('text-sm text-on-night-muted', 'sm:text-base')}>I will give ₹1,900 a quintal.</p>
+          <div className={`${gap} rounded-xl border border-dashed border-accent/70 bg-accent/10 px-3 py-2`}>
+            <p className={sz('flex items-center gap-1.5 text-xs font-bold text-accent', 'sm:text-sm')}><LockIcon /> Only the farmer hears this</p>
+            <p lang="en" className={sz('mt-0.5 text-sm text-on-night', 'sm:text-base')}>The dated sample reference was about ₹1,800 a quintal.</p>
+          </div>
+        </>
+      )
+    },
+  },
+  {
+    title: 'Both agree to the terms',
+    lit: { farmer: true, gone: true, buyer: true },
+    wires: ['idle', 'idle'],
+    brief: { label: 'Read back to both, then a yes from each', text: '40 quintal onion at ₹1,900 a quintal, pay on delivery.', lang: 'en' },
+    body: (sz) => {
+      const { label, gap, small } = type(sz)
+      return (
+        <>
+          <p className={label}>Read back to both, then a yes from each</p>
+          <p className={sz('mt-1.5 text-xl leading-tight font-semibold text-on-night', 'sm:mt-2 sm:text-[1.75rem]')}>40 quintal onion at ₹1,900 a quintal, pay on delivery.</p>
+          <div className={`${gap} flex flex-wrap gap-2`}>
+            <span className="chip bg-farmer-soft text-farmer"><CheckIcon /> Farmer said yes</span>
+            <span className="chip bg-buyer-soft text-buyer"><CheckIcon /> Buyer said yes</span>
+          </div>
+          <p className={small}>A record of the call, not a contract.</p>
+        </>
+      )
+    },
+  },
 ]
-
-const BEAT_MS = 4200
-
-function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
 
 function Bars({ active, tone }: { active: boolean; tone: string }) {
   return (
@@ -48,105 +141,129 @@ function Bars({ active, tone }: { active: boolean; tone: string }) {
   )
 }
 
-function Party({ icon, name, lang, active, muted, tone }: { icon: ReactNode; name: string; lang: string; active: boolean; muted?: boolean; tone: string }) {
+/**
+ * How big the scene is drawn. `roomy` is the full design. `compact` (short windows) keeps phone-size type and spacing at
+ * every width, with no language lines and no sound bars, so the scene fits in view beside its point; the words in each
+ * pane stay the same. `mini` (very short windows) is a short card that can stay docked under the points: small parties
+ * and, in each pane, only its label and main line, plus the English line under a Kannada or Bengali one. It lays itself
+ * out side by side once the card is wide enough.
+ */
+export type SceneSize = 'roomy' | 'compact' | 'mini'
+
+function Party({ icon, name, lang, active, muted, tone, size }: { icon: ReactNode; name: string; lang: string; active: boolean; muted?: boolean; tone: string; size: SceneSize }) {
+  const ring = size === 'mini' ? 'h-8 w-8 text-base' : size === 'compact' ? 'h-11 w-11 text-xl' : 'h-11 w-11 text-xl sm:h-16 sm:w-16 sm:text-3xl'
   return (
-    <div className={`flex flex-col items-center gap-1.5 transition-opacity duration-300 ${muted ? 'opacity-40' : ''}`}>
-      <span className={`relative grid h-13 w-13 place-items-center rounded-full bg-night-raised text-2xl sm:h-16 sm:w-16 sm:text-3xl ${tone}`}>
+    <div className={`flex flex-col items-center transition-opacity duration-300 ${size === 'mini' ? 'gap-1' : 'gap-1.5'} ${muted ? 'opacity-40' : ''}`}>
+      <span className={`relative grid place-items-center rounded-full bg-night-raised ${ring} ${tone}`}>
         {active && <span aria-hidden="true" className="animate-beat absolute inset-0 rounded-full border-2 border-current" />}
         {icon}
       </span>
-      <span className="text-sm leading-tight font-bold text-on-night">{name}</span>
-      <span className="text-xs leading-tight text-on-night-muted">{lang}</span>
+      <span className={`leading-tight font-bold text-on-night ${size === 'mini' ? 'text-xs' : 'text-sm'}`}>{name}</span>
+      {/* Smaller scenes drop the language line; the pane labels still name both languages. */}
+      {size === 'roomy' && <span className="text-xs leading-tight text-on-night-muted">{lang}</span>}
     </div>
   )
 }
 
-/** The dashed wire between two parties, flowing the way the words are going. */
-function Wire({ state }: { state: 'right' | 'left' | 'idle' | 'cut' }) {
+/** The dashed wire between two parties, flowing the way the words are going. It sits level with the middle of the rings. */
+function WireLine({ state, size }: { state: Wire; size: SceneSize }) {
   const flow = state === 'right' ? 'animate-flow' : state === 'left' ? 'animate-flow-back' : ''
+  const level = size === 'mini' ? 'mt-3' : size === 'compact' ? 'mt-5' : 'mt-5 sm:mt-8'
   return (
-    <svg aria-hidden="true" viewBox="0 0 100 8" preserveAspectRatio="none" className="mt-6 h-2 min-w-4 flex-1 sm:mt-8">
+    <svg aria-hidden="true" viewBox="0 0 100 8" preserveAspectRatio="none" className={`h-2 min-w-4 flex-1 ${level}`}>
       <line x1="0" y1="4" x2="100" y2="4" vectorEffect="non-scaling-stroke" strokeWidth="2" strokeLinecap="round" strokeDasharray={state === 'cut' ? '1 7' : '6 4'} className={`${flow} transition-[stroke] duration-300`} style={{ stroke: state === 'idle' || state === 'cut' ? 'var(--night-line)' : 'var(--accent)' }} />
     </svg>
   )
 }
 
-function Stage({ beat }: { beat: Beat }) {
-  if (beat.who === 'deal') {
-    return (
-      <div className="flex h-full flex-col justify-center">
-        <p className="text-sm font-bold tracking-wide text-accent">{beat.title}</p>
-        <p className="mt-2 text-2xl leading-tight font-semibold text-on-night sm:text-[1.75rem]">40 quintal onion at ₹1,900 a quintal, pay on delivery.</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="chip bg-farmer-soft text-farmer"><CheckIcon /> Farmer said yes</span>
-          <span className="chip bg-buyer-soft text-buyer"><CheckIcon /> Buyer said yes</span>
-        </div>
-      </div>
-    )
-  }
-  const whisper = beat.who === 'whisper'
+function Parties({ beat, size, className }: { beat: Beat; size: SceneSize; className: string }) {
   return (
-    <div className={`flex h-full flex-col justify-center ${whisper ? 'rounded-xl border border-dashed border-accent/70 bg-accent/10 px-4' : ''}`}>
-      <p className="flex items-center gap-1.5 text-sm font-bold tracking-wide text-accent">
-        {whisper && <LockIcon />} {beat.title}
-      </p>
-      <p lang={beat.original?.lang} className="mt-1.5 text-2xl leading-snug font-semibold text-on-night sm:text-[1.75rem]">{beat.original?.text}</p>
-      <p lang={beat.translated?.lang} className="mt-1 text-base text-on-night-muted sm:text-lg">{beat.translated?.text}</p>
+    <div className={`flex items-start ${className}`}>
+      <Party icon={<WheatIcon />} name="Farmer" lang="ಕನ್ನಡ" active={!!beat.lit.farmer} tone="text-on-night-farmer" size={size} />
+      <WireLine state={beat.wires[0]} size={size} />
+      <Party icon={<Logo className="text-[1.05em] text-on-night-muted" />} name="G-One" lang="in the middle" active={!!beat.lit.gone} tone="text-accent" size={size} />
+      <WireLine state={beat.wires[1]} size={size} />
+      <Party icon={<StoreIcon />} name="Buyer" lang="বাংলা" active={!!beat.lit.buyer} muted={beat.buyerAway} tone="text-on-night-buyer" size={size} />
     </div>
   )
 }
 
-/** An illustrative call on a loop. It always takes the same space, and a viewer can stop it or step through it. */
-export default function CallScene() {
-  const [step, setStep] = useState(0)
-  const [running, setRunning] = useState(() => !reducedMotion())
-
-  useEffect(() => {
-    if (!running) return
-    const timer = setInterval(() => setStep((s) => (s + 1) % BEATS.length), BEAT_MS)
-    return () => clearInterval(timer)
-  }, [running])
-
-  const beat = BEATS[step]
-  const leftWire = beat.who === 'farmer' ? 'right' : beat.who === 'buyer' || beat.who === 'whisper' ? 'left' : 'idle'
-  const rightWire = beat.who === 'buyer' ? 'left' : beat.who === 'farmer' ? 'right' : beat.who === 'whisper' ? 'cut' : 'idle'
-
+function Badge({ small = false }: { small?: boolean }) {
   return (
-    <figure className="on-night relative overflow-hidden rounded-3xl bg-night p-5 text-on-night shadow-lift sm:p-7" aria-label="Illustrative call between a farmer and a buyer with G-One in the middle">
-      <div className="flex items-center justify-between gap-3">
-        <span className="flex items-center gap-2 text-sm font-semibold text-on-night-muted">
-          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-accent" /> Illustrative call
-        </span>
-        <button type="button" className="btn-night btn-sm w-9 px-0" aria-label={running ? 'Pause the animation' : 'Play the animation'} onClick={() => setRunning((r) => !r)}>
-          {running ? <PauseIcon /> : <PlayIcon />}
-        </button>
-      </div>
+    <p className={`flex items-center gap-2 font-semibold text-on-night-muted ${small ? 'text-xs' : 'text-sm'}`}>
+      <span aria-hidden="true" className="h-2 w-2 rounded-full bg-accent" /> Illustrative call
+    </p>
+  )
+}
 
-      <div className="mt-4 flex items-start gap-2 sm:gap-3">
-        <Party icon={<WheatIcon />} name="Farmer" lang="ಕನ್ನಡ" active={beat.who === 'farmer' || beat.who === 'whisper'} tone="text-on-night-farmer" />
-        <Wire state={leftWire} />
-        <Party icon={<Logo className="text-[1.05em] text-on-night-muted" />} name="G-One" lang="in the middle" active={beat.who === 'whisper' || beat.who === 'deal'} tone="text-accent" />
-        <Wire state={rightWire} />
-        <Party icon={<StoreIcon />} name="Buyer" lang="বাংলা" active={beat.who === 'buyer'} muted={beat.who === 'whisper'} tone="text-on-night-buyer" />
-      </div>
-
-      <div className="mt-4 flex h-5 items-center justify-center gap-6">
-        <Bars active={beat.who !== 'deal'} tone="text-accent" />
-      </div>
-
-      <div className="relative mt-3 h-[12.5rem] sm:h-[11.5rem]" aria-live="off">
-        <div key={step} className="animate-rise h-full">
-          <Stage beat={beat} />
+/**
+ * Every pane shares one grid cell, so the card keeps the height of its tallest pane and never jumps. Panes other than
+ * the current one are hidden, which also removes them from the accessibility tree; the points beside the scene carry
+ * the same story as text. A pane before the current one is marked `is-before` and one after it `is-after`, so the
+ * change animates the way the visitor scrolled.
+ */
+function Panes({ current, className, pane }: { current: number; className: string; pane: (b: Beat) => ReactNode }) {
+  return (
+    <div className={`grid ${className}`}>
+      {BEATS.map((b, i) => (
+        <div key={b.title} data-pane={i} aria-hidden={i === current ? undefined : true} className={`call-pane col-start-1 row-start-1 flex flex-col justify-center ${i === current ? 'is-current' : i < current ? 'is-before' : 'is-after'}`}>
+          {pane(b)}
         </div>
-      </div>
+      ))}
+    </div>
+  )
+}
 
-      <div className="mt-3 flex items-center justify-center gap-1">
-        {BEATS.map((b, i) => (
-          <button key={b.who} type="button" aria-label={`Show step ${i + 1}: ${b.title}`} aria-current={i === step ? 'step' : undefined} className="grid h-6 w-8 cursor-pointer place-items-center rounded" onClick={() => { setRunning(false); setStep(i) }}>
-            <span className={`block h-1.5 rounded-full transition-all duration-300 ${i === step ? 'w-6 bg-accent' : 'w-2.5 bg-night-line'}`} />
-          </button>
-        ))}
-      </div>
+const LABEL = 'Illustrative call between a farmer and a buyer with G-One in the middle'
+
+/**
+ * An illustrative call, one pane per point beside it. It never plays by itself and has no controls of its own: the page
+ * drives `step` from the visitor's scrolling.
+ */
+export default function CallScene({ step, size = 'roomy' }: { step: number; size?: SceneSize }) {
+  const current = Math.min(Math.max(step, 0), BEATS.length - 1)
+  const beat = BEATS[current]
+
+  if (size === 'mini') {
+    // A container query, not a window one: the card is as wide as the column it is docked in.
+    return (
+      <figure data-size="mini" className="on-night @container relative overflow-hidden rounded-2xl bg-night p-2.5 text-on-night shadow-lift" aria-label={LABEL}>
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-2 @min-[26rem]:grid-cols-[11rem_minmax(0,1fr)] @min-[26rem]:items-center @min-[26rem]:gap-3">
+          <div>
+            <Badge small />
+            <Parties beat={beat} size={size} className="mt-1 gap-1.5" />
+          </div>
+          <Panes
+            current={current}
+            className=""
+            pane={(b) => (
+              <>
+                <p className="text-xs font-bold tracking-wide text-accent">{b.brief.label}</p>
+                <p lang={b.brief.lang} className="mt-0.5 text-sm leading-snug font-semibold text-on-night">{b.brief.text}</p>
+                {b.brief.gloss && <p lang="en" className="mt-0.5 text-xs leading-snug text-on-night-muted">{b.brief.gloss}</p>}
+              </>
+            )}
+          />
+        </div>
+      </figure>
+    )
+  }
+
+  const compact = size === 'compact'
+  const sz: Sized = (base, wide) => (compact ? base : `${base} ${wide}`)
+  return (
+    <figure data-size={size} className={`on-night relative overflow-hidden rounded-3xl bg-night text-on-night shadow-lift ${compact ? 'p-3' : 'p-4 sm:p-7'}`} aria-label={LABEL}>
+      <Badge />
+      <Parties beat={beat} size={size} className={compact ? 'mt-2 gap-2' : 'mt-3 gap-2 sm:mt-4 sm:gap-3'} />
+
+      {/* The sound bars are decoration; narrow screens and smaller scenes drop them so the whole stage fits the window. */}
+      {!compact && (
+        <div className="mt-4 hidden h-5 items-center justify-center sm:flex">
+          <Bars active={current !== BEATS.length - 1} tone="text-accent" />
+        </div>
+      )}
+
+      <Panes current={current} className={compact ? 'mt-2' : 'mt-3'} pane={(b) => b.body(sz)} />
     </figure>
   )
 }

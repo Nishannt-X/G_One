@@ -516,3 +516,243 @@
   .phone-banner { animation: none; display: none; }
   .phone-chat, .phone-bubble { animation-delay: 0ms !important; }
 }
+
+/*
+ * Homepage layout. The hero runs the full width of the window. The numbers and the closing call sit on inset "stage"
+ * panels with a margin from the window edge; the sections between them share the page colour and are separated by
+ * hairlines, not boxes.
+ */
+@layer components {
+  .home-stage {
+    @apply mx-2 rounded-[1.25rem] sm:mx-3 lg:mx-4 lg:rounded-3xl;
+  }
+  .home-hero {
+    @apply border-b border-line;
+    /* Only a hint of the accent, so the hero reads as the page colour warmed slightly, not as a yellow panel. */
+    background: color-mix(in srgb, var(--accent-soft) 14%, var(--surface));
+  }
+  .home-section {
+    @apply py-16 md:py-20;
+  }
+  /*
+   * The section straight after "One call. Five things happen." continues it, so it opens without a rule and with one
+   * modest gap after the last point (the call section has no bottom padding) instead of two full section paddings.
+   */
+  .home-section.home-after-call {
+    @apply pt-14 md:pt-20 lg:pt-24;
+  }
+  /* The point numbers a capability sits behind: small copies of the points' numbers, overlapping when there are several. */
+  .home-cap-steps {
+    @apply flex shrink-0;
+  }
+  .home-cap-steps > span {
+    @apply grid h-5 w-5 place-items-center rounded-full bg-brand-soft text-[0.6875rem] leading-none font-bold text-brand tabular-nums;
+    box-shadow: 0 0 0 2px var(--page);
+  }
+  .home-cap-steps > span + span {
+    margin-left: -0.25rem;
+  }
+
+  /*
+   * "One call. Five things happen." The points build up as the visitor scrolls: the first shows alone, then each new
+   * point rises into place below the ones before it, which stay. Every point keeps its place in the list whether it
+   * shows or not, so adding one never moves the others or the scene. Points not reached yet are transparent but stay in
+   * the accessibility tree, so a screen reader reads the whole list in order.
+   *
+   * The newest point carries a ringed number; earlier ones keep a quiet filled number and slightly softer body text. A
+   * rail runs from each number down to the next and draws itself from --home-progress, which the script sets from the
+   * scroll position, so it moves with the scroll rather than on a timer.
+   */
+  .home-points {
+    --home-num: 2rem;
+    --home-point-gap: 1.25rem;
+    @apply relative flex flex-col sm:[--home-point-gap:1.5rem];
+    gap: var(--home-point-gap);
+  }
+  .home-track:not([data-fit='roomy']) .home-points {
+    --home-point-gap: 1rem;
+  }
+  .home-point {
+    @apply relative grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3.5;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate3d(0, 1.5rem, 0);
+    filter: blur(6px);
+    transition:
+      opacity 420ms ease-out,
+      transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 420ms ease-out;
+  }
+  .home-point[data-state='shown'],
+  .home-point[data-state='current'] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+    filter: none;
+    transition:
+      opacity 640ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 900ms cubic-bezier(0.16, 1, 0.3, 1),
+      filter 640ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .home-point-num {
+    @apply relative z-10 grid shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-on-brand;
+    width: var(--home-num);
+    height: var(--home-num);
+    transform: scale(0.6);
+    transition:
+      transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      background-color 400ms ease-out,
+      color 400ms ease-out,
+      box-shadow 400ms ease-out;
+  }
+  .home-point[data-state='current'] .home-point-num {
+    transform: none;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand) 18%, transparent), var(--shadow-brand);
+  }
+  .home-point[data-state='shown'] .home-point-num {
+    transform: none;
+    background: var(--brand-soft);
+    color: var(--brand);
+  }
+  .home-point-body {
+    transition: opacity 400ms ease-out;
+  }
+  .home-point[data-state='shown'] .home-point-body {
+    opacity: 0.8;
+  }
+  /* The rail from this point's number down to the next one's: a faint track, and the fill that follows the scroll. */
+  .home-point:not(:last-child)::before,
+  .home-point:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: calc(var(--home-num) / 2 - 1px);
+    top: calc(var(--home-num) + 0.375rem);
+    bottom: calc(0.375rem - var(--home-point-gap));
+    width: 2px;
+    border-radius: 2px;
+  }
+  .home-point:not(:last-child)::before {
+    background: var(--line);
+  }
+  .home-point:not(:last-child)::after {
+    background: var(--brand);
+    transform-origin: top;
+    transform: scaleY(clamp(0, calc(var(--home-progress, 0) - var(--i, 0)), 1));
+  }
+
+  /*
+   * Pinned, the stage stays in view (the script sets --home-pin-top so it sits under the header) while the spacer after
+   * it scrolls past. The page is never scrolled for the visitor, so the browser's own scrolling, keys, touch and scroll
+   * bar all work, and the page carries on normally after the last point.
+   */
+  .home-track[data-mode='pinned'] > .home-track-stage {
+    position: sticky;
+    top: var(--home-pin-top);
+  }
+}
+
+/*
+ * The list, for windows too short to pin the whole stage: the points sit in the page and each appears as it scrolls
+ * past a reading line. Beside the points the scene stays in view at the top; on one column it docks to the bottom of
+ * the window under the points and settles into place after the last one. Docking needs the stage to be a flex column,
+ * because a sticky grid item cannot leave its own grid row. Unlayered, so it wins over the stage's grid utilities.
+ */
+.home-track[data-dock='side'] [data-scene] {
+  position: sticky;
+  top: var(--home-pin-top);
+  align-self: start;
+}
+.home-track[data-dock='bottom'] > .home-track-stage {
+  display: flex;
+  flex-direction: column;
+  /* The stage's grid centres its items; as a flex column that would size the scene to its content, not the column. */
+  align-items: stretch;
+  /* Once the scene settles after the last point, the point's 1.5rem rise still starts clear of it. */
+  row-gap: 1.75rem;
+}
+.home-track[data-dock='bottom'] [data-scene] {
+  position: sticky;
+  bottom: 0.75rem;
+  z-index: 10;
+  /*
+   * The first point shows from the start, so the scene must never sit over it. A sticky box keeps its margin box inside
+   * its container, so this margin holds the scene below the first point (its height, from the script, plus a gap) while
+   * the stage scrolls in. The list's matching negative margin keeps the scene's place after the last point unchanged.
+   */
+  margin-top: calc(var(--home-first-point, 0px) + 0.75rem);
+}
+.home-track[data-dock='bottom'] .home-points {
+  margin-bottom: calc(-1 * (var(--home-first-point, 0px) + 0.75rem));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Points still appear and leave with the scroll, by fading only: no slide, blur or springing number. */
+  .home-point,
+  .home-point[data-state='shown'],
+  .home-point[data-state='current'],
+  .home-point-num {
+    transform: none;
+    filter: none;
+  }
+}
+
+@media print {
+  .home-track [data-spacer] {
+    display: none;
+  }
+  .home-track-stage,
+  .home-track [data-scene] {
+    position: static !important;
+  }
+  .home-point {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+  .home-point-num {
+    transform: none !important;
+  }
+  .home-point::before,
+  .home-point::after {
+    display: none;
+  }
+}
+
+/*
+ * The call scene's panes share one grid cell; only the current one is visible (and in the accessibility tree). Moving
+ * forward, the old pane lifts away and the new one rises from below; moving back, the reverse, because a pane before
+ * the current one rests above its place and a pane after it rests below.
+ */
+.call-pane {
+  visibility: hidden;
+  opacity: 0;
+  transform: translate3d(0, 0.875rem, 0);
+  filter: blur(4px);
+  transition:
+    opacity 260ms ease-out,
+    transform 360ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 260ms ease-out,
+    visibility 0s linear 360ms;
+}
+.call-pane.is-before {
+  transform: translate3d(0, -0.875rem, 0);
+}
+.call-pane.is-current {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition:
+    opacity 520ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
+    transform 720ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
+    filter 520ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
+    visibility 0s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .call-pane,
+  .call-pane.is-before,
+  .call-pane.is-current {
+    transform: none;
+    filter: none;
+  }
+}

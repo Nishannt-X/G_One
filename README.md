@@ -4,6 +4,7 @@
 
 <br>
 
+<a href="docs/Project_Doc.pdf"><img alt="Project Doc (PDF)" src="https://img.shields.io/badge/📘_Project_Doc-PDF-e8452c?style=for-the-badge&labelColor=0b2b1f"></a>
 <a href="PITCH.md"><img alt="One-page pitch" src="https://img.shields.io/badge/📄_One--page_pitch-read_first-f6a823?style=for-the-badge&labelColor=0b2b1f"></a>
 <a href="#-a-call-minute-by-minute"><img alt="See a call" src="https://img.shields.io/badge/▶_See_a_call-3_min_story-4fd18b?style=for-the-badge&labelColor=0b2b1f"></a>
 <a href="#-run-it-in-two-minutes"><img alt="Run it" src="https://img.shields.io/badge/⚡_Run_it-no_keys_needed-8fa9ff?style=for-the-badge&labelColor=0b2b1f"></a>

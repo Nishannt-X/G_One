@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" role="img" aria-label="G-One: the voice in the middle, on the farmer's side">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07211a"/>
+      <stop offset="0.55" stop-color="#0b2b1f"/>
+      <stop offset="1" stop-color="#123a2a"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f6a823" stop-opacity="0.55"/>
+      <stop offset="0.45" stop-color="#f6a823" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#f6a823" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c5a3c"/>
+      <stop offset="1" stop-color="#0e3423"/>
+    </linearGradient>
+    <linearGradient id="wire" gradientUnits="userSpaceOnUse" x1="70" y1="0" x2="230" y2="0">
+      <stop offset="0" stop-color="#4fd18b"/>
+      <stop offset="0.5" stop-color="#f6a823"/>
+      <stop offset="1" stop-color="#8fa9ff"/>
+    </linearGradient>
+    <pattern id="dots" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#f6f1e3" fill-opacity="0.06"/>
+    </pattern>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="440" rx="24" fill="url(#sky)"/>
+  <rect width="1280" height="440" rx="24" fill="url(#dots)"/>
+
+  <!-- sun and fields -->
+  <circle cx="1150" cy="372" r="210" fill="url(#sun)"/>
+  <circle cx="1150" cy="388" r="70" fill="#f6a823"/>
+  <path d="M600 440 C 700 392, 860 370, 1010 366 S 1200 350, 1280 360 L1280 440 Z" fill="url(#field)"/>
+  <path d="M520 440 C 700 410, 980 404, 1280 398 L1280 440 Z" fill="#0b2b1f" fill-opacity="0.9"/>
+  <g stroke="#2a5643" stroke-width="1.4" fill="none" opacity="0.55" transform="translate(0 50)">
+    <path d="M700 440 L960 352"/><path d="M820 440 L1000 350"/><path d="M940 440 L1040 350"/>
+    <path d="M1060 440 L1080 350"/><path d="M1180 440 L1120 348"/><path d="M1280 420 L1160 346"/>
+  </g>
+
+  <!-- three parties on one call -->
+  <g transform="translate(690 168)">
+    <!-- wires -->
+    <path d="M70 70 L230 70" stroke="url(#wire)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M330 70 L490 70" stroke="#8fa9ff" stroke-opacity="0.75" stroke-width="3" stroke-linecap="round"/>
+    <!-- whisper arc: only the farmer hears -->
+    <path d="M262 30 C 220 -40, 90 -40, 46 20" stroke="#f6a823" stroke-width="2.4" stroke-dasharray="7 7" fill="none" stroke-linecap="round"/>
+    <path d="M40 10 L46 22 L58 14" stroke="#f6a823" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="88" y="-58" width="148" height="28" rx="14" fill="#2b1800" stroke="#f6a823" stroke-opacity="0.7"/>
+    <text x="162" y="-39" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" font-weight="600" fill="#ffd27a">only the farmer hears</text>
+
+    <!-- farmer -->
+    <circle cx="40" cy="70" r="40" fill="#0d7046" stroke="#4fd18b" stroke-width="3"/>
+    <path d="M40 92 L40 50 M40 62 C 30 58, 27 50, 28 44 C 36 46, 40 52, 40 62 Z M40 62 C 50 58, 53 50, 52 44 C 44 46, 40 52, 40 62 Z M40 76 C 29 72, 26 63, 27 57 C 35 59, 40 66, 40 76 Z M40 76 C 51 72, 54 63, 53 57 C 45 59, 40 66, 40 76 Z" fill="#dcf2e3" stroke="#dcf2e3" stroke-width="1.5" stroke-linejoin="round"/>
+    <text x="40" y="138" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#f6f1e3">Farmer</text>
+
+    <!-- G-One -->
+    <circle cx="280" cy="70" r="62" fill="#f6a823" opacity="0.35" filter="url(#soft)"/>
+    <circle cx="280" cy="70" r="50" fill="#123a2a" stroke="#f6a823" stroke-width="4"/>
+    <circle cx="252" cy="70" r="7" fill="#4fd18b"/>
+    <circle cx="308" cy="70" r="7" fill="#8fa9ff"/>
+    <circle cx="280" cy="70" r="19" fill="#ff9a7a"/>
+    <text x="280" y="77" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="21" font-weight="800" fill="#13221a">G</text>
+    <text x="280" y="148" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#f6f1e3">G-One</text>
+
+    <!-- buyer -->
+    <circle cx="530" cy="70" r="40" fill="#1d3a7a" stroke="#8fa9ff" stroke-width="3"/>
+    <path d="M512 62 L516 52 L544 52 L548 62 Z M514 62 L514 88 L546 88 L546 62 M525 88 L525 74 L535 74 L535 88" fill="none" stroke="#e3eafb" stroke-width="2.6" stroke-linejoin="round"/>
+    <text x="530" y="138" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#f6f1e3">Buyer</text>
+
+    <!-- language chips -->
+    <rect x="-18" y="-112" width="84" height="34" rx="12" fill="#0b2b1f" stroke="#4fd18b" stroke-width="1.6"/>
+    <text x="24" y="-89" text-anchor="middle" font-family="Nirmala UI, Mangal, Noto Sans Devanagari, sans-serif" font-size="17" font-weight="700" fill="#7fe0a8">हिंदी</text>
+    <rect x="474" y="-112" width="96" height="34" rx="12" fill="#0b2b1f" stroke="#8fa9ff" stroke-width="1.6"/>
+    <text x="522" y="-89" text-anchor="middle" font-family="Nirmala UI, Vrinda, Noto Sans Bengali, sans-serif" font-size="17" font-weight="700" fill="#b8c8ff">বাংলা</text>
+    <rect x="384" y="-58" width="78" height="30" rx="11" fill="#0b2b1f" stroke="#ff9a7a" stroke-width="1.4"/>
+    <text x="423" y="-38" text-anchor="middle" font-family="Nirmala UI, Tunga, Noto Sans Kannada, sans-serif" font-size="15" font-weight="700" fill="#ffb9a3">ಕನ್ನಡ</text>
+  </g>
+
+  <!-- wordmark and copy -->
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif">
+    <circle cx="78" cy="98" r="8" fill="#4fd18b"/>
+    <circle cx="106" cy="98" r="17" fill="#ff9a7a"/>
+    <text x="106" y="105" text-anchor="middle" font-size="19" font-weight="800" fill="#13221a">G</text>
+    <circle cx="134" cy="98" r="8" fill="#8fa9ff"/>
+    <text x="156" y="111" font-size="38" font-weight="800" fill="#f6f1e3" letter-spacing="-0.5">G-One</text>
+
+    <text x="64" y="186" font-size="46" font-weight="800" fill="#f6f1e3" letter-spacing="-1">The voice in the middle,</text>
+    <text x="64" y="240" font-size="46" font-weight="800" fill="#4fd18b" letter-spacing="-1">on the farmer's side.</text>
+
+    <text x="64" y="292" font-size="19" fill="#bcd0c2">A voice assistant that brings in a buyer, translates both ways,</text>
+    <text x="64" y="318" font-size="19" fill="#bcd0c2">and quietly tells the farmer what the buyer can't hear.</text>
+
+    <rect x="64" y="350" width="246" height="34" rx="17" fill="#f6a823"/>
+    <text x="187" y="372" text-anchor="middle" font-size="14" font-weight="700" fill="#2b1800">Built on Gnani Prisma + Timbre</text>
+    <rect x="322" y="350" width="270" height="34" rx="17" fill="none" stroke="#2a5643" stroke-width="1.6"/>
+    <text x="457" y="372" text-anchor="middle" font-size="14" font-weight="600" fill="#bcd0c2">Great Indian AI Internship Challenge</text>
+  </g>
+</svg>

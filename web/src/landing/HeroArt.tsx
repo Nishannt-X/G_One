@@ -2,6 +2,8 @@
  * The hero illustration, drawn for G-One: a sunrise over the fields, a phone on a call, speech in three scripts and a
  * mandi crate. Inline SVG coloured by the theme's art tokens, so it follows light and dark with no image request.
  */
+import { LogoGlyph } from '../ui/icons'
+
 const s = (name: string) => ({ fill: `var(--${name})` })
 
 function Bubble({ x, y, w, label, lang, tone, tail }: { x: number; y: number; w: number; label: string; lang: string; tone: 'farmer' | 'buyer' | 'assistant'; tail: 'left' | 'right' }) {
@@ -59,7 +61,8 @@ export default function HeroArt({ className = '' }: { className?: string }) {
         <rect x="9" y="12" width="142" height="276" rx="21" style={s('night')} />
         <rect x="60" y="20" width="40" height="7" rx="3.5" style={s('art-phone')} />
         <circle cx="80" cy="82" r="28" style={s('assistant')} />
-        <path d="M89 75.5a10 10 0 1 0 1.9 8.6h-8.1" fill="none" stroke="var(--night)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+        {/* The mark's centre circle is radius 7 at (16,16); scale it 4x onto this radius-28 circle at (80,82). */}
+        <LogoGlyph transform="translate(16 18) scale(4)" style={s('night')} />
         <text x="80" y="136" textAnchor="middle" fontSize="17" fontWeight="700" fontFamily="inherit" style={s('on-night')}>G-One</text>
         <text x="80" y="156" textAnchor="middle" fontSize="12" fontFamily="inherit" style={s('on-night-muted')}>on the call</text>
         <g transform="translate(29 186)">

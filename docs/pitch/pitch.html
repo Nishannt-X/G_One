@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>G-One · One-page pitch</title>
+<!-- Source of docs/G-One-Pitch.pdf. Print to A4 with background graphics on; it must fit one page. -->
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --night: #0b2b1f; --brand: #0b6b44; --brand-soft: #def2e5; --accent: #f6a823; --accent-soft: #fff0cf;
+    --ink: #13221a; --muted: #48534a; --line: #e7dec9; --page: #fbf7ee; --buyer: #2a4fa8; --whisper: #7f4500;
+  }
+  html, body { width: 210mm; height: 297mm; }
+  body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color: var(--ink); background: var(--page);
+         font-size: 9.1pt; line-height: 1.38; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet { width: 210mm; height: 297mm; overflow: hidden; display: flex; flex-direction: column; }
+  header { background: linear-gradient(120deg, #07211a, var(--night) 55%, #123a2a); color: #f6f1e3;
+           padding: 9mm 12mm 7mm; position: relative; overflow: hidden; }
+  header::after { content: ""; position: absolute; right: -26mm; bottom: -34mm; width: 64mm; height: 64mm;
+                  border-radius: 50%; background: radial-gradient(circle, rgba(246,168,35,.9) 0 34%, rgba(246,168,35,.18) 35% 60%, transparent 61%); }
+  .brand { display: flex; align-items: center; gap: 2.2mm; font-weight: 800; font-size: 15pt; }
+  .dot { width: 3mm; height: 3mm; border-radius: 50%; display: inline-block; }
+  .g { width: 6.4mm; height: 6.4mm; border-radius: 50%; background: #ff9a7a; color: var(--ink); display: inline-grid;
+       place-items: center; font-size: 10pt; font-weight: 900; }
+  h1 { font-size: 23pt; line-height: 1.08; letter-spacing: -.4px; margin-top: 4mm; font-weight: 800; position: relative; z-index: 1; }
+  h1 em { font-style: normal; color: #4fd18b; }
+  .sub { margin-top: 2.5mm; color: #bcd0c2; font-size: 10.2pt; max-width: 140mm; position: relative; z-index: 1; }
+  .meta { margin-top: 3.5mm; display: flex; gap: 2mm; flex-wrap: wrap; position: relative; z-index: 1; }
+  .pill { font-size: 7.6pt; font-weight: 700; padding: .9mm 2.6mm; border-radius: 10mm; border: .3mm solid #2a5643; color: #bcd0c2; }
+  .pill.hot { background: var(--accent); border-color: var(--accent); color: #2b1800; }
+  main { padding: 5.5mm 12mm 3mm; display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 7mm; flex: 1; align-content: start; }
+  h2 { font-size: 8pt; text-transform: uppercase; letter-spacing: 1.4px; color: var(--brand); margin-bottom: 1.6mm;
+       display: flex; align-items: center; gap: 2mm; }
+  h2::before { content: ""; width: 5mm; height: .6mm; background: var(--accent); }
+  p + p { margin-top: 1.4mm; }
+  .full { grid-column: 1 / -1; }
+  ul { list-style: none; }
+  li { padding-left: 4.2mm; position: relative; margin-top: 1.1mm; }
+  li::before { content: ""; position: absolute; left: 0; top: 1.5mm; width: 1.8mm; height: 1.8mm; border-radius: 50%; background: var(--brand); }
+  b { font-weight: 700; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; margin-top: 2.2mm; }
+  .stat { background: #fff; border: .3mm solid var(--line); border-radius: 2.4mm; padding: 1.8mm 2.2mm; }
+  .stat strong { display: block; font-size: 13pt; color: var(--brand); line-height: 1.1; }
+  .stat span { font-size: 6.9pt; color: var(--muted); }
+  /* the call diagram */
+  .call { background: var(--night); border-radius: 3mm; padding: 4mm 5mm 3.4mm; color: #f6f1e3; display: grid;
+          grid-template-columns: 1fr 1.25fr 1fr; align-items: center; gap: 3mm; text-align: center; position: relative; }
+  .node { display: grid; justify-items: center; gap: 1.2mm; }
+  .circle { width: 13mm; height: 13mm; border-radius: 50%; display: grid; place-items: center; font-size: 15pt; border: .7mm solid; }
+  .farmer .circle { background: #0d7046; border-color: #4fd18b; }
+  .buyer .circle { background: #1d3a7a; border-color: #8fa9ff; }
+  .gone .circle { width: 16mm; height: 16mm; background: #123a2a; border-color: var(--accent); box-shadow: 0 0 6mm rgba(246,168,35,.45); }
+  .node b { font-size: 8.6pt; }
+  .node small { font-size: 7pt; color: #bcd0c2; }
+  .wire { position: absolute; top: 10.6mm; height: .6mm; }
+  .wire.l { left: 22%; width: 18%; background: linear-gradient(90deg, #4fd18b, var(--accent)); }
+  .wire.r { right: 22%; width: 18%; background: #8fa9ff; opacity: .8; }
+  .roles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; margin-top: 1.6mm; }
+  .role { background: #123a2a; border: .3mm solid #2a5643; border-radius: 2mm; padding: 1.6mm 2mm; text-align: left; font-size: 7.3pt; color: #d9e6dc; }
+  .role b { display: block; color: #fff; font-size: 7.9pt; margin-bottom: .4mm; }
+  .role.w { border-color: var(--accent); background: #2b1800; }
+  .role.w b { color: #ffd27a; }
+  .result { background: var(--accent-soft); border: .3mm solid #eba22a; border-radius: 2.4mm; padding: 2.2mm 3mm; margin-top: 2.4mm; color: #4a2a00; }
+  .result strong { color: var(--whisper); }
+  .gnani { background: var(--brand-soft); border-radius: 2.4mm; padding: 2.4mm 3mm; }
+  .gnani p { font-size: 8.7pt; }
+  .tag { display: inline-block; font-size: 6.8pt; font-weight: 700; padding: .3mm 1.6mm; border-radius: 1mm; background: var(--brand); color: #fff; margin-right: 1mm; }
+  .status { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2mm; }
+  .st { border: .3mm solid var(--line); background: #fff; border-radius: 2.4mm; padding: 1.8mm 2.4mm; font-size: 7.8pt; }
+  .st b { display: block; font-size: 8.4pt; margin-bottom: .3mm; }
+  .ok b { color: var(--brand); } .next b { color: var(--buyer); } .test b { color: var(--whisper); }
+  footer { margin-top: auto; padding: 3.4mm 12mm; border-top: .3mm solid var(--line); display: flex; justify-content: space-between;
+           font-size: 7.3pt; color: var(--muted); }
+  footer b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <header>
+    <div class="brand"><span class="dot" style="background:#4fd18b"></span><span class="g">G</span><span class="dot" style="background:#8fa9ff"></span>&nbsp;G-One</div>
+    <h1>The voice in the middle,<br><em>on the farmer's side.</em></h1>
+    <p class="sub">A voice assistant that brings a buyer onto the farmer's call, translates both ways, and quietly tells the farmer what the buyer can't hear.</p>
+    <div class="meta">
+      <span class="pill hot">Built on Gnani Prisma + Gnani Timbre</span>
+      <span class="pill">One-page solution pitch</span>
+      <span class="pill">Great Indian AI Internship Challenge</span>
+      <span class="pill">Team of two</span>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>The problem</h2>
+      <p>Most Indian farmers sell small lots, by phone, to buyers they cannot see, often across a language gap. Whoever translates on that call usually works for the other side.</p>
+      <p>The farmer hears <i>"the market is down"</i> with no reference point, and payment scams (<i>"scan this QR and enter your PIN"</i>) target exactly these calls. The phone is already in their hand; an app and English are not.</p>
+      <div class="stats">
+        <div class="stat"><strong>9.30 cr</strong><span>rural agricultural households (2019 est.)</span></div>
+        <div class="stat"><strong>89.4%</strong><span>of them own under two hectares (2019)</span></div>
+        <div class="stat"><strong>96.8%</strong><span>rural 15–29s used a mobile (2025)</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>The solution</h2>
+      <p><b>G-One sits on the call and works for the farmer.</b> The farmer speaks their own language. G-One finds a matching buyer, asks the buyer's permission, brings them on, and stays in the middle.</p>
+      <ul>
+        <li><b>Translates both ways:</b> Kannada farmer ⇄ Bengali buyer, each in their own language.</li>
+        <li><b>Cautions against traps:</b> a PIN or OTP request gets a fixed caution, never repeating the secret.</li>
+        <li><b>Two spoken yeses:</b> terms read back to each side, then a bilingual <i>Sauda Parchi</i> (a record, not a contract).</li>
+        <li><b>Remembers, with consent:</b> greets returning farmers by name; "मुझे भूल जाओ" forgets them.</li>
+      </ul>
+    </section>
+
+    <section class="full">
+      <div class="call">
+        <div class="wire l"></div><div class="wire r"></div>
+        <div class="node farmer"><div class="circle">🌾</div><b>Farmer</b><small>speaks Kannada</small></div>
+        <div class="node gone"><div class="circle">🎧</div><b>G-One</b><small>hears both legs separately · nothing is mixed</small></div>
+        <div class="node buyer"><div class="circle">🏪</div><b>Buyer</b><small>speaks Bengali</small></div>
+        <div class="roles">
+          <div class="role"><b>👂 Listen</b>Gnani Prisma transcribes every turn from both parties.</div>
+          <div class="role"><b>🔁 Translate</b>Each side hears the other in their own language.</div>
+          <div class="role w"><b>🤫 Whisper</b>"₹1,500 is well below the dated ₹1,800 reference. Try ₹2,000." Buyer hears nothing.</div>
+          <div class="role"><b>🗣️ Speak</b>Gnani Timbre voices translations, cautions and the read-back.</div>
+        </div>
+      </div>
+      <div class="result">In our scripted sample the offer moves from <strong>₹1,500 to ₹1,900 per quintal: ₹16,000 more on 40 quintal</strong>, and the farmer refuses a UPI PIN request after G-One's caution. <i>(Illustrative figures that show the design, not a measured result.)</i></div>
+    </section>
+
+    <section class="gnani">
+      <h2>Gnani at the core</h2>
+      <p><span class="tag">Prisma</span>Speech to text for both parties: streaming on 8 kHz PCM16, with per-turn upload as a fall back.</p>
+      <p><span class="tag">Timbre v2.5</span>G-One's voice in every language. Numbers are spelled out as words so they sound natural.</p>
+      <p>Keys stay on the backend. An OpenAI-compatible LLM with tools (mandi price, weather, buyer match, price fairness, scam patterns) is the brain; Sarvam translates.</p>
+    </section>
+
+    <section>
+      <h2>What makes it different</h2>
+      <ul>
+        <li><b>Separate audio per party</b>, so private whispers are possible at all.</li>
+        <li><b>Built for conversation:</b> barge-in that ignores a short "haan", patience after "aur… / lekin…", echo checks, LLM failover within 1.5 s.</li>
+        <li><b>Honest by design:</b> dated price references, never "today's price"; memory keyed by an HMAC of the number; IDs-only logs; synthetic data only.</li>
+      </ul>
+    </section>
+
+    <section class="full">
+      <h2>Status</h2>
+      <div class="status">
+        <div class="st ok"><b>✅ Working today</b>Full flow as a browser call: laptop as farmer, phone as buyer, same backend pipeline.</div>
+        <div class="st test"><b>🧪 862 + 111 tests</b>Backend and web tests that never call Gnani, a phone line or an LLM.</div>
+        <div class="st next"><b>📐 Next: phone line</b>Twilio designed as two independent legs, each its own media stream.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span><b>Team:</b> Nikhil Sah (brain and memory) · Nishant (console, speech and launch)</span>
+    <span>All names, numbers and prices are synthetic.</span>
+  </footer>
+</div>
+</body>
+</html>

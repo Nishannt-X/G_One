@@ -46,6 +46,18 @@ export const UserCheckIcon = (p: IconProps) => <Svg {...p}><circle cx="9" cy="8"
 export const ExternalIcon = (p: IconProps) => <Svg {...p}><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></Svg>
 export const DoubleCheckIcon = (p: IconProps) => <Svg {...p}><path d="m2 12 5 5L18 6M12 16l1 1L22 8" /></Svg>
 
+/**
+ * The "G" inside the mark's centre circle (radius 7 at 16,16 in a 32-unit box): the Young Serif glyph converted to
+ * an outline path, so it needs no extra font. A round sans G with a crossbar beside red, green and blue dots read too
+ * much like Google's logo. Pass `fill`, and a `transform` to place it in a larger circle.
+ */
+export const LogoGlyph = (p: SVGProps<SVGPathElement>) => (
+  <path
+    {...p}
+    d="M14.06 15.62Q14.06 16.19 14.19 16.78Q14.31 17.38 14.58 17.88Q14.85 18.39 15.27 18.69Q15.70 19 16.29 19Q16.52 19 16.79 18.94Q17.07 18.89 17.27 18.75Q17.47 18.61 17.47 18.37L17.47 17.83Q17.47 17.24 17.31 17Q17.14 16.75 16.89 16.70Q16.63 16.65 16.37 16.65L16.29 16.65Q16.14 16.65 16.14 16.49L16.14 16.18Q16.14 16.03 16.29 16.03L19.55 16.03Q19.70 16.03 19.70 16.18L19.70 16.49Q19.70 16.65 19.55 16.65L19.46 16.65Q19.19 16.65 19.19 16.99L19.19 18.10Q18.84 18.93 18.03 19.46Q17.21 20 16.04 20Q15.17 20 14.48 19.70Q13.79 19.40 13.30 18.86Q12.82 18.33 12.56 17.62Q12.30 16.90 12.30 16.08Q12.30 15.56 12.41 14.99Q12.53 14.43 12.79 13.89Q13.05 13.36 13.49 12.93Q13.93 12.51 14.58 12.25Q15.22 12 16.11 12Q16.85 12 17.39 12.19Q17.94 12.37 18.30 12.66Q18.66 12.95 18.87 13.26Q19.08 13.57 19.17 13.83Q19.27 14.10 19.27 14.23Q19.27 14.32 19.22 14.36Q19.17 14.41 19.09 14.44L17.83 14.88Q17.79 14.89 17.74 14.91Q17.70 14.92 17.65 14.92Q17.61 14.92 17.56 14.91Q17.52 14.89 17.52 14.82Q17.52 14.77 17.53 14.69Q17.54 14.61 17.54 14.48Q17.54 13.77 17.17 13.29Q16.79 12.82 16.03 12.82Q15.44 12.82 14.99 13.17Q14.55 13.53 14.31 14.16Q14.06 14.79 14.06 15.62"
+  />
+)
+
 /** The G-One mark: two people joined through the assistant in the middle. */
 export function Logo(p: IconProps) {
   return (
@@ -54,7 +66,7 @@ export function Logo(p: IconProps) {
       <circle cx="5.5" cy="16" r="3.5" fill="var(--farmer)" />
       <circle cx="26.5" cy="16" r="3.5" fill="var(--buyer)" />
       <circle cx="16" cy="16" r="7" fill="var(--assistant)" />
-      <path d="M19 13.6a3.7 3.7 0 1 0 .7 3.2h-3" fill="none" stroke="var(--surface)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <LogoGlyph fill="var(--surface)" />
     </svg>
   )
 }

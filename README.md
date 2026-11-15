@@ -4,7 +4,7 @@
 
 <br>
 
-<a href="PITCH.md"><img alt="One-page pitch" src="https://img.shields.io/badge/📄_One--page_pitch-read_first-f6a823?style=for-the-badge&labelColor=0b2b1f"></a>
+<a href="docs/G-One-Pitch.pdf"><img alt="One-page pitch" src="https://img.shields.io/badge/📄_One--page_pitch-read_first-f6a823?style=for-the-badge&labelColor=0b2b1f"></a>
 <a href="#-a-call-minute-by-minute"><img alt="See a call" src="https://img.shields.io/badge/▶_See_a_call-3_min_story-4fd18b?style=for-the-badge&labelColor=0b2b1f"></a>
 <a href="#-run-it-in-two-minutes"><img alt="Run it" src="https://img.shields.io/badge/⚡_Run_it-no_keys_needed-8fa9ff?style=for-the-badge&labelColor=0b2b1f"></a>
 
@@ -20,7 +20,7 @@
 
 <h3>A farmer shouldn't need an app, English, or a middleman who works for the other side.</h3>
 
-<sub>Built by a team of two for the <b>Gnani.ai Great Indian AI Internship Challenge</b> · <a href="PITCH.md">Pitch</a> · <a href="#-how-it-works">How it works</a> · <a href="#-architecture">Architecture</a> · <a href="#-where-gnani-sits">Gnani usage</a> · <a href="#-team">Team</a></sub>
+<sub>Built by a team of two for the <b>Gnani.ai Great Indian AI Internship Challenge</b> · <a href="docs/G-One-Pitch.pdf">Pitch (PDF)</a> · <a href="#-how-it-works">How it works</a> · <a href="#-architecture">Architecture</a> · <a href="#-where-gnani-sits">Gnani usage</a> · <a href="#-how-it-was-built-two-repositories-one-project">History</a> · <a href="#-team">Team</a></sub>
 
 </div>
 
@@ -46,8 +46,8 @@ buyer's permission, and brings them onto the same call. From then on G-One sits 
 > synthetic.
 
 <p align="center">
-  <img src="docs/assets/call-stage.png" alt="The call stage: farmer Basavaraj speaks Kannada, G-One in the middle, the buyer Mondal Traders hears nothing while G-One listens to the farmer; the price check shows ₹1,500 is 16.7% below the dated reference" width="94%">
-  <br><sub><i>The live call stage during the scripted sample. The buyer's badge says <b>"Hears nothing"</b> while G-One talks to the farmer. The price check compares the offer with a dated reference.</i></sub>
+  <img src="docs/assets/call-stage.png" alt="The call stage mid-negotiation: G-One whispers a price note to farmer Basavaraj in Kannada while the buyer, Mondal Traders, hears nothing; the price check shows ₹1,500 is 16.7% below the dated reference" width="94%">
+  <br><sub><i>Mid-negotiation in the scripted sample. G-One <b>whispers a price note to the farmer in Kannada</b> while the buyer's badge reads <b>"Hears nothing"</b>. The price check puts ₹1,500 at 16.7% below the dated reference.</i></sub>
 </p>
 
 <br>
@@ -133,7 +133,7 @@ flowchart LR
     L --> W --> S
     S -- "translated buyer turn<br/>+ whispers" --> F
     S -- "translated farmer turn<br/>only" --> B
-    linkStyle 7 stroke:#f6a823,stroke-width:3px
+    linkStyle 6 stroke:#f6a823,stroke-width:3px
     style G fill:#0b2b1f,stroke:#f6a823,color:#f6f1e3
     style F fill:#0d7046,stroke:#4fd18b,color:#fff
     style B fill:#2a4fa8,stroke:#8fa9ff,color:#fff
@@ -145,14 +145,13 @@ Every sale moves through the same guarded states. Nothing skips ahead without a 
 
 ```mermaid
 stateDiagram-v2
-    direction LR
+    state "Buyer consent" as BuyerConsent
+    state "Read-back" as ReadBack
+    state "Sauda Parchi" as SaudaParchi
+    state "Call gist" as Gist
     [*] --> Language: call starts
     Language --> Intake: language chosen
     Intake --> Matching: crop, quantity, place known
-    note right of Intake
-        A returning farmer gets a short intake,
-        memory fills in what is already known
-    end note
     Matching --> BuyerConsent: best buyer ranked
     BuyerConsent --> Matching: buyer says no
     BuyerConsent --> Mediation: buyer says yes
@@ -181,12 +180,11 @@ The console mirrors this as a deal card that moves through **Draft → Read-back
 
 ```mermaid
 flowchart TB
-    subgraph Clients["Clients (browser today, phone line next)"]
+    subgraph Clients["Call legs"]
         direction LR
-        FC["👨‍🌾 Farmer leg<br/>laptop mic · #/call"]
-        BC["🏪 Buyer leg<br/>phone over LAN · QR join"]
+        FC["👨‍🌾 Farmer leg<br/>browser, laptop microphone"]
+        BC["🏪 Buyer leg<br/>phone browser over LAN · QR join"]
         TW["☎️ Twilio Media Streams<br/><i>designed, not built</i>"]
-        CON["🖥️ Console<br/>React · live call, farmers,<br/>analytics, deal map"]
     end
 
     subgraph Backend["Spring Boot 3.5 · Java 21"]
@@ -207,7 +205,7 @@ flowchart TB
         BUS["console/<br/>event bus · WebSocket feed"]
     end
 
-    subgraph Ext["External services (keys stay on the backend)"]
+    subgraph Ext["External services"]
         direction LR
         PRISMA["Gnani Prisma<br/>speech to text"]
         TIMBRE["Gnani Timbre v2.5<br/>text to speech"]
@@ -215,6 +213,8 @@ flowchart TB
         SARVAM["Sarvam<br/>translation"]
         AGM["AGMARKNET<br/>dated prices"]
     end
+
+    CON["🖥️ Web console · React<br/>live call, farmers, analytics, deal map"]
 
     FC & BC --> SIM
     TW -.-> TEL
@@ -369,8 +369,106 @@ cd web && bun install && bun run dev      # open http://localhost:5173
 Then open **`#/demo`** for the voiced sample call or **`#/call`** to try a call yourself.
 
 For live Gnani speech, set the variables listed in [`.env.example`](.env.example) (`GNANI_API_KEY`, an
-OpenAI-compatible LLM endpoint, and a memory HMAC key). The farmer-memory take and the phone-as-buyer setup are in
-**[docs/RUNBOOK.md](docs/RUNBOOK.md)**.
+OpenAI-compatible LLM endpoint, and a memory HMAC key). The two live demo takes are below.
+
+<details>
+<summary><b>Live take 1: farmer memory ("it remembers me")</b></summary>
+
+G-One remembers a short gist of each farmer's calls, keyed by a salted hash of the number (never the number itself). A
+synthetic farmer, Suresh, is seeded for the "it remembers me" moment.
+
+**Env (synthetic values only).** Spring Boot reads only real environment variables here; it does not read
+`.env.local` by itself. Put these in an untracked `.env.local` at the repo root (see `.env.example`):
+
+```sh
+G_ONE_MEMORY_HMAC_KEY=<your own base64 key>        # openssl rand -base64 32; never commit it
+G_ONE_MEMORY_SEED_FILE=classpath:memory/seed-suresh.json
+G_ONE_DEMO_FARMER_PHONE=+919876543210              # simulator Caller A (synthetic)
+```
+
+Then load the file into the terminal that starts the backend, from the repo root:
+
+```powershell
+# PowerShell (Windows)
+Get-Content .env.local | ForEach-Object { if ($_ -match '^\s*([A-Za-z_]\w*)=(.*?)\s*(#.*)?$') { Set-Item "env:$($Matches[1])" $Matches[2] } }
+cd backend; .\mvnw.cmd spring-boot:run
+```
+
+```sh
+# bash / Git Bash / macOS
+set -a; . ./.env.local; set +a
+cd backend && ./mvnw spring-boot:run
+```
+
+The variables last only for that terminal; load them again in a new one.
+
+The browser simulator hashes caller numbers with `G_ONE_MEMORY_HMAC_KEY` too, so **Caller A is Suresh**. Without the
+key the seed is skipped (startup logs a warning) and the simulator falls back to its built-in dev salt.
+
+**Start a fresh take.** Stop the backend (Ctrl+C), then select a new empty data directory in the same terminal before
+restarting it. The scripts create a unique directory and print its path; they never delete an existing database.
+
+```powershell
+# PowerShell (Windows), from the repo root after loading .env.local
+$env:G_ONE_DATA_DIR = (& pwsh scripts/reset-memory.ps1)
+cd backend; .\mvnw.cmd spring-boot:run
+```
+
+```sh
+# bash / Git Bash / macOS, from the repo root after loading .env.local
+export G_ONE_DATA_DIR="$(sh scripts/reset-memory.sh)"
+cd backend && ./mvnw spring-boot:run
+```
+
+Check the log for `Farmer memory seeded from classpath:memory/seed-suresh.json`. Each fresh directory keeps its own
+take history; stop every backend using an old directory before cleaning old data by hand.
+
+**Take plan.**
+
+1. Caller A: G-One asks "Suresh ji?"; answer yes. The memory panel on `#/demo` shows his crops and open follow-up.
+2. Caller B: a first call. Say your name (for example "मेरा नाम रमेश है"). Hang up and wait for the
+   "Saved for next time" note before redialing (it appears only once this call's own summary is stored; "Couldn't
+   confirm" means check the memory profile before redialing). Call again as Caller B: G-One asks for that name.
+3. Use **Caller B, never Caller A,** for "forget me" (मुझे भूल जाओ). A forget blocks the seed for that caller in the
+   current data directory. Select a fresh directory for another take.
+
+</details>
+
+<details>
+<summary><b>Live take 2: a phone as the buyer (local network)</b></summary>
+
+The laptop is the farmer on `#/call` (Try a call). A phone on the same network scans a QR code and joins as the buyer. This stays on
+your network: a self-signed certificate and no public tunnel.
+
+```sh
+cd backend && ./mvnw spring-boot:run           # add G_ONE_DEMO_MODE=true to run offline with no keys
+cd web && bun run dev:https                    # second terminal; prints https://<laptop-ip>:5173/
+```
+
+1. Connect the laptop to the phone's hotspot (or put both on one Wi-Fi network), then start the commands above.
+2. Open `https://localhost:5173/#/call` on the laptop and tap **Call as farmer**. The QR code and link appear in the
+   buyer panel.
+3. Scan the code, or type the link on the phone. Accept the certificate warning once.
+4. Tap **Join call** and allow the microphone. G-One asks the buyer to say yes before connecting them. Use headphones on
+   one side if the two devices are close, so that they do not hear each other.
+
+`bun run dev` stays HTTP on localhost only. The certificate is written to `web/.dev-certs/` and is gitignored. If the
+wrong address is shown, pick another under the QR code, set `G_ONE_LAN_HOST=<ip>` before `bun run dev:https`, or open
+`#/call?lan=<ip>`.
+
+**Troubleshooting**
+
+- *The phone cannot open the page.* Some hotspots and Wi-Fi networks isolate clients, so devices on them cannot reach
+  each other, and nothing on the laptop can change that. Turn client isolation off if the phone offers it, or use a
+  different network. Also check that the macOS firewall allows incoming connections for `bun`/`node`.
+- *The microphone is blocked.* The phone needs the `https://` link. Then allow the microphone in the browser's site
+  settings.
+- *The page opens but says it could not reach the laptop.* The certificate exception may not cover the audio connection,
+  which has been a problem on iPhones. Send `web/.dev-certs/cert.pem` to the phone, install it, and turn it on under
+  Settings > General > About > Certificate Trust Settings. Remove it afterwards. This route has not been tested on a
+  real phone.
+
+</details>
 
 <details>
 <summary><b>Checks</b></summary>
@@ -466,14 +564,24 @@ docs/adr/          architecture decisions with reasons
 
 <br>
 
+## 📜 How it was built: two repositories, one project
+
+G-One was built in two phases. The first repository holds the foundation and its full history; this repository
+continues from it.
+
+| Phase | Where | What was built |
+|---|---|---|
+| **1 · Foundation**<br><sub>7–9 Nov 2026</sub> | [**G_One-AI**](https://github.com/Nishannt-X/G_One-AI) | Research and decisions: [Twilio call topology](https://github.com/Nishannt-X/G_One-AI/issues/4), [the Gnani speech contract for 8 kHz audio](https://github.com/Nishannt-X/G_One-AI/issues/5), [telephony alternatives](https://github.com/Nishannt-X/G_One-AI/issues/34), [call flow](https://github.com/Nishannt-X/G_One-AI/issues/8), [farmer memory](https://github.com/Nishannt-X/G_One-AI/issues/9). Then the core, through 17 merged PRs: [contracts and fakes](https://github.com/Nishannt-X/G_One-AI/pull/38), [call pipeline with barge-in](https://github.com/Nishannt-X/G_One-AI/pull/43), [Gnani speech adapters and turn detection](https://github.com/Nishannt-X/G_One-AI/pull/50), [agent brain with mandi and weather tools](https://github.com/Nishannt-X/G_One-AI/pull/45), [farmer memory](https://github.com/Nishannt-X/G_One-AI/pull/44) [wired into the call](https://github.com/Nishannt-X/G_One-AI/pull/52), [buyer directory and connect tools](https://github.com/Nishannt-X/G_One-AI/pull/54), [mediation with translation and farmer-only whispers](https://github.com/Nishannt-X/G_One-AI/pull/55), [console v1](https://github.com/Nishannt-X/G_One-AI/pull/46) and [v2](https://github.com/Nishannt-X/G_One-AI/pull/48), [browser call simulator](https://github.com/Nishannt-X/G_One-AI/pull/47), [CI](https://github.com/Nishannt-X/G_One-AI/pull/37) and [scam cautions](https://github.com/Nishannt-X/G_One-AI/pull/2). |
+| **2 · Product**<br><sub>9–15 Nov 2026</sub> | **G_One** (this repo) | Started from G_One-AI's code in one initial commit, so the per-person history of phase 1 lives there. Added: a phone joining as the buyer by QR code, consent at the end of every call, memory recall and "welcome back", yes/no reading across six languages, private questions to G-One, the voiced sample call, Analytics, the Farmers tab, the deal map, the homepage and this pitch. |
+
+<br>
+
 ## 👥 Team
 
-| | Member | Lane | Contributions |
-|---|---|---|---|
-| 🧠 | **Nikhil Sah** · [@Sah-Nikhil](https://github.com/Sah-Nikhil) | Brain and memory | Core contracts, agent brain and tools, farmer memory (profile, call gists, HMAC caller key, forget me, seeding), memory demo, product decisions (ADR 0002). |
-| 🖥️ | **Nishant** · [@Nishannt-X](https://github.com/Nishannt-X) | Console, speech and launch | Repository owner. Call pipeline and Gnani speech integration, mediation, the web console (call stage, farmers, analytics, deal map), browser call simulator, demo and launch. |
-
-<sub>G-One started from our earlier project, <a href="https://github.com/Nishannt-X/G_One-AI">G_One-AI</a>, and reuses its verified Gnani integration.</sub>
+| | Member | Contributions (both repositories) |
+|---|---|---|
+| 🧠 | **Nikhil Sah**<br>[@Sah-Nikhil](https://github.com/Sah-Nikhil)<br><sub>Brain, memory and mediation</sub> | Project setup, docs and the agent workflow; the research and decisions on call topology, the Gnani speech contract, call flow and memory. Core contracts and fakes, the call pipeline (greeting, turns, barge-in), the agent brain and its tools, farmer memory (SQLite store, call gists, HMAC caller key) and its wiring into the call, the buyer directory, and mediation with translation and farmer-only whispers. Later: memory recall quality, the guard that keeps model reasoning out of speech, mediation playback fixes, the homepage story, the brand mark, this README and the pitch. |
+| 🖥️ | **Nishant**<br>[@Nishannt-X](https://github.com/Nishannt-X)<br><sub>Speech, console and product</sub> | Repository owner. The first G-One demo site and two-way scam cautions, CI, the runtime runbook, the Gnani telephony speech adapters with turn detection and a live probe, console v1 and v2, and the browser call simulator. Later: a phone joining as the buyer over the local network, the consent-gated end of call and Analytics, yes/no reading in six languages, private questions to G-One, the voiced sample call, the Farmers tab, the calls list and the deal map. |
 
 <br>
 
